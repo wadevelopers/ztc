@@ -20,6 +20,7 @@ class TermConfigApp(App[None]):
     SUB_TITLE = f"v{__version__}"
 
     BINDINGS = [
+        Binding("p", "command_palette", "Buscar"),
         Binding("q", "quit", "Salir"),
     ]
 

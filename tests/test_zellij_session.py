@@ -33,6 +33,22 @@ def test_parse_line_exited() -> None:
     assert s.state == "exited"
 
 
+def test_parse_line_exited_resurrectable_suffix() -> None:
+    s = zellij_session._parse_line(
+        "circular-platypus [Created 30m 37s ago] (EXITED - attach to resurrect)"
+    )
+    assert s is not None
+    assert s.name == "circular-platypus"
+    assert s.state == "exited"
+
+
+def test_parse_line_current_marker_stays_running() -> None:
+    s = zellij_session._parse_line("main [Created 1h ago] (current)")
+    assert s is not None
+    assert s.name == "main"
+    assert s.state == "running"
+
+
 def test_strip_ansi() -> None:
     raw = "\x1b[32;1mmain\x1b[m [Created 14m 4s ago]"
     assert zellij_session._strip_ansi(raw) == "main [Created 14m 4s ago]"

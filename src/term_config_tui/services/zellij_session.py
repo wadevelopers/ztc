@@ -67,13 +67,17 @@ def list_sessions(*, timeout: float = 5.0) -> list[ZellijSession]:
     return out
 
 
+_EXITED_SUFFIX = re.compile(r"\(EXITED\b", re.IGNORECASE)
+
+
 def _parse_line(line: str) -> ZellijSession | None:
     """Saca nombre y estado de una linea de `list-sessions`.
 
     Acepta:
       - 'name [Created 14m 4s ago]' -> running
       - 'name [Created ... ago] (current)' -> running
-      - 'EXITED - name [...]'  -> exited
+      - 'name [Created ... ago] (EXITED - attach to resurrect)' -> exited
+      - 'EXITED - name [...]' (formato legacy) -> exited
       - 'name'  (formato `-s`) -> running por defecto
     """
     m = re.match(r"^EXITED\s*-\s*(?P<name>\S+)(?:\s+(?P<rest>.*))?$", line)
@@ -85,9 +89,11 @@ def _parse_line(line: str) -> ZellijSession | None:
         )
     m = re.match(r"^(?P<name>\S+)(?:\s+(?P<rest>.*))?$", line)
     if m:
+        rest = m.group("rest") or ""
+        state = "exited" if _EXITED_SUFFIX.search(rest) else "running"
         return ZellijSession(
             name=m.group("name"),
-            state="running",
+            state=state,
             raw_line=line,
         )
     return None
