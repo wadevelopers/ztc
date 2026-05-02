@@ -495,3 +495,119 @@ class PaneEditModal(ModalScreen[Pane | None]):
 def _none_if_empty(value: str) -> str | None:
     value = value.strip()
     return value if value else None
+
+
+class EditColorModal(ModalScreen[str | None]):
+    """Modal para editar un valor de color hex con validacion en vivo."""
+
+    BINDINGS = [Binding("escape", "dismiss_none", "Cancelar")]
+
+    DEFAULT_CSS = """
+    EditColorModal {
+        align: center middle;
+    }
+    #dialog {
+        width: 60;
+        height: auto;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #title {
+        text-style: bold;
+        color: $accent;
+    }
+    .label {
+        color: $text-muted;
+    }
+    #swatch {
+        height: 3;
+        margin: 1 0;
+        content-align: center middle;
+    }
+    #status {
+        color: $text-muted;
+    }
+    #buttons {
+        align-horizontal: right;
+        height: 3;
+        margin-top: 1;
+    }
+    Button {
+        margin-left: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        *,
+        slot_label: str,
+        initial: str = "",
+    ) -> None:
+        super().__init__()
+        self._slot_label = slot_label
+        self._initial = initial
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Static(f"Editar {self._slot_label}", id="title")
+            yield Static("Hex: #rgb, #rrggbb o #rrggbbaa", classes="label")
+            yield Input(
+                value=self._initial,
+                placeholder="#1e1e2e",
+                id="hex-input",
+            )
+            yield Static("", id="swatch")
+            yield Static("", id="status")
+            with Horizontal(id="buttons"):
+                yield Button("Cancelar", id="cancel")
+                yield Button("Guardar", id="save", variant="primary", disabled=True)
+
+    def on_mount(self) -> None:
+        inp = self.query_one("#hex-input", Input)
+        inp.focus()
+        inp.cursor_position = len(inp.value)
+        self._refresh()
+
+    @on(Input.Changed, "#hex-input")
+    def _on_change(self) -> None:
+        self._refresh()
+
+    @on(Input.Submitted, "#hex-input")
+    def _on_submit(self) -> None:
+        self._submit()
+
+    @on(Button.Pressed, "#save")
+    def _on_save(self) -> None:
+        self._submit()
+
+    @on(Button.Pressed, "#cancel")
+    def _on_cancel(self) -> None:
+        self.dismiss(None)
+
+    def action_dismiss_none(self) -> None:
+        self.dismiss(None)
+
+    def _refresh(self) -> None:
+        from term_config_tui.services.alacritty import is_valid_hex, normalize_hex
+
+        value = self.query_one("#hex-input", Input).value.strip()
+        valid = is_valid_hex(value)
+        self.query_one("#save", Button).disabled = not valid
+        swatch = self.query_one("#swatch", Static)
+        status = self.query_one("#status", Static)
+        if valid:
+            normalized = normalize_hex(value)
+            swatch.update(f"[on {normalized}]                              [/]")
+            status.update(f"OK  ->  {normalized}")
+        else:
+            swatch.update("")
+            status.update("Formato invalido")
+
+    def _submit(self) -> None:
+        from term_config_tui.services.alacritty import is_valid_hex, normalize_hex
+
+        value = self.query_one("#hex-input", Input).value.strip()
+        if not is_valid_hex(value):
+            return
+        self.dismiss(normalize_hex(value))
