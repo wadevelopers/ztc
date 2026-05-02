@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "term-config-tui"
+version = "0.1.0"
+description = "TUI para administrar Alacritty y Zellij (sesiones, layouts, temas, colores)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "martin" }]
+dependencies = [
+    "textual>=0.80",
+    "tomlkit>=0.13",
+    "kdl-py>=1.2",
+]
+
+[project.scripts]
+term-config-tui = "term_config_tui.__main__:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "textual-dev>=1.6",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/term_config_tui"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
