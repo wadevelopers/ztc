@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Footer, Header, OptionList, Static
+from textual.widgets.option_list import Option
 
 from term_config_tui import __version__
 from term_config_tui.models.config import Paths
@@ -15,24 +17,26 @@ class TermConfigApp(App[None]):
     SUB_TITLE = f"v{__version__}"
 
     BINDINGS = [
-        Binding("t", "theme_picker", "Tema Zellij"),
         Binding("q", "quit", "Salir"),
     ]
 
     DEFAULT_CSS = """
-    #menu {
+    #menu-wrap {
         padding: 1 2;
     }
     .menu-title {
         text-style: bold;
         color: $accent;
+        margin-bottom: 1;
     }
-    .menu-item {
-        margin-top: 1;
+    .menu-hint {
+        color: $text-muted;
+        margin-bottom: 1;
     }
-    .menu-key {
-        color: $accent;
-        text-style: bold;
+    #main-menu {
+        height: auto;
+        max-height: 20;
+        border: round $panel;
     }
     """
 
@@ -42,18 +46,25 @@ class TermConfigApp(App[None]):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Vertical(
-            Static("term-config-tui", classes="menu-title"),
-            Static("", classes="menu-item"),
-            Static("[b]t[/b]  Tema Zellij", classes="menu-item"),
-            Static("[dim]s[/dim]  Sesiones Zellij (proxima fase)", classes="menu-item"),
-            Static("[dim]l[/dim]  Layouts Zellij (proxima fase)", classes="menu-item"),
-            Static("[dim]c[/dim]  Colores Alacritty (proxima fase)", classes="menu-item"),
-            Static("", classes="menu-item"),
-            Static("[b]q[/b]  Salir", classes="menu-item"),
-            id="menu",
-        )
+        with Vertical(id="menu-wrap"):
+            yield Static("term-config-tui", classes="menu-title")
+            yield Static(
+                "Flechas para navegar  /  Enter para abrir  /  q para salir",
+                classes="menu-hint",
+            )
+            yield OptionList(
+                Option("Tema Zellij", id="themes"),
+                Option("Sesiones Zellij  (proxima fase)", id="sessions", disabled=True),
+                Option("Layouts Zellij  (proxima fase)", id="layouts", disabled=True),
+                Option("Colores Alacritty  (proxima fase)", id="colors", disabled=True),
+                id="main-menu",
+            )
         yield Footer()
 
-    def action_theme_picker(self) -> None:
-        self.push_screen(ThemePickerScreen(config_path=self.paths.zellij_config))
+    def on_mount(self) -> None:
+        self.query_one("#main-menu", OptionList).focus()
+
+    @on(OptionList.OptionSelected, "#main-menu")
+    def _on_menu_selected(self, event: OptionList.OptionSelected) -> None:
+        if event.option.id == "themes":
+            self.push_screen(ThemePickerScreen(config_path=self.paths.zellij_config))

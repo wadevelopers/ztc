@@ -26,7 +26,7 @@ async def test_theme_picker_lists_themes_and_marks_active(tmp_path: Path) -> Non
     paths = _make_paths(tmp_path, FIX / "config_with_user_themes.kdl")
     app = TermConfigApp(paths=paths)
     async with app.run_test() as pilot:
-        await pilot.press("t")
+        await pilot.press("enter")
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, ThemePickerScreen)
@@ -46,7 +46,7 @@ async def test_theme_picker_apply_writes_config(tmp_path: Path) -> None:
     paths = _make_paths(tmp_path, FIX / "config_with_user_themes.kdl")
     app = TermConfigApp(paths=paths)
     async with app.run_test() as pilot:
-        await pilot.press("t")
+        await pilot.press("enter")
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, ThemePickerScreen)
