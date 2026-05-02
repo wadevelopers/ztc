@@ -2,7 +2,8 @@
 
 TUI en Python para administrar el setup de terminal: Alacritty (colores) y Zellij (sesiones, layouts, temas).
 
-Ver [`PLAN.md`](PLAN.md) para el plan completo.
+- [`PLAN.md`](PLAN.md) — diseno y roadmap del proyecto.
+- [`NOTES.md`](NOTES.md) — gotchas operativos y notas de uso.
 
 ## Estado
 
