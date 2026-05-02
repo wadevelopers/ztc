@@ -124,6 +124,11 @@ class SessionManagerScreen(Screen[None]):
         meta.update(f"Estado: {s.state}\n{s.raw_line or ''}")
         if s.is_current:
             warn.update("Cuidado: esta es la sesion donde corre este TUI.")
+        elif s.state == "exited":
+            warn.update(
+                "Esta sesion esta resurrectable. [b]Enter[/b] la resucita con "
+                "su layout original. [b]x[/b] la borra para siempre."
+            )
         else:
             warn.update("")
 
@@ -157,12 +162,11 @@ class SessionManagerScreen(Screen[None]):
                 timeout=8,
             )
             return
-        if s.state != "running":
+        if s.state == "exited":
             self.app.notify(
-                f"'{s.name}' no esta viva. Crea una nueva o usa otra accion.",
-                severity="warning",
+                f"Resucitando '{s.name}' con su layout original...",
+                severity="information",
             )
-            return
         self._run_in_tty(zellij_session.attach_argv(s.name))
         self.action_refresh()
 
