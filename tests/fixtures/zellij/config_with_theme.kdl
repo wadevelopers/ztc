@@ -1,0 +1,10 @@
+// comentario inicial
+keybinds {
+    normal {}
+}
+
+// theme "dracula"
+theme "custom_dark"
+
+// otra cosa al final
+default_mode "normal"

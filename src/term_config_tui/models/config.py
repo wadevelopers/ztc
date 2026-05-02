@@ -19,7 +19,7 @@ class Paths:
     alacritty_config: Path
 
     @classmethod
-    def default(cls) -> "Paths":
+    def default(cls) -> Paths:
         zdir = default_zellij_config_dir()
         return cls(
             zellij_config=zdir / "config.kdl",

@@ -1,0 +1,18 @@
+layout {
+    tab name="system" {
+        pane {
+            command "btop"
+            start_suspended true
+        }
+    }
+    tab name="dev" {
+        pane split_direction="vertical" {
+            pane size="60%" {
+                pane
+                pane
+                pane
+            }
+            pane size="40%"
+        }
+    }
+}

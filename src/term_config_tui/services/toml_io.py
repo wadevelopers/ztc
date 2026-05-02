@@ -5,15 +5,24 @@ from pathlib import Path
 import tomlkit
 from tomlkit.toml_document import TOMLDocument
 
+from term_config_tui.services.atomic import write_atomic
+from term_config_tui.services.backups import make_backup
+
 
 def load_toml(path: Path) -> TOMLDocument:
-    """Stub Fase 0. La implementacion real va en Fase 0.5."""
-    raise NotImplementedError
+    """Carga un TOML preservando formato, comentarios y orden."""
+    if not path.exists():
+        return tomlkit.document()
+    return tomlkit.parse(path.read_text(encoding="utf-8"))
 
 
-def dump_toml(doc: TOMLDocument, path: Path) -> None:
-    """Stub Fase 0. La implementacion real va en Fase 0.5."""
-    raise NotImplementedError
+def dump_toml(doc: TOMLDocument, path: Path, *, backup: bool = True) -> Path | None:
+    """Escribe atomicamente. Crea backup si el archivo existia."""
+    backup_path: Path | None = None
+    if backup and path.exists():
+        backup_path = make_backup(path)
+    write_atomic(path, tomlkit.dumps(doc))
+    return backup_path
 
 
-__all__ = ["load_toml", "dump_toml", "tomlkit"]
+__all__ = ["load_toml", "dump_toml", "tomlkit", "TOMLDocument"]

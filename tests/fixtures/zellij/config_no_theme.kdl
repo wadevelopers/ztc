@@ -1,0 +1,7 @@
+// comentario inicial
+keybinds {
+    normal {}
+}
+
+// theme "dracula"
+default_mode "normal"
