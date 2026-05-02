@@ -92,6 +92,47 @@ def test_dump_layout_minimal_roundtrip() -> None:
         path.unlink(missing_ok=True)
 
 
+def test_dump_preserves_layout_raw_nodes(tmp_path: Path) -> None:
+    src = tmp_path / "with_template.kdl"
+    src.write_text(
+        'layout {\n'
+        '    default_tab_template {\n'
+        '        pane size=1 borderless=true {\n'
+        '            plugin location="zellij:status-bar"\n'
+        '        }\n'
+        '        children\n'
+        '    }\n'
+        '    tab name="dev" {\n'
+        '        pane\n'
+        '    }\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    layout = kdl_io.load_layout(src)
+    assert len(layout.raw_unknown_nodes) == 1
+    text = kdl_io.dump_layout(layout)
+    assert "default_tab_template" in text
+    assert "zellij:status-bar" in text
+    assert 'tab name="dev"' in text
+
+
+def test_dump_preserves_pane_raw_nodes(tmp_path: Path) -> None:
+    src = tmp_path / "panes_with_plugin.kdl"
+    src.write_text(
+        'layout {\n'
+        '    tab {\n'
+        '        pane {\n'
+        '            plugin location="zellij:strider"\n'
+        '        }\n'
+        '    }\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    layout = kdl_io.load_layout(src)
+    text = kdl_io.dump_layout(layout)
+    assert "zellij:strider" in text
+
+
 def test_dump_layout_emits_no_default_props() -> None:
     layout = Layout(name="x", path=Path("/tmp/x.kdl"), tabs=[Tab(name="t")])
     text = kdl_io.dump_layout(layout)

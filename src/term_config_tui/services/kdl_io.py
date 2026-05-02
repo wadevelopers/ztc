@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
 import kdl
 
 from term_config_tui.models.layout import Layout, Pane, SplitDirection, Tab
+from term_config_tui.services.atomic import write_atomic
+from term_config_tui.services.backups import make_backup
+
+# kdl-py serializa enteros como floats ("1.0"). Para no introducir ruido al
+# guardar layouts existentes, los normalizamos en la salida de raw nodes.
+_INTEGER_FLOAT = re.compile(r"=(\d+)\.0\b")
 
 
 def load_layout(path: Path) -> Layout:
@@ -40,18 +47,33 @@ def load_layout(path: Path) -> Layout:
 
 
 def dump_layout(layout: Layout) -> str:
-    """Emite KDL limpio desde el modelo. No re-emite `raw_unknown_nodes`.
+    """Emite KDL desde el modelo, preservando `raw_unknown_nodes`.
 
-    Pensado para layouts creados por la app. Para round-trip de layouts externos,
-    ver fase posterior.
+    Los nodos no entendidos (p. ej. `default_tab_template`, `plugin`) se
+    re-emiten via kdl-py y se reindentan al estilo del resto del archivo.
+    Limitacion conocida: nodos comentados con `/-` se pierden porque kdl-py
+    no los expone al parsear.
     """
     lines: list[str] = ["layout {"]
     if layout.cwd:
         lines.append(f'    cwd "{_escape(layout.cwd)}"')
+    for raw in layout.raw_unknown_nodes:
+        lines.extend(_emit_raw_kdl_node(raw, indent=1))
     for tab in layout.tabs:
         lines.extend(_emit_tab(tab, indent=1))
     lines.append("}")
     return "\n".join(lines) + "\n"
+
+
+def _emit_raw_kdl_node(node: object, *, indent: int) -> list[str]:
+    """Re-emite un nodo opaco (kdl.Node) e indenta para alinearlo con el resto."""
+    pad = "    " * indent
+    text = _INTEGER_FLOAT.sub(r"=\1", str(node)).rstrip("\n")
+    out: list[str] = []
+    for line in text.splitlines():
+        normalized = line.replace("\t", "    ")
+        out.append(pad + normalized if normalized else pad)
+    return out
 
 
 # ---------- helpers de parseo ----------
@@ -184,9 +206,12 @@ def _emit_tab(tab: Tab, *, indent: int) -> list[str]:
         ("split_direction", tab.split_direction, _emit_str),
     )
     header = f"{pad}tab" + (f" {props}" if props else "")
-    if not tab.children:
+    has_block = bool(tab.children) or bool(tab.raw_unknown_nodes)
+    if not has_block:
         return [header]
     lines = [f"{header} {{"]
+    for raw in tab.raw_unknown_nodes:
+        lines.extend(_emit_raw_kdl_node(raw, indent=indent + 1))
     for child in tab.children:
         lines.extend(_emit_pane(child, indent=indent + 1))
     lines.append(f"{pad}}}")
@@ -206,13 +231,15 @@ def _emit_pane(pane: Pane, *, indent: int) -> list[str]:
         ("split_direction", pane.split_direction, _emit_str),
     )
     header = f"{pad}pane" + (f" {props}" if props else "")
-    has_block = bool(pane.children) or bool(pane.args)
+    has_block = bool(pane.children) or bool(pane.args) or bool(pane.raw_unknown_nodes)
     if not has_block:
         return [header]
     lines = [f"{header} {{"]
     if pane.args:
         args_quoted = " ".join(f'"{_escape(a)}"' for a in pane.args)
         lines.append(f"{pad}    args {args_quoted}")
+    for raw in pane.raw_unknown_nodes:
+        lines.extend(_emit_raw_kdl_node(raw, indent=indent + 1))
     for child in pane.children:
         lines.extend(_emit_pane(child, indent=indent + 1))
     lines.append(f"{pad}}}")
@@ -248,4 +275,29 @@ def _emit_size(key: str, value: str | None) -> str | None:
     return f'{key}="{_escape(value)}"'
 
 
-__all__ = ["Layout", "Pane", "Tab", "SplitDirection", "load_layout", "dump_layout"]
+def write_layout(layout: Layout, *, backup: bool = True) -> Path | None:
+    """Serializa el layout y lo escribe atomicamente. Crea backup si existia."""
+    backup_path = make_backup(layout.path) if backup and layout.path.exists() else None
+    write_atomic(layout.path, dump_layout(layout))
+    return backup_path
+
+
+def delete_layout(path: Path) -> Path | None:
+    """Borra un archivo de layout. Antes hace backup. Devuelve la ruta del backup."""
+    if not path.exists():
+        return None
+    backup_path = make_backup(path)
+    path.unlink()
+    return backup_path
+
+
+__all__ = [
+    "Layout",
+    "Pane",
+    "Tab",
+    "SplitDirection",
+    "load_layout",
+    "dump_layout",
+    "write_layout",
+    "delete_layout",
+]

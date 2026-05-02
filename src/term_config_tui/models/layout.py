@@ -7,7 +7,7 @@ from typing import Any, Literal
 SplitDirection = Literal["vertical", "horizontal"]
 
 
-@dataclass
+@dataclass(eq=False)
 class Pane:
     command: str | None = None
     args: list[str] = field(default_factory=list)
@@ -26,7 +26,7 @@ class Pane:
         return bool(self.children)
 
 
-@dataclass
+@dataclass(eq=False)
 class Tab:
     name: str | None = None
     children: list[Pane] = field(default_factory=list)

@@ -9,6 +9,7 @@ from textual.widgets.option_list import Option
 
 from term_config_tui import __version__
 from term_config_tui.models.config import Paths
+from term_config_tui.screens.layout_list import LayoutListScreen
 from term_config_tui.screens.session_manager import SessionManagerScreen
 from term_config_tui.screens.theme_editor import ThemePickerScreen
 
@@ -56,7 +57,7 @@ class TermConfigApp(App[None]):
             yield OptionList(
                 Option("Tema Zellij", id="themes"),
                 Option("Sesiones Zellij", id="sessions"),
-                Option("Layouts Zellij  (proxima fase)", id="layouts", disabled=True),
+                Option("Layouts Zellij", id="layouts"),
                 Option("Colores Alacritty  (proxima fase)", id="colors", disabled=True),
                 id="main-menu",
             )
@@ -71,3 +72,5 @@ class TermConfigApp(App[None]):
             self.push_screen(ThemePickerScreen(config_path=self.paths.zellij_config))
         elif event.option.id == "sessions":
             self.push_screen(SessionManagerScreen(layouts_dir=self.paths.zellij_layouts_dir))
+        elif event.option.id == "layouts":
+            self.push_screen(LayoutListScreen(layouts_dir=self.paths.zellij_layouts_dir))

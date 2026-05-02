@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass
 
 from textual import on
@@ -7,7 +8,9 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Static
+from textual.widgets import Button, Input, RadioButton, RadioSet, Static, Switch
+
+from term_config_tui.models.layout import Pane, SplitDirection
 
 
 class ConfirmByNameModal(ModalScreen[bool]):
@@ -211,3 +214,284 @@ class NewSessionModal(ModalScreen[NewSessionResult | None]):
             if layout_value:
                 layout = layout_value
         self.dismiss(NewSessionResult(name=name, layout=layout))
+
+
+class PromptModal(ModalScreen[str | None]):
+    """Modal generico de un solo input: pide texto, devuelve string o None si cancela."""
+
+    BINDINGS = [Binding("escape", "dismiss_none", "Cancelar")]
+
+    DEFAULT_CSS = """
+    PromptModal {
+        align: center middle;
+    }
+    #dialog {
+        width: 60;
+        height: auto;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #title {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+    Input {
+        margin-bottom: 1;
+    }
+    #buttons {
+        align-horizontal: right;
+        height: 3;
+    }
+    Button {
+        margin-left: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        *,
+        title: str,
+        placeholder: str = "",
+        initial: str = "",
+        confirm_label: str = "Aceptar",
+        allow_empty: bool = False,
+    ) -> None:
+        super().__init__()
+        self._title = title
+        self._placeholder = placeholder
+        self._initial = initial
+        self._confirm_label = confirm_label
+        self._allow_empty = allow_empty
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Static(self._title, id="title")
+            yield Input(
+                value=self._initial, placeholder=self._placeholder, id="prompt-input"
+            )
+            with Horizontal(id="buttons"):
+                yield Button("Cancelar", id="cancel")
+                yield Button(
+                    self._confirm_label,
+                    id="confirm",
+                    variant="primary",
+                    disabled=not (self._allow_empty or bool(self._initial)),
+                )
+
+    def on_mount(self) -> None:
+        inp = self.query_one("#prompt-input", Input)
+        inp.focus()
+        if inp.value:
+            inp.cursor_position = len(inp.value)
+
+    @on(Input.Changed, "#prompt-input")
+    def _on_change(self, event: Input.Changed) -> None:
+        self.query_one("#confirm", Button).disabled = not (
+            self._allow_empty or bool(event.value.strip())
+        )
+
+    @on(Input.Submitted, "#prompt-input")
+    def _on_submit(self, event: Input.Submitted) -> None:
+        self._submit()
+
+    @on(Button.Pressed, "#confirm")
+    def _on_confirm(self) -> None:
+        self._submit()
+
+    @on(Button.Pressed, "#cancel")
+    def _on_cancel(self) -> None:
+        self.dismiss(None)
+
+    def action_dismiss_none(self) -> None:
+        self.dismiss(None)
+
+    def _submit(self) -> None:
+        value = self.query_one("#prompt-input", Input).value
+        if not self._allow_empty and not value.strip():
+            return
+        self.dismiss(value.strip())
+
+
+class PaneEditModal(ModalScreen[Pane | None]):
+    """Edita las propiedades de un Pane (hoja o contenedor).
+
+    Devuelve un nuevo Pane con los cambios o None si se cancela.
+    El pane original no se muta: el caller decide como aplicarlo.
+    """
+
+    BINDINGS = [Binding("escape", "dismiss_none", "Cancelar")]
+
+    DEFAULT_CSS = """
+    PaneEditModal {
+        align: center middle;
+    }
+    #dialog {
+        width: 80;
+        height: auto;
+        max-height: 90%;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #title {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+    .row {
+        height: 3;
+        margin-bottom: 0;
+    }
+    .label {
+        width: 20;
+        color: $text-muted;
+        padding-top: 1;
+    }
+    .narrow {
+        width: 30;
+    }
+    Input {
+        width: 1fr;
+    }
+    Switch {
+        width: auto;
+    }
+    RadioSet {
+        width: 1fr;
+        height: 3;
+        layout: horizontal;
+    }
+    #buttons {
+        align-horizontal: right;
+        height: 3;
+        margin-top: 1;
+    }
+    Button {
+        margin-left: 1;
+    }
+    """
+
+    def __init__(self, pane: Pane) -> None:
+        super().__init__()
+        self._pane = pane
+        self._is_container = pane.is_container
+
+    def compose(self) -> ComposeResult:
+        kind = "contenedor" if self._is_container else "hoja"
+        with Vertical(id="dialog"):
+            yield Static(f"Editar pane ({kind})", id="title")
+
+            with Horizontal(classes="row"):
+                yield Static("Nombre", classes="label")
+                yield Input(value=self._pane.name or "", id="name", placeholder="opcional")
+
+            with Horizontal(classes="row"):
+                yield Static("Size", classes="label")
+                yield Input(
+                    value=self._pane.size or "",
+                    id="size",
+                    placeholder="ej. 60% o 1",
+                )
+
+            with Horizontal(classes="row"):
+                yield Static("Focus", classes="label")
+                yield Switch(value=self._pane.focus, id="focus")
+
+            if self._is_container:
+                with Horizontal(classes="row"):
+                    yield Static("Split direction", classes="label")
+                    with RadioSet(id="split"):
+                        yield RadioButton(
+                            "vertical",
+                            value=self._pane.split_direction == "vertical",
+                        )
+                        yield RadioButton(
+                            "horizontal",
+                            value=self._pane.split_direction == "horizontal",
+                        )
+                        yield RadioButton(
+                            "(none)",
+                            value=self._pane.split_direction is None,
+                        )
+            else:
+                with Horizontal(classes="row"):
+                    yield Static("Comando", classes="label")
+                    yield Input(
+                        value=self._pane.command or "",
+                        id="command",
+                        placeholder="ej. nvim",
+                    )
+                with Horizontal(classes="row"):
+                    yield Static("Args", classes="label")
+                    yield Input(
+                        value=shlex.join(self._pane.args) if self._pane.args else "",
+                        id="args",
+                        placeholder="ej. --verbose --file foo.txt",
+                    )
+                with Horizontal(classes="row"):
+                    yield Static("CWD", classes="label")
+                    yield Input(
+                        value=self._pane.cwd or "",
+                        id="cwd",
+                        placeholder="opcional, ej. /home/martin/proj",
+                    )
+                with Horizontal(classes="row"):
+                    yield Static("Start suspended", classes="label")
+                    yield Switch(
+                        value=self._pane.start_suspended, id="start_suspended"
+                    )
+                with Horizontal(classes="row"):
+                    yield Static("Borderless", classes="label")
+                    yield Switch(value=self._pane.borderless, id="borderless")
+
+            with Horizontal(id="buttons"):
+                yield Button("Cancelar", id="cancel")
+                yield Button("Guardar", id="save", variant="primary")
+
+    def on_mount(self) -> None:
+        self.query_one("#name", Input).focus()
+
+    @on(Button.Pressed, "#cancel")
+    def _on_cancel(self) -> None:
+        self.dismiss(None)
+
+    @on(Button.Pressed, "#save")
+    def _on_save(self) -> None:
+        self._submit()
+
+    def action_dismiss_none(self) -> None:
+        self.dismiss(None)
+
+    def _submit(self) -> None:
+        new_pane = Pane(
+            children=list(self._pane.children),
+            raw_unknown_nodes=list(self._pane.raw_unknown_nodes),
+        )
+        new_pane.name = _none_if_empty(self.query_one("#name", Input).value)
+        new_pane.size = _none_if_empty(self.query_one("#size", Input).value)
+        new_pane.focus = self.query_one("#focus", Switch).value
+
+        if self._is_container:
+            split_set = self.query_one("#split", RadioSet)
+            choice: SplitDirection | None = None
+            if split_set.pressed_button is not None:
+                label = str(split_set.pressed_button.label).strip()
+                if label in ("vertical", "horizontal"):
+                    choice = label  # type: ignore[assignment]
+            new_pane.split_direction = choice
+        else:
+            new_pane.command = _none_if_empty(self.query_one("#command", Input).value)
+            args_value = self.query_one("#args", Input).value.strip()
+            new_pane.args = shlex.split(args_value) if args_value else []
+            new_pane.cwd = _none_if_empty(self.query_one("#cwd", Input).value)
+            new_pane.start_suspended = self.query_one("#start_suspended", Switch).value
+            new_pane.borderless = self.query_one("#borderless", Switch).value
+            new_pane.split_direction = None
+        self.dismiss(new_pane)
+
+
+def _none_if_empty(value: str) -> str | None:
+    value = value.strip()
+    return value if value else None
