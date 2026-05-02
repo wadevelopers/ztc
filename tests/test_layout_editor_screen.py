@@ -10,7 +10,11 @@ from term_config_tui.models.config import Paths
 from term_config_tui.screens.layout_editor import LayoutEditorScreen
 from term_config_tui.screens.layout_list import LayoutListScreen
 from term_config_tui.services import kdl_io
-from term_config_tui.widgets.confirm import ConfirmByNameModal, PaneEditModal
+from term_config_tui.widgets.confirm import (
+    ConfirmByNameModal,
+    PaneEditModal,
+    PostSaveLayoutModal,
+)
 
 FIX = Path(__file__).parent / "fixtures" / "zellij"
 
@@ -123,6 +127,23 @@ async def test_pane_edit_modal_returns_changes(tmp_path: Path) -> None:
         await pilot.pause()
         assert isinstance(app.screen, LayoutEditorScreen)
         assert app.screen.layout_model.tabs[0].children[0].command == "btop"
+
+
+async def test_layout_editor_save_opens_post_save_modal(tmp_path: Path) -> None:
+    paths = _paths_with_layout(tmp_path)
+    app = TermConfigApp(paths=paths)
+    async with app.run_test() as pilot:
+        await pilot.press("down", "down", "enter", "enter")
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, LayoutEditorScreen)
+        screen.action_save()
+        await pilot.pause()
+        assert isinstance(app.screen, PostSaveLayoutModal)
+        # Cerrar modal con Esc.
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, LayoutEditorScreen)
 
 
 async def test_layout_list_new_creates_file(tmp_path: Path) -> None:

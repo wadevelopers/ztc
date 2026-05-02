@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shlex
 from dataclasses import dataclass
+from typing import Literal
 
 from textual import on
 from textual.app import ComposeResult
@@ -611,3 +612,182 @@ class EditColorModal(ModalScreen[str | None]):
         if not is_valid_hex(value):
             return
         self.dismiss(normalize_hex(value))
+
+
+PostSaveChoice = Literal["close", "new_session", "recreate", "sessions"]
+
+
+class PostSaveLayoutModal(ModalScreen["PostSaveChoice | None"]):
+    """Despues de guardar un layout, ofrece pasos siguientes."""
+
+    BINDINGS = [Binding("escape", "dismiss_close", "Cerrar")]
+
+    DEFAULT_CSS = """
+    PostSaveLayoutModal {
+        align: center middle;
+    }
+    #dialog {
+        width: 70;
+        height: auto;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #title {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+    .label {
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+    Button {
+        margin-top: 1;
+        width: 100%;
+    }
+    """
+
+    def __init__(self, *, layout_name: str, backup_name: str | None) -> None:
+        super().__init__()
+        self._layout_name = layout_name
+        self._backup_name = backup_name
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Static(f"Layout '{self._layout_name}' guardado", id="title")
+            backup_line = (
+                f"Backup: {self._backup_name}"
+                if self._backup_name
+                else "Sin backup (era nuevo)."
+            )
+            yield Static(backup_line, classes="label")
+            yield Static("Que quieres hacer ahora?", classes="label")
+            yield Button(
+                "Abrir una sesion nueva con este layout",
+                id="new_session",
+                variant="primary",
+            )
+            yield Button(
+                "Recrear una sesion existente con este layout",
+                id="recreate",
+                variant="warning",
+            )
+            yield Button("Ir al Session Manager", id="sessions")
+            yield Button("Cerrar", id="close")
+
+    def on_mount(self) -> None:
+        self.query_one("#new_session", Button).focus()
+
+    @on(Button.Pressed)
+    def _on_button(self, event: Button.Pressed) -> None:
+        choice = event.button.id
+        if choice in ("close", "new_session", "recreate", "sessions"):
+            self.dismiss(choice)  # type: ignore[arg-type]
+
+    def action_dismiss_close(self) -> None:
+        self.dismiss("close")
+
+
+class PickSessionModal(ModalScreen[str | None]):
+    """Modal para elegir una sesion existente de una lista."""
+
+    BINDINGS = [
+        Binding("escape", "dismiss_none", "Cancelar"),
+        Binding("enter", "submit", "Elegir"),
+    ]
+
+    DEFAULT_CSS = """
+    PickSessionModal {
+        align: center middle;
+    }
+    #dialog {
+        width: 70;
+        height: auto;
+        max-height: 90%;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #title {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+    .label {
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+    OptionList {
+        height: auto;
+        max-height: 12;
+    }
+    #buttons {
+        align-horizontal: right;
+        height: 3;
+        margin-top: 1;
+    }
+    Button {
+        margin-left: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        *,
+        title: str,
+        options: list[tuple[str, str]],
+        current_session: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._title = title
+        self._options = options
+        self._current = current_session
+
+    def compose(self) -> ComposeResult:
+        from textual.widgets import OptionList
+
+        with Vertical(id="dialog"):
+            yield Static(self._title, id="title")
+            if self._current is not None:
+                yield Static(
+                    "Sesion actual marcada con '*' — protegida.",
+                    classes="label",
+                )
+            ol = OptionList(id="picker-list")
+            yield ol
+            with Horizontal(id="buttons"):
+                yield Button("Cancelar", id="cancel")
+                yield Button("Elegir", id="ok", variant="primary")
+
+    def on_mount(self) -> None:
+        from textual.widgets import OptionList
+        from textual.widgets.option_list import Option
+
+        ol = self.query_one("#picker-list", OptionList)
+        for name, label in self._options:
+            disabled = name == self._current
+            ol.add_option(Option(label, id=name, disabled=disabled))
+        if ol.option_count:
+            ol.focus()
+
+    @on(Button.Pressed, "#ok")
+    def _on_ok(self) -> None:
+        self.action_submit()
+
+    @on(Button.Pressed, "#cancel")
+    def _on_cancel(self) -> None:
+        self.dismiss(None)
+
+    def action_dismiss_none(self) -> None:
+        self.dismiss(None)
+
+    def action_submit(self) -> None:
+        from textual.widgets import OptionList
+
+        ol = self.query_one("#picker-list", OptionList)
+        if ol.highlighted is None:
+            return
+        opt = ol.get_option_at_index(ol.highlighted)
+        if opt.id is not None:
+            self.dismiss(opt.id)
