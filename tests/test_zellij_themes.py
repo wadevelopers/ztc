@@ -66,7 +66,6 @@ def test_textual_theme_for_curated_dark() -> None:
     assert zellij_themes.textual_theme_for("ayu-mirage") == "ansi-dark"
     assert zellij_themes.textual_theme_for("lucario") == "ansi-dark"
     assert zellij_themes.textual_theme_for("night-owl") == "ansi-dark"
-    assert zellij_themes.textual_theme_for("ao") == "nord"
     assert zellij_themes.textual_theme_for("cyber-noir") == "nord"
     assert zellij_themes.textual_theme_for("everforest-dark") == "nord"
     assert zellij_themes.textual_theme_for("terafox") == "nord"
@@ -79,6 +78,7 @@ def test_textual_theme_for_curated_dark() -> None:
     assert zellij_themes.textual_theme_for("menace") == "textual-dark"
     assert zellij_themes.textual_theme_for("retro-wave") == "textual-dark"
     assert zellij_themes.textual_theme_for("default") == "textual-dark"
+    assert zellij_themes.textual_theme_for("ao") == "textual-dark"
 
 
 def test_textual_theme_for_curated_light() -> None:

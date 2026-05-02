@@ -280,7 +280,7 @@ ZELLIJ_TO_TEXTUAL: dict[str, str] = {
     "solarized-dark": "solarized-dark",
     "solarized-light": "solarized-light",
     # Curado: dark
-    "ao": "nord",
+    "ao": "textual-dark",
     "ayu-dark": "ansi-dark",
     "ayu-mirage": "ansi-dark",
     "cyber-noir": "nord",
