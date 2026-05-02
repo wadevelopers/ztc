@@ -115,6 +115,19 @@ cual: comentarios, indentacion, todo.
 
 Si la directiva `theme` no existe en tu archivo, se anade al final.
 
+### Sincronizacion con el tema del propio TUI
+
+Al arrancar, el TUI lee `theme "..."` de tu `config.kdl` y aplica el
+tema de Textual equivalente para que la propia interfaz combine. Cada
+vez que pulsas Enter para aplicar un tema en el picker, el TUI cambia
+ambos a la vez.
+
+El mapping de los 33 temas built-in de Zellij a temas de Textual esta
+en `services/zellij_themes.py::ZELLIJ_TO_TEXTUAL`. Para temas
+user-defined (como `custom_dark`) o nombres no mapeados, el TUI usa
+`textual-dark` como fallback (no intenta detectar dark/light por
+luminancia del bg — si te interesa, se puede agregar despues).
+
 ### Custom themes (crear / editar / clonar / borrar)
 
 Desde el Theme Picker:

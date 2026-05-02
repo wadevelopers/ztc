@@ -262,6 +262,63 @@ def clone_theme(
     return upsert_user_theme(config_path, new_theme, backup=backup)
 
 
+# ---------- mapping Zellij -> Textual ----------
+
+TEXTUAL_FALLBACK = "textual-dark"
+
+# Curado manualmente: cada tema Zellij apunta a un tema de Textual
+# disponible. Cubre los 33 temas built-in. Para temas user-defined o
+# nombres desconocidos se usa `TEXTUAL_FALLBACK`.
+ZELLIJ_TO_TEXTUAL: dict[str, str] = {
+    # Match exacto
+    "catppuccin-frappe": "catppuccin-frappe",
+    "catppuccin-macchiato": "catppuccin-macchiato",
+    "catppuccin-mocha": "catppuccin-mocha",
+    "catppuccin-latte": "catppuccin-latte",
+    "dracula": "dracula",
+    "tokyo-night": "tokyo-night",
+    "solarized-dark": "solarized-dark",
+    "solarized-light": "solarized-light",
+    # Curado: dark
+    "ao": "nord",
+    "ayu-dark": "ansi-dark",
+    "ayu-mirage": "ansi-dark",
+    "cyber-noir": "nord",
+    "default": "textual-dark",
+    "everforest-dark": "nord",
+    "gruber-darker": "flexoki",
+    "kanagawa": "gruvbox",
+    "lucario": "ansi-dark",
+    "menace": "textual-dark",
+    "night-owl": "ansi-dark",
+    "nightfox": "tokyo-night",
+    "onedark": "atom-one-dark",
+    "one-half-dark": "atom-one-dark",
+    "retro-wave": "textual-dark",
+    "terafox": "nord",
+    "tokyo-night-dark": "tokyo-night",
+    "tokyo-night-storm": "tokyo-night",
+    "vesper": "flexoki",
+    # Curado: light
+    "ayu-light": "rose-pine-dawn",
+    "dayfox": "monokai",
+    "everforest-light": "rose-pine-dawn",
+    "gruvbox-light": "gruvbox",
+    "iceberg-light": "rose-pine-moon",
+    "tokyo-night-light": "rose-pine",
+}
+
+
+def textual_theme_for(zellij_name: str | None) -> str:
+    """Devuelve el tema de Textual que mejor matchea el tema de Zellij dado.
+
+    Para temas user-defined o nombres no mapeados, devuelve TEXTUAL_FALLBACK.
+    """
+    if not zellij_name:
+        return TEXTUAL_FALLBACK
+    return ZELLIJ_TO_TEXTUAL.get(zellij_name, TEXTUAL_FALLBACK)
+
+
 def default_legacy_slots() -> list[ZellijColor]:
     """11 slots con valores neutros para crear un tema nuevo desde cero."""
     defaults = {

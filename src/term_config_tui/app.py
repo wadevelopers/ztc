@@ -13,6 +13,7 @@ from term_config_tui.screens.color_editor import AlacrittyColorEditorScreen
 from term_config_tui.screens.layout_list import LayoutListScreen
 from term_config_tui.screens.session_manager import SessionManagerScreen
 from term_config_tui.screens.theme_editor import ThemePickerScreen
+from term_config_tui.services import zellij_config, zellij_themes
 
 
 class TermConfigApp(App[None]):
@@ -66,7 +67,19 @@ class TermConfigApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.sync_theme_with_zellij()
         self.query_one("#main-menu", OptionList).focus()
+
+    def sync_theme_with_zellij(self) -> None:
+        """Aplica el tema Textual que matchea el tema Zellij activo."""
+        active = zellij_config.read_active_theme(self.paths.zellij_config)
+        self.apply_theme_for_zellij(active)
+
+    def apply_theme_for_zellij(self, zellij_name: str | None) -> None:
+        """Cambia el tema del TUI al equivalente Textual del tema Zellij dado."""
+        target = zellij_themes.textual_theme_for(zellij_name)
+        if target in self.available_themes and self.theme != target:
+            self.theme = target
 
     @on(OptionList.OptionSelected, "#main-menu")
     def _on_menu_selected(self, event: OptionList.OptionSelected) -> None:

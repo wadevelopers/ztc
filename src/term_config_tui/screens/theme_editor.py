@@ -166,6 +166,10 @@ class ThemePickerScreen(Screen[None]):
         if backup is not None:
             msg += f" (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
+        # Sincronizar el tema del TUI con el tema Zellij recien aplicado.
+        applier = getattr(self.app, "apply_theme_for_zellij", None)
+        if callable(applier):
+            applier(name)
         self._reload()
 
     def _theme_by_name(self, name: str) -> ZellijTheme | None:
