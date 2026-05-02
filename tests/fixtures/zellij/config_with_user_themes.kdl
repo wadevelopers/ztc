@@ -1,0 +1,16 @@
+// comentario
+keybinds {}
+
+themes {
+    custom_dark {
+        fg "#cdd6f4"
+        bg "#585b70"
+        red "#d5597c"
+    }
+    midnight {
+        fg "#ffffff"
+        bg "#000000"
+    }
+}
+
+theme "custom_dark"
