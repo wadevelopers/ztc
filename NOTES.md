@@ -115,6 +115,33 @@ cual: comentarios, indentacion, todo.
 
 Si la directiva `theme` no existe en tu archivo, se anade al final.
 
+### Custom themes (crear / editar / clonar / borrar)
+
+Desde el Theme Picker:
+
+| Tecla | Accion |
+|---|---|
+| `n` | Nuevo user theme (PromptModal pide nombre, abre editor con 11 slots por defecto) |
+| `e` | Editar el user theme seleccionado (built-in no se puede editar) |
+| `c` | Clonar el seleccionado bajo nuevo nombre. Si es user, copia colores. Si es built-in, crea con todos los slots a `#000000` para que rellenes |
+| `d` | Borrar user theme (confirm-by-name) |
+
+El editor de custom theme muestra los **11 slots legacy**
+(`fg`, `bg`, `black`..`white`, `orange`) mas cualquier otro slot que ya
+estuviera definido. Enter abre el modal de hex; Ctrl+S guarda.
+
+Al guardar, el TUI **regenera el bloque entero `themes { ... }`** y lo
+splicea en el lugar exacto del config.kdl (con balance de llaves
+tolerando llaves dentro de strings). El resto del archivo se preserva.
+
+**Limitacion**: comentarios `//` y `/-` dentro del bloque themes se
+pierden al re-escribir. Si tienes anotaciones importantes ahi, sacalas
+fuera del bloque.
+
+Solo se soporta el **formato legacy** (`fg "#hex"`). El formato nuevo de
+componentes UI (`text_unselected { ... }`) se preserva al leer pero el
+editor no lo expone bien — si tu tema usa eso, edita a mano.
+
 ---
 
 ## 5. Layouts de Zellij

@@ -12,6 +12,7 @@ from textual.widgets.option_list import Option
 
 from term_config_tui.models.theme import ZellijTheme
 from term_config_tui.services import zellij_config, zellij_themes
+from term_config_tui.widgets.confirm import ConfirmByNameModal, PromptModal
 
 
 class ThemePickerScreen(Screen[None]):
@@ -19,6 +20,10 @@ class ThemePickerScreen(Screen[None]):
 
     BINDINGS = [
         Binding("enter", "apply", "Aplicar", show=True),
+        Binding("n", "new_theme", "Nuevo"),
+        Binding("e", "edit_theme", "Editar"),
+        Binding("c", "clone_theme", "Clonar"),
+        Binding("d", "delete_theme", "Borrar"),
         Binding("escape", "app.pop_screen", "Volver", show=True),
         Binding("q", "app.pop_screen", "Volver", show=False),
     ]
@@ -165,6 +170,154 @@ class ThemePickerScreen(Screen[None]):
 
     def _theme_by_name(self, name: str) -> ZellijTheme | None:
         return next((t for t in self._themes if t.name == name), None)
+
+    def _highlighted(self) -> ZellijTheme | None:
+        option_list = self.query_one("#theme-list", OptionList)
+        if option_list.highlighted is None:
+            return None
+        opt = option_list.get_option_at_index(option_list.highlighted)
+        if opt.id is None:
+            return None
+        return self._theme_by_name(opt.id)
+
+    def on_screen_resume(self) -> None:
+        # Tras volver del editor de custom themes, refrescar para ver cambios.
+        self._reload()
+
+    # ---------- acciones de custom themes ----------
+
+    def action_new_theme(self) -> None:
+        def after(name: str | None) -> None:
+            if not name:
+                return
+            if not zellij_themes.is_valid_theme_name(name):
+                self.app.notify(
+                    f"Nombre invalido: {name!r}. "
+                    "Empieza por letra; usa letras, numeros, '_' o '-'.",
+                    severity="error",
+                    timeout=8,
+                )
+                return
+            current_names = {t.name for t in zellij_themes.list_user_themes(self.config_path)}
+            if name in current_names:
+                self.app.notify(
+                    f"Ya existe un user theme '{name}'. Usa otro nombre.",
+                    severity="error",
+                )
+                return
+            from term_config_tui.models.theme import ZellijTheme as _ZT
+            from term_config_tui.screens.custom_theme_editor import CustomThemeEditorScreen
+
+            new_theme = _ZT(
+                name=name,
+                source="user",
+                colors=zellij_themes.default_legacy_slots(),
+            )
+            self.app.push_screen(
+                CustomThemeEditorScreen(
+                    config_path=self.config_path, theme=new_theme
+                )
+            )
+
+        self.app.push_screen(
+            PromptModal(
+                title="Nuevo user theme",
+                placeholder="ej. mi-tema",
+                confirm_label="Crear",
+            ),
+            after,
+        )
+
+    def action_edit_theme(self) -> None:
+        theme = self._highlighted()
+        if theme is None:
+            return
+        if not theme.is_user:
+            self.app.notify(
+                f"'{theme.name}' es un built-in. Usa Clonar (c) para crear una copia editable.",
+                severity="warning",
+                timeout=8,
+            )
+            return
+        from term_config_tui.screens.custom_theme_editor import CustomThemeEditorScreen
+
+        self.app.push_screen(
+            CustomThemeEditorScreen(config_path=self.config_path, theme=theme)
+        )
+
+    def action_clone_theme(self) -> None:
+        theme = self._highlighted()
+        if theme is None:
+            return
+        src = theme.name
+
+        def after(dst: str | None) -> None:
+            if not dst:
+                return
+            if not zellij_themes.is_valid_theme_name(dst):
+                self.app.notify(
+                    f"Nombre invalido: {dst!r}.",
+                    severity="error",
+                )
+                return
+            try:
+                backup = zellij_themes.clone_theme(self.config_path, src, dst)
+            except ValueError as exc:
+                self.app.notify(str(exc), severity="error")
+                return
+            msg = f"Clonado '{src}' como '{dst}'"
+            if backup is not None:
+                msg += f"  (backup: {backup.name})"
+            self.app.notify(msg, severity="information", timeout=6)
+            self._reload()
+
+        kind = "user" if theme.is_user else "built-in (colores por defecto)"
+        self.app.push_screen(
+            PromptModal(
+                title=f"Clonar '{src}' [{kind}]",
+                placeholder=f"{src}-copy",
+                confirm_label="Clonar",
+            ),
+            after,
+        )
+
+    def action_delete_theme(self) -> None:
+        theme = self._highlighted()
+        if theme is None:
+            return
+        if not theme.is_user:
+            self.app.notify(
+                f"'{theme.name}' es un built-in; no se puede borrar.",
+                severity="warning",
+            )
+            return
+
+        def after(ok: bool) -> None:
+            if not ok:
+                return
+            try:
+                backup = zellij_themes.delete_user_theme(self.config_path, theme.name)
+            except Exception as exc:  # noqa: BLE001
+                self.app.notify(f"Error al borrar: {exc}", severity="error")
+                return
+            msg = f"Tema '{theme.name}' eliminado"
+            if backup is not None:
+                msg += f"  (backup: {backup.name})"
+            self.app.notify(msg, severity="information", timeout=6)
+            self._reload()
+
+        self.app.push_screen(
+            ConfirmByNameModal(
+                title="Borrar user theme",
+                message=(
+                    f"Esto eliminara '{theme.name}' del bloque themes en config.kdl. "
+                    "Si es el tema activo, Zellij caera al tema 'default' al recargar."
+                ),
+                expected=theme.name,
+                confirm_label="Borrar",
+            ),
+            after,
+        )
 
 
 def _looks_like_hex(value: str) -> bool:
