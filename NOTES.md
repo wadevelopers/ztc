@@ -115,6 +115,38 @@ cual: comentarios, indentacion, todo.
 
 Si la directiva `theme` no existe en tu archivo, se anade al final.
 
+### Sincronizacion automatica con Alacritty al cambiar de tema
+
+Cada vez que aplicas un tema en el Theme Picker (Enter), el TUI tambien
+sincroniza estos slots de `alacritty.toml`:
+
+| Slot Zellij | Slot Alacritty |
+|---|---|
+| `fg` | `[colors.primary] foreground` |
+| `bg` | `[colors.primary] background` |
+| `black` | `[colors.normal] black` |
+| `red` | `[colors.normal] red` |
+| `green` | `[colors.normal] green` |
+| `yellow` | `[colors.normal] yellow` |
+| `blue` | `[colors.normal] blue` |
+| `magenta` | `[colors.normal] magenta` |
+| `cyan` | `[colors.normal] cyan` |
+| `white` | `[colors.normal] white` |
+
+Para temas built-in los colores se derivan del .kdl vendorizado (los
+mismos que se usan al clonar). Para user themes, se leen los slots del
+bloque `themes { }`. Si un slot no esta definido en el origen, no se
+toca en Alacritty (preserva lo que tengas).
+
+`[colors.bright]`, `[colors.selection]`, `[colors.cursor]` y todas las
+demas secciones (`[window]`, `[font]`, etc.) **no se tocan**. Despues de
+sincronizar puedes seguir editando manualmente desde la pantalla de
+Colores Alacritty.
+
+Solo se escribe si hay cambios efectivos. Si el slot ya tenia el valor
+correcto, no genera diff ni backup. Cuando sí escribe, crea el backup
+habitual `alacritty.toml.bak.YYYYMMDD-HHMMSS`.
+
 ### Sincronizacion con el tema del propio TUI (match exacto)
 
 Al arrancar, el TUI:

@@ -11,7 +11,7 @@ from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from term_config_tui.models.theme import ZellijTheme
-from term_config_tui.services import zellij_config, zellij_themes
+from term_config_tui.services import theme_sync, zellij_config, zellij_themes
 from term_config_tui.widgets.confirm import ConfirmByNameModal, PromptModal
 
 
@@ -162,13 +162,46 @@ class ThemePickerScreen(Screen[None]):
         except Exception as exc:  # noqa: BLE001
             self.app.notify(f"Error al aplicar tema: {exc}", severity="error", timeout=8)
             return
-        msg = f"Tema cambiado a '{name}'"
+        msg = f"Tema Zellij '{name}' aplicado"
         if backup is not None:
             msg += f" (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
-        # Sincronizar el tema del TUI con el tema Zellij recien aplicado.
+        # Sincronizar Alacritty con el tema Zellij recien aplicado.
+        self._sync_alacritty(name)
+        # Sincronizar el tema del TUI.
         self._sync_app_theme(name)
         self._reload()
+
+    def _sync_alacritty(self, zellij_name: str) -> None:
+        """Propaga bg/fg/normal.* a alacritty.toml. No bloqueante: si falla, avisa."""
+        alacritty_path = getattr(getattr(self.app, "paths", None), "alacritty_config", None)
+        if alacritty_path is None:
+            return
+        try:
+            result = theme_sync.sync_alacritty_with_zellij_theme(
+                zellij_theme_name=zellij_name,
+                alacritty_path=alacritty_path,
+                zellij_config_path=self.config_path,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.app.notify(
+                f"Error al sincronizar Alacritty: {exc}",
+                severity="error",
+                timeout=8,
+            )
+            return
+        if result.skipped_reason:
+            self.app.notify(
+                f"Alacritty no actualizado: {result.skipped_reason}",
+                severity="warning",
+                timeout=6,
+            )
+            return
+        n = len(result.updated)
+        msg = f"Alacritty actualizado: {n} slot(s)"
+        if result.backup is not None:
+            msg += f" (backup: {result.backup.name})"
+        self.app.notify(msg, severity="information", timeout=6)
 
     def _sync_app_theme(self, name: str) -> None:
         """Re-registra (por si era un user theme nuevo/editado) y aplica."""
