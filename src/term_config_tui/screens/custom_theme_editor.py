@@ -61,10 +61,13 @@ class CustomThemeEditorScreen(Screen[None]):
         super().__init__()
         self.config_path = config_path
         # Trabajamos sobre una copia mutable para no afectar el modelo origen.
+        # raw_components se preservan tal cual: el editor solo expone slots
+        # legacy, pero al guardar se re-emiten para no perder fidelidad.
         self.theme = ZellijTheme(
             name=theme.name,
             source="user",
             colors=list(theme.colors),
+            raw_components=list(theme.raw_components),
         )
         self.dirty = False
 

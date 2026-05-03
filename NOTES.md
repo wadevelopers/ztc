@@ -226,6 +226,28 @@ Esto significa que:
 - Si Zellij saca un tema nuevo que no este vendorizado aqui, el TUI
   cae al fallback hasta que actualicemos los assets.
 
+### Clonar built-in copia componentes del formato nuevo
+
+Cuando clonas un built-in, ademas de los slots legacy (fg, bg, red...),
+se copian al user theme **todos los bloques del formato nuevo de Zellij**
+(`text_unselected`, `text_selected`, `ribbon_selected`, `ribbon_unselected`,
+`frame_*`, `exit_code_*`, `table_title`, `multiplayer_user_colors`).
+
+Por que: Zellij usa el formato nuevo para renderizar su UI (tab bar,
+ribbons, frames, status). Si el clon solo tuviera slots legacy, el
+tab-bar del clon NO seria del mismo color que el del original (Zellij
+caeria a defaults derivados de la paleta legacy, no del verde / azul /
+etc. especifico del tema).
+
+Lo mismo pasa con el TUI: registra el Textual theme leyendo
+`ribbon_selected.background` como `primary`, no el slot legacy `blue`.
+Si el clon no tuviera el componente nuevo, el TUI usaria `blue` como
+primary (ej. `#66d9ef` cyan-ish para molokai en vez del `#008c00`
+verde correcto).
+
+Resultado: el clon es indistinguible visualmente del built-in, tanto
+en Zellij como en el TUI.
+
 ### Clonar el tema activo preserva tweaks de Alacritty
 
 Cuando clonas el **tema actualmente activo** desde el Theme Picker (`c`),
