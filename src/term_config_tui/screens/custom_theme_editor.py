@@ -23,7 +23,7 @@ class CustomThemeEditorScreen(Screen[None]):
 
     BINDINGS = [
         Binding("enter", "edit", "Editar slot"),
-        Binding("ctrl+s", "save", "Guardar"),
+        Binding("s", "save", "Guardar"),
         Binding("escape", "back", "Volver"),
         Binding("q", "back", "Volver", show=False),
     ]
