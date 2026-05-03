@@ -118,40 +118,29 @@ Si la directiva `theme` no existe en tu archivo, se anade al final.
 ### Reglas de extraccion de paleta (built-in -> legacy fg/bg/red/...)
 
 Para sincronizar Alacritty y para clonar built-ins a user themes editables,
-el TUI extrae una paleta legacy desde el formato nuevo de Zellij usando
-**una sola regla, sin condicionales por tema**. La regla esta en
-`services/zellij_theme_assets.py::_derive_with_overrides`:
+el TUI extrae una paleta legacy desde el formato nuevo de Zellij. Las
+reglas estan validadas contra la conversion inversa oficial de Zellij
+(impl `From<Palette> for Styling` en `zellij-utils/src/data.rs`). Una
+sola regla por slot, sin condicionales por tema, sin overrides:
 
 | Slot legacy | Origen en el .kdl |
 |---|---|
 | `bg` | `text_unselected.background` |
-| `fg` | `text_unselected.base` |
-| `black` | `text_selected.background` |
+| `black` | `text_unselected.background` (= bg; Zellij usa `palette.black` como bg de plugins) |
+| `fg` | `ribbon_unselected.background` (`palette.fg` en la conversion) |
+| `white` | `text_unselected.base` |
 | `red` | `exit_code_error.base` |
 | `green` | `exit_code_success.base` |
 | `yellow` | `table_title.emphasis_0` |
 | `blue` | `ribbon_selected.emphasis_3` |
 | `magenta` | `frame_highlight.emphasis_0` |
 | `cyan` | `text_unselected.emphasis_1` |
-| `white` | `text_unselected.base` |
 | `orange` | `text_unselected.emphasis_0` |
 
-Cuando un tema concreto tiene datos crudos que no producen el slot
-esperado, se anade una entrada en `THEME_OVERRIDES` (mismo modulo) con
-el motivo. Hoy hay un solo override:
-
-- `ayu-light` → `fg = "#5c6166"` (`text_unselected.base` es `#fcfcfc`
-  blanco y no contrasta con bg light. El "fg oscuro" canonico vive en
-  `ribbon_unselected.background`).
-
-Otros temas como `dracula`, `ao`, `cyber-noir`, etc. tienen
-`text_unselected.background = "#000000"` (placeholder de "usa el bg
-del terminal"). Sin override, el bg cae a `#000000` (negro puro). Esto
-es decision deliberada: dejamos los datos crudos visibles y solo
-overrideamos lo estrictamente necesario.
-
-Cuando veas otro tema con un slot raro, agrega la linea correspondiente
-al dict y commiteamos. Nada de heuristicas escondidas.
+Algunos temas (dracula, ao, cyber-noir, etc.) tienen
+`text_unselected.background = "#000000"` como placeholder de "usa el
+bg del terminal". Para esos, el bg derivado cae a `#000000` (negro puro).
+Es el dato crudo del .kdl tal cual. No hay heuristica oculta.
 
 ### Lista de built-in en el picker
 

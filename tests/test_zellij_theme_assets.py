@@ -34,8 +34,10 @@ def test_build_textual_theme_dracula() -> None:
     assert theme.name == "dracula"
     # Sin override, dracula bg = text_unselected.background = #000000.
     assert theme.background == "#000000"
-    # fg <- ribbon_unselected.background = #f8f8f2 (dracula off-white).
-    assert theme.foreground == "#f8f8f2"
+    # foreground <- white (= text_unselected.base = #ffffff). NO usamos
+    # fg (= ribbon_un.bg = #f8f8f2) porque ese es el bg de ribbons en
+    # Zellij, no el color del texto.
+    assert theme.foreground == "#ffffff"
     assert theme.primary == "#50fa7b"  # iconic dracula green (ribbon_selected.bg)
     assert theme.dark is True
 
@@ -65,17 +67,23 @@ def test_build_textual_theme_from_legacy_basic() -> None:
             "green": "#a6e3a1",
             "yellow": "#f9e2af",
             "cyan": "#94e2d5",
+            "orange": "#fab387",
         },
     )
     assert theme is not None
     assert theme.name == "my-theme"
     assert theme.foreground == "#cdd6f4"
     assert theme.background == "#1e1e2e"
-    assert theme.primary == "#89b4fa"
+    # primary <- green (matchea ribbon_selected.background = palette.green).
+    assert theme.primary == "#a6e3a1"
+    # secondary <- fg (matchea ribbon_unselected.background = palette.fg).
+    assert theme.secondary == "#cdd6f4"
+    # accent <- orange (matchea frame_highlight.base = palette.orange).
+    assert theme.accent == "#fab387"
     assert theme.error == "#f38ba8"
     assert theme.success == "#a6e3a1"
-    assert theme.warning == "#f9e2af"
-    assert theme.accent == "#94e2d5"
+    # warning <- orange (matchea table_title.emphasis_0 = palette.orange).
+    assert theme.warning == "#fab387"
     assert theme.dark is True
 
 
@@ -84,36 +92,37 @@ def test_build_textual_theme_from_legacy_missing_fg_or_bg_returns_none() -> None
     assert zta.build_textual_theme_from_legacy("x", {"bg": "#000"}) is None
 
 
-def test_overrides_applied_in_legacy_derivation() -> None:
-    """Las correcciones de THEME_OVERRIDES deben aplicarse en derive_legacy."""
-    # ayu-light: fg sobreescrito de #fcfcfc a #5c6166.
+def test_derived_slots_match_zellij_conversion() -> None:
+    """Las reglas de derivacion replican la conversion oficial de Zellij
+    (impl From<Palette> for Styling)."""
+    # ayu-light: fg <- ribbon_unselected.background = #5c6166.
     s = zta.derive_legacy_slots_from_bundled("ayu-light")
     assert s is not None
     assert s["fg"] == "#5c6166"
+    # bg y black coinciden por defecto (ambos = text_unselected.background).
+    assert s["bg"] == s["black"]
 
 
-def test_no_override_means_raw_data_wins() -> None:
-    """Sin override, el bg/fg sale tal cual de los componentes."""
-    # dracula NO tiene override: text_un.bg = #000000.
-    s = zta.derive_legacy_slots_from_bundled("dracula")
-    assert s is not None
-    assert s["bg"] == "#000000"
-    # ao NO tiene override: text_un.bg = #000000.
-    s = zta.derive_legacy_slots_from_bundled("ao")
-    assert s is not None
-    assert s["bg"] == "#000000"
-    # cyber-noir NO tiene override (ahora): text_un.bg = #000000.
-    s = zta.derive_legacy_slots_from_bundled("cyber-noir")
-    assert s is not None
-    assert s["bg"] == "#000000"
+def test_derived_slots_for_zero_bg_themes() -> None:
+    """Para temas con text_unselected.background = #000000 (placeholder
+    transparente: dracula, ao, cyber-noir, etc.), bg y black quedan
+    en negro puro. Sin condicionales por tema."""
+    for name in ("dracula", "ao", "cyber-noir"):
+        s = zta.derive_legacy_slots_from_bundled(name)
+        assert s is not None, name
+        assert s["bg"] == "#000000", name
 
 
-def test_overrides_applied_in_textual_theme() -> None:
-    """Las correcciones tambien afectan al Theme registrado en Textual."""
-    t = zta.load_bundled_theme("ayu-light")
-    th = zta.build_textual_theme(t)
-    assert th is not None
-    assert th.foreground == "#5c6166"
+def test_textual_theme_uses_white_slot_for_foreground() -> None:
+    """foreground del Textual theme sale del slot 'white', no de 'fg'."""
+    for name in zta.list_bundled_theme_names():
+        if name == "ansi":
+            continue
+        t = zta.load_bundled_theme(name)
+        th = zta.build_textual_theme(t)
+        slots = zta.derive_legacy_slots_from_bundled(name)
+        assert th is not None and slots is not None, name
+        assert th.foreground == slots["white"], name
 
 
 def test_bundled_filenames_match_inner_theme_names() -> None:

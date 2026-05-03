@@ -5,26 +5,21 @@ Los .kdl viven en src/term_config_tui/assets/zellij_themes/ y vienen del repo
 oficial https://github.com/zellij-org/zellij (MIT). Estan en el formato nuevo
 (componentes UI: text_unselected, ribbon_selected, etc., con RGB triples).
 
-Reglas para extraer paleta legacy (fg, bg, red, ...) desde el formato nuevo:
-una sola regla, sin fallbacks. Si un tema queda mal con esta regla, se
-corrige puntualmente en `THEME_OVERRIDES`.
+Reglas para extraer paleta legacy desde el formato nuevo. Validadas contra
+la conversion oficial inversa de Zellij (impl From<Palette> for Styling
+en zellij-utils/src/data.rs):
 
-Regla:
-- bg          <- text_unselected.background
-- fg          <- text_unselected.base
-- black       <- text_selected.background
-- red         <- exit_code_error.base
-- green       <- exit_code_success.base
-- yellow      <- table_title.emphasis_0
-- blue        <- ribbon_selected.emphasis_3
-- magenta     <- frame_highlight.emphasis_0
-- cyan        <- text_unselected.emphasis_1
-- white       <- text_unselected.base
-- orange      <- text_unselected.emphasis_0
-
-Cuando un tema reporta un slot incorrecto, se anade en THEME_OVERRIDES con
-el comentario que explica por que (ej. dracula usa #000000 como
-placeholder transparente en text_unselected.background).
+- bg       <- text_unselected.background
+- black    <- text_unselected.background  (= bg; Zellij usa palette.black como bg de plugins)
+- fg       <- ribbon_unselected.background  (palette.fg en la conversion)
+- white    <- text_unselected.base
+- red      <- exit_code_error.base
+- green    <- exit_code_success.base
+- yellow   <- table_title.emphasis_0
+- blue     <- ribbon_selected.emphasis_3
+- magenta  <- frame_highlight.emphasis_0
+- cyan     <- text_unselected.emphasis_1
+- orange   <- text_unselected.emphasis_0
 """
 
 from __future__ import annotations
@@ -39,17 +34,6 @@ if TYPE_CHECKING:
     from textual.theme import Theme as TextualTheme
 
 ASSETS_PACKAGE = "term_config_tui.assets.zellij_themes"
-
-# Correcciones puntuales para temas vendorizados cuyo dato crudo no produce
-# el slot legacy esperado. Cada entrada apunta a slots LEGACY (fg, bg,
-# black, red, green, yellow, blue, magenta, cyan, white, orange).
-#
-# Filosofia: una sola regla de extraccion, sin condicionales por tema dentro
-# del codigo. Cuando algo sale mal, se anade aqui con su motivo.
-THEME_OVERRIDES: dict[str, dict[str, str]] = {
-    # Sin overrides actualmente. La regla `fg <- ribbon_unselected.background`
-    # ya da el resultado correcto para ayu-light (#5c6166) y todos los demas.
-}
 
 # Componentes UI relevantes para el mapping a Textual.
 _RELEVANT_COMPONENTS = (
@@ -206,17 +190,17 @@ def _is_dark(hex_value: str | None) -> bool:
 
 
 def derive_legacy_slots_from_bundled(name: str) -> dict[str, str] | None:
-    """Devuelve un dict slot_name -> hex aplicando la regla unica + overrides.
+    """Devuelve un dict slot_name -> hex aplicando la regla unica.
 
     Devuelve None si no hay tema vendorizado con ese nombre.
     """
     bundled = load_bundled_theme(name)
     if bundled is None:
         return None
-    return _derive_with_overrides(name, bundled)
+    return _derive_slots(bundled)
 
 
-def _derive_with_overrides(name: str, bundled: ZellijUITheme) -> dict[str, str]:
+def _derive_slots(bundled: ZellijUITheme) -> dict[str, str]:
     text_un = bundled.components.get("text_unselected") or ZellijUIComponent()
     ribbon_sel = bundled.components.get("ribbon_selected") or ZellijUIComponent()
     ribbon_un = bundled.components.get("ribbon_unselected") or ZellijUIComponent()
@@ -250,16 +234,14 @@ def _derive_with_overrides(name: str, bundled: ZellijUITheme) -> dict[str, str]:
         "white": white,
         "orange": text_un.emphasis_0 or "#ff8800",
     }
-    overrides = THEME_OVERRIDES.get(name, {})
-    derived.update(overrides)
     return derived
 
 
 def build_textual_theme(theme: ZellijUITheme) -> TextualTheme | None:
     """Construye un Theme de Textual desde un ZellijUITheme.
 
-    Aplica la regla unica + THEME_OVERRIDES para fg/bg. Para los demas
-    tokens (primary, accent, etc.) usa los componentes ricos:
+    fg/bg desde los slots legacy derivados. Para los demas tokens usa
+    los componentes ricos:
     - primary       <- ribbon_selected.background  (color "interactivo")
     - accent        <- frame_highlight.base
     - secondary     <- ribbon_unselected.background
@@ -276,9 +258,9 @@ def build_textual_theme(theme: ZellijUITheme) -> TextualTheme | None:
     if text_un is None or text_un.base is None:
         return None
 
-    slots = _derive_with_overrides(theme.name, theme)
+    slots = _derive_slots(theme)
     background = slots["bg"]
-    foreground = slots["fg"]
+    foreground = slots["white"]
 
     ribbon_sel = theme.components.get("ribbon_selected")
     ribbon_un = theme.components.get("ribbon_unselected")
@@ -320,27 +302,33 @@ def build_textual_theme(theme: ZellijUITheme) -> TextualTheme | None:
 def build_textual_theme_from_legacy(
     name: str, slots: dict[str, str]
 ) -> TextualTheme | None:
-    """Construye un Theme de Textual desde slots legacy (fg, bg, red, ...).
+    """Construye un Theme de Textual desde slots legacy.
 
-    Usado para user themes en formato clasico (como custom_dark).
+    Mapping segun la conversion de Zellij (impl From<Palette> for Styling):
+      green   -> primary, success
+      orange  -> accent, warning
+      fg      -> secondary  (bg de ribbons)
+      white   -> foreground (texto canonico)
+      red     -> error
     """
     from textual.theme import Theme
 
-    fg = slots.get("fg")
     bg = slots.get("bg")
-    if fg is None or bg is None:
+    foreground = slots.get("white") or slots.get("fg")
+    if foreground is None or bg is None:
         return None
 
+    orange = slots.get("orange") or slots.get("yellow") or foreground
     return Theme(
         name=name,
-        primary=slots.get("blue") or fg,
-        secondary=slots.get("magenta") or fg,
-        accent=slots.get("cyan") or slots.get("magenta") or fg,
+        primary=slots.get("green") or foreground,
+        secondary=slots.get("fg") or foreground,
+        accent=orange,
         background=bg,
         surface=bg,
-        foreground=fg,
+        foreground=foreground,
         success=slots.get("green") or "#50fa7b",
-        warning=slots.get("yellow") or "#f1fa8c",
+        warning=orange,
         error=slots.get("red") or "#ff5555",
         dark=_is_dark(bg),
     )

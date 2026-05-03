@@ -266,10 +266,13 @@ def _read_alacritty_legacy_slots(alacritty_path: Path) -> dict[str, str]:
 
     doc = toml_io.load_toml(alacritty_path)
     out: dict[str, str] = {}
-    for legacy_name, (group, alacritty_name) in _LEGACY_TO_ALACRITTY.items():
-        value = ala_svc.read_slot(doc, group, alacritty_name)
-        if value and ala_svc.is_valid_hex(value):
-            out[legacy_name] = ala_svc.normalize_hex(value)
+    for legacy_name, destinations in _LEGACY_TO_ALACRITTY.items():
+        # Tomamos el primer destino que tenga valor en el TOML.
+        for group, alacritty_name in destinations:
+            value = ala_svc.read_slot(doc, group, alacritty_name)
+            if value and ala_svc.is_valid_hex(value):
+                out[legacy_name] = ala_svc.normalize_hex(value)
+                break
     return out
 
 

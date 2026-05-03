@@ -14,18 +14,19 @@ from pathlib import Path
 from term_config_tui.services import alacritty, toml_io, zellij_themes
 from term_config_tui.services import zellij_theme_assets as zta
 
-# Mapeo de slot legacy de Zellij a (group, name) de Alacritty.
-_LEGACY_TO_ALACRITTY: dict[str, tuple[str, str]] = {
-    "fg": ("primary", "foreground"),
-    "bg": ("primary", "background"),
-    "black": ("normal", "black"),
-    "red": ("normal", "red"),
-    "green": ("normal", "green"),
-    "yellow": ("normal", "yellow"),
-    "blue": ("normal", "blue"),
-    "magenta": ("normal", "magenta"),
-    "cyan": ("normal", "cyan"),
-    "white": ("normal", "white"),
+# En Zellij, `palette.fg` es el bg de los ribbons; el color del texto
+# canonico vive en `palette.white` (text_unselected.base). Por eso
+# primary.foreground se sincroniza desde `white`, no desde `fg`.
+_LEGACY_TO_ALACRITTY: dict[str, list[tuple[str, str]]] = {
+    "bg": [("primary", "background")],
+    "white": [("normal", "white"), ("primary", "foreground")],
+    "black": [("normal", "black")],
+    "red": [("normal", "red")],
+    "green": [("normal", "green")],
+    "yellow": [("normal", "yellow")],
+    "blue": [("normal", "blue")],
+    "magenta": [("normal", "magenta")],
+    "cyan": [("normal", "cyan")],
 }
 
 
@@ -83,20 +84,21 @@ def sync_alacritty_with_zellij_theme(
 
     doc = toml_io.load_toml(alacritty_path)
     updated: dict[tuple[str, str], str] = {}
-    for legacy_name, (group, alacritty_name) in _LEGACY_TO_ALACRITTY.items():
+    for legacy_name, destinations in _LEGACY_TO_ALACRITTY.items():
         value = slots.get(legacy_name)
         if value is None:
             continue
         normalized = alacritty.normalize_hex(value)
-        current = alacritty.read_slot(doc, group, alacritty_name)
-        if (
-            current
-            and alacritty.is_valid_hex(current)
-            and alacritty.normalize_hex(current) == normalized
-        ):
-            continue
-        alacritty.write_slot(doc, group, alacritty_name, normalized)
-        updated[(group, alacritty_name)] = normalized
+        for group, alacritty_name in destinations:
+            current = alacritty.read_slot(doc, group, alacritty_name)
+            if (
+                current
+                and alacritty.is_valid_hex(current)
+                and alacritty.normalize_hex(current) == normalized
+            ):
+                continue
+            alacritty.write_slot(doc, group, alacritty_name, normalized)
+            updated[(group, alacritty_name)] = normalized
 
     if not updated:
         return SyncResult(backup=None, updated={}, skipped_reason="Sin cambios")
