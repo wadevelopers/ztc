@@ -280,12 +280,28 @@ def _derive_legacy_slots_from_bundled(src_name: str) -> list[ZellijColor]:
     table = bundled.components.get("table_title")
 
     fg = (text_un and text_un.base) or "#cccccc"
-    bg = (text_sel and text_sel.background) or "#000000"
+    # Heuristica del bg: text_unselected.background es el bg canonico del
+    # tema en muchos casos (ayu-dark, nord, gruber-darker, etc.). Pero en
+    # otros (dracula, tokyo-night, ...) ese slot es '#000000' como
+    # placeholder de "transparente / bg del terminal" y el bg real esta
+    # en text_selected.background. Aplicamos la misma heuristica que
+    # zellij_theme_assets._pick_background.
+    bg = zta._pick_background(text_un, text_sel)
+    # Para 'black' (ANSI), usamos el OTRO bg disponible: si bg vino de
+    # text_unselected (ayu-dark), black ← text_selected.background. Si bg
+    # vino de text_selected (dracula), black ← text_unselected.background
+    # (que para dracula es '#000000' = negro real, perfecto).
+    other_bg = None
+    if text_un and text_un.background == bg:
+        other_bg = text_sel and text_sel.background
+    elif text_sel and text_sel.background == bg:
+        other_bg = text_un and text_un.background
+    black = other_bg or "#000000"
 
     derived = {
         "fg": fg,
         "bg": bg,
-        "black": (text_un and text_un.background) or "#000000",
+        "black": black,
         "red": (exit_err and exit_err.base) or "#ff5555",
         "green": (exit_ok and exit_ok.base) or "#50fa7b",
         "yellow": (table and table.emphasis_0) or "#f1fa8c",

@@ -200,6 +200,16 @@ def test_clone_builtin_extracts_colors_from_bundled(tmp_path: Path) -> None:
     assert by_name["red"] == "#ff5555"
 
 
+def test_clone_ayu_dark_bg_is_text_unselected(tmp_path: Path) -> None:
+    """Regresion: ayu-dark stores el bg real en text_unselected.background
+    (#131721), no en text_selected.background (#475266 = pane seleccionado)."""
+    cfg = tmp_path / "config.kdl"
+    cfg.write_text("// empty\n", encoding="utf-8")
+    zellij_themes.clone_theme(cfg, "ayu-dark", "my-ayu")
+    by_name = {c.name: c.value for c in zellij_themes.list_user_themes(cfg)[0].colors}
+    assert by_name["bg"] == "#131721"
+
+
 def test_clone_unknown_uses_black_defaults(tmp_path: Path) -> None:
     cfg = tmp_path / "config.kdl"
     cfg.write_text("// empty\n", encoding="utf-8")
