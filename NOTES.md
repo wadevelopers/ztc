@@ -115,18 +115,34 @@ cual: comentarios, indentacion, todo.
 
 Si la directiva `theme` no existe en tu archivo, se anade al final.
 
-### Sincronizacion con el tema del propio TUI
+### Sincronizacion con el tema del propio TUI (match exacto)
 
-Al arrancar, el TUI lee `theme "..."` de tu `config.kdl` y aplica el
-tema de Textual equivalente para que la propia interfaz combine. Cada
-vez que pulsas Enter para aplicar un tema en el picker, el TUI cambia
-ambos a la vez.
+Al arrancar, el TUI:
 
-El mapping de los 33 temas built-in de Zellij a temas de Textual esta
-en `services/zellij_themes.py::ZELLIJ_TO_TEXTUAL`. Para temas
-user-defined (como `custom_dark`) o nombres no mapeados, el TUI usa
-`textual-dark` como fallback (no intenta detectar dark/light por
-luminancia del bg — si te interesa, se puede agregar despues).
+1. Carga los 41 temas built-in de Zellij vendorizados en
+   `src/term_config_tui/assets/zellij_themes/` (descargados del repo
+   oficial, MIT).
+2. Construye un Textual `Theme` desde cada uno, mapeando los slots
+   del formato nuevo (`text_unselected.background`, `ribbon_selected.
+   background`, `exit_code_error.base`, etc.) a los tokens de Textual
+   (`background`, `primary`, `error`, ...).
+3. Hace lo mismo con tus user themes legacy (`fg`, `bg`, `red`, ...)
+   leidos de `config.kdl`.
+4. Lee `theme "..."` de tu config y aplica el Textual con el **mismo
+   nombre**. Cada Zellij theme tiene su match exacto: `dracula` en
+   Zellij -> `dracula` en el TUI con los hex reales del repo.
+
+Esto significa que:
+
+- Clonar un built-in (`c` en el theme picker) crea un user theme con
+  los colores reales extraidos del .kdl vendorizado, no con `#000000`.
+- Editar / clonar un user theme refresca el registro en Textual al
+  guardar, asi que el TUI usa los nuevos hex sin reiniciar.
+- El tema `ansi` esta excluido del registro porque usa indices de
+  paleta del terminal (0..15), no RGB. Si lo activas en Zellij, el
+  TUI cae al fallback `textual-dark`.
+- Si Zellij saca un tema nuevo que no este vendorizado aqui, el TUI
+  cae al fallback hasta que actualicemos los assets.
 
 ### Custom themes (crear / editar / clonar / borrar)
 

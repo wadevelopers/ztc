@@ -42,12 +42,25 @@ async def test_theme_picker_lists_themes_and_marks_active(tmp_path: Path) -> Non
         assert "*" in str(active_label)
 
 
-async def test_app_applies_textual_theme_on_mount(tmp_path: Path) -> None:
+async def test_app_registers_bundled_and_user_themes(tmp_path: Path) -> None:
     paths = _make_paths(tmp_path, FIX / "config_with_user_themes.kdl")
-    # config_with_user_themes tiene `theme "custom_dark"` (user theme) -> fallback.
+    # El fixture define `custom_dark` y `midnight` como user themes con fg/bg.
     app = TermConfigApp(paths=paths)
     async with app.run_test() as _:
-        assert app.theme == "textual-dark"  # fallback para user themes
+        # Built-in vendorizado registrado.
+        assert "dracula" in app.available_themes
+        assert "tokyo-night" in app.available_themes
+        # User themes con fg/bg registrados con su nombre tal cual.
+        assert "custom_dark" in app.available_themes
+        assert "midnight" in app.available_themes
+
+
+async def test_app_applies_active_zellij_theme_on_mount(tmp_path: Path) -> None:
+    paths = _make_paths(tmp_path, FIX / "config_with_user_themes.kdl")
+    # config_with_user_themes tiene `theme "custom_dark"`.
+    app = TermConfigApp(paths=paths)
+    async with app.run_test() as _:
+        assert app.theme == "custom_dark"
 
 
 async def test_theme_picker_apply_changes_textual_theme(tmp_path: Path) -> None:

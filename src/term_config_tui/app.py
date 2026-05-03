@@ -13,7 +13,7 @@ from term_config_tui.screens.color_editor import AlacrittyColorEditorScreen
 from term_config_tui.screens.layout_list import LayoutListScreen
 from term_config_tui.screens.session_manager import SessionManagerScreen
 from term_config_tui.screens.theme_editor import ThemePickerScreen
-from term_config_tui.services import zellij_config, zellij_themes
+from term_config_tui.services import zellij_config, zellij_theme_assets, zellij_themes
 
 
 class TermConfigApp(App[None]):
@@ -67,18 +67,44 @@ class TermConfigApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.register_zellij_themes()
         self.sync_theme_with_zellij()
         self.query_one("#main-menu", OptionList).focus()
 
+    def register_zellij_themes(self) -> None:
+        """Registra como temas de Textual los built-in vendorizados y los
+        user themes definidos en config.kdl. Idempotente: re-registra
+        cuando el usuario crea/edita user themes.
+        """
+        # Built-in vendorizados.
+        for ui_theme in zellij_theme_assets.load_all_bundled_themes():
+            textual_theme = zellij_theme_assets.build_textual_theme(ui_theme)
+            if textual_theme is not None:
+                self.register_theme(textual_theme)
+        # User themes (formato legacy).
+        for ut in zellij_themes.list_user_themes(self.paths.zellij_config):
+            slots = {c.name: c.value for c in ut.colors}
+            textual_theme = zellij_theme_assets.build_textual_theme_from_legacy(
+                ut.name, slots
+            )
+            if textual_theme is not None:
+                self.register_theme(textual_theme)
+
     def sync_theme_with_zellij(self) -> None:
-        """Aplica el tema Textual que matchea el tema Zellij activo."""
+        """Aplica el tema Textual con el mismo nombre que el tema Zellij activo."""
         active = zellij_config.read_active_theme(self.paths.zellij_config)
         self.apply_theme_for_zellij(active)
 
     def apply_theme_for_zellij(self, zellij_name: str | None) -> None:
-        """Cambia el tema del TUI al equivalente Textual del tema Zellij dado."""
-        target = zellij_themes.textual_theme_for(zellij_name)
-        if target in self.available_themes and self.theme != target:
+        """Cambia el tema del TUI al que tenga el mismo nombre que el de Zellij.
+
+        Si el nombre no esta registrado (built-in nuevo no vendorizado, o
+        user theme con problemas de parseo), cae a `textual-dark`.
+        """
+        target = zellij_name if zellij_name else zellij_themes.TEXTUAL_FALLBACK
+        if target not in self.available_themes:
+            target = zellij_themes.TEXTUAL_FALLBACK
+        if self.theme != target:
             self.theme = target
 
     @on(OptionList.OptionSelected, "#main-menu")

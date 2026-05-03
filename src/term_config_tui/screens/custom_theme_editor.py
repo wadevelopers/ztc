@@ -193,6 +193,10 @@ class CustomThemeEditorScreen(Screen[None]):
         if backup is not None:
             msg += f"  (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
+        # Re-registrar el theme en Textual para que su preview use los nuevos hex.
+        register = getattr(self.app, "register_zellij_themes", None)
+        if callable(register):
+            register()
 
     def action_back(self) -> None:
         if not self.dirty:

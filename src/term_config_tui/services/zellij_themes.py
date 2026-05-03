@@ -256,67 +256,50 @@ def clone_theme(
     if src_user is not None:
         colors = list(src_user.colors)
     else:
-        colors = [ZellijColor(name=s, value="#000000") for s in LEGACY_SLOTS]
+        colors = _derive_legacy_slots_from_bundled(src_name)
 
     new_theme = ZellijTheme(name=dst_name, source="user", colors=colors)
     return upsert_user_theme(config_path, new_theme, backup=backup)
 
 
-# ---------- mapping Zellij -> Textual ----------
+def _derive_legacy_slots_from_bundled(src_name: str) -> list[ZellijColor]:
+    """Para clonar un built-in: extrae slots legacy razonables desde el .kdl
+    vendorizado. Si no esta vendorizado, devuelve slots a #000000."""
+    from term_config_tui.services import zellij_theme_assets as zta
 
+    bundled = zta.load_bundled_theme(src_name)
+    if bundled is None:
+        return [ZellijColor(name=s, value="#000000") for s in LEGACY_SLOTS]
+
+    text_un = bundled.components.get("text_unselected")
+    text_sel = bundled.components.get("text_selected")
+    ribbon_sel = bundled.components.get("ribbon_selected")
+    frame_hl = bundled.components.get("frame_highlight")
+    exit_err = bundled.components.get("exit_code_error")
+    exit_ok = bundled.components.get("exit_code_success")
+    table = bundled.components.get("table_title")
+
+    fg = (text_un and text_un.base) or "#cccccc"
+    bg = (text_sel and text_sel.background) or "#000000"
+
+    derived = {
+        "fg": fg,
+        "bg": bg,
+        "black": (text_un and text_un.background) or "#000000",
+        "red": (exit_err and exit_err.base) or "#ff5555",
+        "green": (exit_ok and exit_ok.base) or "#50fa7b",
+        "yellow": (table and table.emphasis_0) or "#f1fa8c",
+        "blue": (ribbon_sel and ribbon_sel.emphasis_3) or fg,
+        "magenta": (frame_hl and frame_hl.emphasis_0) or fg,
+        "cyan": (text_un and text_un.emphasis_1) or fg,
+        "white": fg,
+        "orange": (text_un and text_un.emphasis_0) or "#ff8800",
+    }
+    return [ZellijColor(name=s, value=derived[s]) for s in LEGACY_SLOTS]
+
+
+# Fallback cuando el tema activo de Zellij no esta registrado como Textual.
 TEXTUAL_FALLBACK = "textual-dark"
-
-# Curado manualmente: cada tema Zellij apunta a un tema de Textual
-# disponible. Cubre los 33 temas built-in. Para temas user-defined o
-# nombres desconocidos se usa `TEXTUAL_FALLBACK`.
-ZELLIJ_TO_TEXTUAL: dict[str, str] = {
-    # Match exacto
-    "catppuccin-frappe": "catppuccin-frappe",
-    "catppuccin-macchiato": "catppuccin-macchiato",
-    "catppuccin-mocha": "catppuccin-mocha",
-    "catppuccin-latte": "catppuccin-latte",
-    "dracula": "dracula",
-    "tokyo-night": "tokyo-night",
-    "solarized-dark": "solarized-dark",
-    "solarized-light": "solarized-light",
-    # Curado: dark
-    "ao": "textual-dark",
-    "ayu-dark": "ansi-dark",
-    "ayu-mirage": "ansi-dark",
-    "cyber-noir": "nord",
-    "default": "textual-dark",
-    "everforest-dark": "nord",
-    "gruber-darker": "flexoki",
-    "kanagawa": "gruvbox",
-    "lucario": "ansi-dark",
-    "menace": "textual-dark",
-    "night-owl": "ansi-dark",
-    "nightfox": "tokyo-night",
-    "onedark": "atom-one-dark",
-    "one-half-dark": "atom-one-dark",
-    "retro-wave": "textual-dark",
-    "terafox": "nord",
-    "tokyo-night-dark": "tokyo-night",
-    "tokyo-night-storm": "tokyo-night",
-    "vesper": "flexoki",
-    # Curado: light
-    "ayu-light": "rose-pine-dawn",
-    "dayfox": "monokai",
-    "everforest-light": "rose-pine-dawn",
-    "gruvbox-light": "gruvbox",
-    "iceberg-light": "rose-pine-moon",
-    "tokyo-night-light": "rose-pine",
-}
-
-
-def textual_theme_for(zellij_name: str | None) -> str:
-    """Devuelve el tema de Textual que mejor matchea el tema de Zellij dado.
-
-    Para temas user-defined o nombres no mapeados, devuelve TEXTUAL_FALLBACK.
-    """
-    if not zellij_name:
-        return TEXTUAL_FALLBACK
-    return ZELLIJ_TO_TEXTUAL.get(zellij_name, TEXTUAL_FALLBACK)
 
 
 def default_legacy_slots() -> list[ZellijColor]:

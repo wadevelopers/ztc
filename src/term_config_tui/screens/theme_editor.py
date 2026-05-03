@@ -167,10 +167,17 @@ class ThemePickerScreen(Screen[None]):
             msg += f" (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
         # Sincronizar el tema del TUI con el tema Zellij recien aplicado.
+        self._sync_app_theme(name)
+        self._reload()
+
+    def _sync_app_theme(self, name: str) -> None:
+        """Re-registra (por si era un user theme nuevo/editado) y aplica."""
+        register = getattr(self.app, "register_zellij_themes", None)
+        if callable(register):
+            register()
         applier = getattr(self.app, "apply_theme_for_zellij", None)
         if callable(applier):
             applier(name)
-        self._reload()
 
     def _theme_by_name(self, name: str) -> ZellijTheme | None:
         return next((t for t in self._themes if t.name == name), None)
@@ -273,6 +280,9 @@ class ThemePickerScreen(Screen[None]):
             if backup is not None:
                 msg += f"  (backup: {backup.name})"
             self.app.notify(msg, severity="information", timeout=6)
+            register = getattr(self.app, "register_zellij_themes", None)
+            if callable(register):
+                register()
             self._reload()
 
         kind = "user" if theme.is_user else "built-in (colores por defecto)"

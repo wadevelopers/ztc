@@ -52,58 +52,8 @@ def test_list_all_themes_user_first_then_builtins() -> None:
     assert len(builtins) == len(set(builtins))
 
 
-def test_textual_theme_for_direct_match() -> None:
-    assert zellij_themes.textual_theme_for("dracula") == "dracula"
-    assert zellij_themes.textual_theme_for("tokyo-night") == "tokyo-night"
-    assert zellij_themes.textual_theme_for("solarized-light") == "solarized-light"
-    assert zellij_themes.textual_theme_for("catppuccin-frappe") == "catppuccin-frappe"
-
-
-def test_textual_theme_for_curated_dark() -> None:
-    assert zellij_themes.textual_theme_for("gruber-darker") == "flexoki"
-    assert zellij_themes.textual_theme_for("vesper") == "flexoki"
-    assert zellij_themes.textual_theme_for("ayu-dark") == "ansi-dark"
-    assert zellij_themes.textual_theme_for("ayu-mirage") == "ansi-dark"
-    assert zellij_themes.textual_theme_for("lucario") == "ansi-dark"
-    assert zellij_themes.textual_theme_for("night-owl") == "ansi-dark"
-    assert zellij_themes.textual_theme_for("cyber-noir") == "nord"
-    assert zellij_themes.textual_theme_for("everforest-dark") == "nord"
-    assert zellij_themes.textual_theme_for("terafox") == "nord"
-    assert zellij_themes.textual_theme_for("kanagawa") == "gruvbox"
-    assert zellij_themes.textual_theme_for("onedark") == "atom-one-dark"
-    assert zellij_themes.textual_theme_for("one-half-dark") == "atom-one-dark"
-    assert zellij_themes.textual_theme_for("nightfox") == "tokyo-night"
-    assert zellij_themes.textual_theme_for("tokyo-night-dark") == "tokyo-night"
-    assert zellij_themes.textual_theme_for("tokyo-night-storm") == "tokyo-night"
-    assert zellij_themes.textual_theme_for("menace") == "textual-dark"
-    assert zellij_themes.textual_theme_for("retro-wave") == "textual-dark"
-    assert zellij_themes.textual_theme_for("default") == "textual-dark"
-    assert zellij_themes.textual_theme_for("ao") == "textual-dark"
-
-
-def test_textual_theme_for_curated_light() -> None:
-    assert zellij_themes.textual_theme_for("ayu-light") == "rose-pine-dawn"
-    assert zellij_themes.textual_theme_for("everforest-light") == "rose-pine-dawn"
-    assert zellij_themes.textual_theme_for("dayfox") == "monokai"
-    assert zellij_themes.textual_theme_for("gruvbox-light") == "gruvbox"
-    assert zellij_themes.textual_theme_for("iceberg-light") == "rose-pine-moon"
-    assert zellij_themes.textual_theme_for("tokyo-night-light") == "rose-pine"
-
-
-def test_textual_theme_for_unknown_falls_back() -> None:
-    # User themes y nombres no mapeados caen al fallback.
-    assert zellij_themes.textual_theme_for("custom_dark") == zellij_themes.TEXTUAL_FALLBACK
-    assert zellij_themes.textual_theme_for(None) == zellij_themes.TEXTUAL_FALLBACK
-    assert zellij_themes.textual_theme_for("") == zellij_themes.TEXTUAL_FALLBACK
-
-
-def test_textual_theme_map_covers_all_builtin() -> None:
-    """Todo built-in de Zellij debe tener un mapping explicito."""
-    missing = [
-        n for n in zellij_themes.BUILTIN_THEMES
-        if n not in zellij_themes.ZELLIJ_TO_TEXTUAL
-    ]
-    assert missing == [], f"Sin mapping: {missing}"
+def test_textual_fallback_constant_is_textual_dark() -> None:
+    assert zellij_themes.TEXTUAL_FALLBACK == "textual-dark"
 
 
 def test_list_all_themes_user_overrides_builtin_name(tmp_path: Path) -> None:
