@@ -50,13 +50,6 @@ THEME_OVERRIDES: dict[str, dict[str, str]] = {
     # text_unselected.base = #fcfcfc (blanco) no contrasta con bg light.
     # El "fg oscuro" de ayu-light vive en ribbon_unselected.background.
     "ayu-light": {"fg": "#5c6166"},
-    # text_unselected.background = #000000 es placeholder de transparente.
-    # bg real esta en text_selected.background. Sin override, el bg queda
-    # en negro puro.
-    "blade-runner": {"bg": "#1a1a1a"},
-    "cyber-noir": {"bg": "#0b0e1a"},
-    "molokai-dark": {"bg": "#1b1d1e"},
-    "retro-wave": {"bg": "#1a1a1a"},
 }
 
 # Componentes UI relevantes para el mapping a Textual.

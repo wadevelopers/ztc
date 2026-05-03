@@ -30,54 +30,28 @@ _VALID_THEME_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_\-]*$")
 def is_valid_theme_name(name: str) -> bool:
     return bool(_VALID_THEME_NAME.match(name))
 
-# Lista conocida de temas que vienen con Zellij. Se puede ampliar segun versiones.
-# Si el usuario aplica un tema fuera de esta lista, no es un error: Zellij
-# lo resuelve por nombre.
-BUILTIN_DARK = (
-    "ao",
-    "ayu-dark",
-    "ayu-mirage",
-    "catppuccin-frappe",
-    "catppuccin-macchiato",
-    "catppuccin-mocha",
-    "cyber-noir",
-    "default",
-    "dracula",
-    "everforest-dark",
-    "gruber-darker",
-    "kanagawa",
-    "lucario",
-    "menace",
-    "night-owl",
-    "nightfox",
-    "one-half-dark",
-    "onedark",
-    "retro-wave",
-    "solarized-dark",
-    "terafox",
-    "tokyo-night",
-    "tokyo-night-dark",
-    "tokyo-night-storm",
-    "vesper",
-)
+# Excluimos 'ansi' del listing y registro porque usa indices de paleta del
+# terminal (0..15) en vez de RGB. No podemos construir un Textual Theme
+# desde el sin saber la paleta del terminal del usuario.
+_EXCLUDED_BUILTINS = frozenset({"ansi"})
 
-BUILTIN_LIGHT = (
-    "ayu-light",
-    "catppuccin-latte",
-    "dayfox",
-    "everforest-light",
-    "gruvbox-light",
-    "iceberg-light",
-    "solarized-light",
-    "tokyo-night-light",
-)
 
-BUILTIN_THEMES: tuple[str, ...] = tuple(sorted(set(BUILTIN_DARK + BUILTIN_LIGHT)))
+def builtin_theme_names() -> tuple[str, ...]:
+    """Nombres de los temas built-in de Zellij, derivados de los .kdl
+    vendorizados en src/term_config_tui/assets/zellij_themes/.
+
+    Excluye 'ansi' (formato palette-index, sin RGB).
+    """
+    from term_config_tui.services import zellij_theme_assets as zta
+
+    names = [n for n in zta.list_bundled_theme_names() if n not in _EXCLUDED_BUILTINS]
+    return tuple(sorted(names))
 
 
 def list_builtin_themes() -> list[ZellijTheme]:
-    """Devuelve los temas built-in conocidos. Sin colores asociados."""
-    return [ZellijTheme(name=n, source="builtin") for n in BUILTIN_THEMES]
+    """Devuelve los temas built-in. Sin colores asociados (los hex viven
+    en los .kdl vendorizados; este listado solo expone nombres)."""
+    return [ZellijTheme(name=n, source="builtin") for n in builtin_theme_names()]
 
 
 def list_user_themes(config_path: Path) -> list[ZellijTheme]:

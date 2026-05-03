@@ -9,8 +9,14 @@ FIX = Path(__file__).parent / "fixtures" / "zellij"
 
 def test_builtin_list_includes_known_names() -> None:
     names = {t.name for t in zellij_themes.list_builtin_themes()}
-    for expected in ("dracula", "tokyo-night", "catppuccin-mocha", "default"):
+    for expected in ("dracula", "tokyo-night", "catppuccin-mocha", "nord"):
         assert expected in names
+
+
+def test_builtin_list_excludes_ansi() -> None:
+    """'ansi' usa indices de paleta del terminal, no RGB; no se lista."""
+    names = {t.name for t in zellij_themes.list_builtin_themes()}
+    assert "ansi" not in names
 
 
 def test_builtin_themes_have_no_duplicates_and_are_sorted() -> None:

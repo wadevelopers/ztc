@@ -138,19 +138,32 @@ el TUI extrae una paleta legacy desde el formato nuevo de Zellij usando
 
 Cuando un tema concreto tiene datos crudos que no producen el slot
 esperado, se anade una entrada en `THEME_OVERRIDES` (mismo modulo) con
-el motivo. Hoy hay overrides para:
+el motivo. Hoy hay un solo override:
 
-- `ayu-light` → `fg = "#5c6166"` (`text_unselected.base` es blanco
-  y no contrasta con bg light).
-- `dracula`, `ao`, `blade-runner`, `cyber-noir`, `molokai-dark`,
-  `retro-wave` → `bg` corregido (todos esos tienen
-  `text_unselected.background = "#000000"` como placeholder de "usa el
-  bg del terminal" — el bg real esta en `text_selected.background`).
-- `dracula` → `black = "#000000"` adicional para que el ANSI black
-  no acabe igualando al bg.
+- `ayu-light` → `fg = "#5c6166"` (`text_unselected.base` es `#fcfcfc`
+  blanco y no contrasta con bg light. El "fg oscuro" canonico vive en
+  `ribbon_unselected.background`).
+
+Otros temas como `dracula`, `ao`, `cyber-noir`, etc. tienen
+`text_unselected.background = "#000000"` (placeholder de "usa el bg
+del terminal"). Sin override, el bg cae a `#000000` (negro puro). Esto
+es decision deliberada: dejamos los datos crudos visibles y solo
+overrideamos lo estrictamente necesario.
 
 Cuando veas otro tema con un slot raro, agrega la linea correspondiente
 al dict y commiteamos. Nada de heuristicas escondidas.
+
+### Lista de built-in en el picker
+
+`BUILTIN_THEMES` no es una lista hardcodeada: se deriva en runtime de
+los archivos `.kdl` vendorizados en `src/term_config_tui/assets/zellij_themes/`.
+Hoy son **40 temas** (los 41 del repo de Zellij menos `ansi`, que usa
+indices de paleta del terminal en vez de RGB y no podemos construir un
+Textual Theme desde el).
+
+Si Zellij agrega un tema nuevo en una version posterior, basta con
+descargar su `.kdl` al directorio assets y aparece automaticamente en
+el picker.
 
 ### Sincronizacion automatica con Alacritty al cambiar de tema
 

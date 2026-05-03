@@ -89,10 +89,6 @@ def test_overrides_applied_in_legacy_derivation() -> None:
     s = zta.derive_legacy_slots_from_bundled("ayu-light")
     assert s is not None
     assert s["fg"] == "#5c6166"
-    # cyber-noir: bg de #000000 a #0b0e1a (override).
-    s = zta.derive_legacy_slots_from_bundled("cyber-noir")
-    assert s is not None
-    assert s["bg"] == "#0b0e1a"
 
 
 def test_no_override_means_raw_data_wins() -> None:
@@ -103,6 +99,10 @@ def test_no_override_means_raw_data_wins() -> None:
     assert s["bg"] == "#000000"
     # ao NO tiene override: text_un.bg = #000000.
     s = zta.derive_legacy_slots_from_bundled("ao")
+    assert s is not None
+    assert s["bg"] == "#000000"
+    # cyber-noir NO tiene override (ahora): text_un.bg = #000000.
+    s = zta.derive_legacy_slots_from_bundled("cyber-noir")
     assert s is not None
     assert s["bg"] == "#000000"
 
