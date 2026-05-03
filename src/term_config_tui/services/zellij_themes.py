@@ -256,62 +256,16 @@ def clone_theme(
     if src_user is not None:
         colors = list(src_user.colors)
     else:
-        colors = _derive_legacy_slots_from_bundled(src_name)
+        from term_config_tui.services import zellij_theme_assets as zta
+
+        derived = zta.derive_legacy_slots_from_bundled(src_name)
+        if derived is None:
+            colors = [ZellijColor(name=s, value="#000000") for s in LEGACY_SLOTS]
+        else:
+            colors = [ZellijColor(name=s, value=derived[s]) for s in LEGACY_SLOTS]
 
     new_theme = ZellijTheme(name=dst_name, source="user", colors=colors)
     return upsert_user_theme(config_path, new_theme, backup=backup)
-
-
-def _derive_legacy_slots_from_bundled(src_name: str) -> list[ZellijColor]:
-    """Para clonar un built-in: extrae slots legacy razonables desde el .kdl
-    vendorizado. Si no esta vendorizado, devuelve slots a #000000."""
-    from term_config_tui.services import zellij_theme_assets as zta
-
-    bundled = zta.load_bundled_theme(src_name)
-    if bundled is None:
-        return [ZellijColor(name=s, value="#000000") for s in LEGACY_SLOTS]
-
-    text_un = bundled.components.get("text_unselected")
-    text_sel = bundled.components.get("text_selected")
-    ribbon_sel = bundled.components.get("ribbon_selected")
-    frame_hl = bundled.components.get("frame_highlight")
-    exit_err = bundled.components.get("exit_code_error")
-    exit_ok = bundled.components.get("exit_code_success")
-    table = bundled.components.get("table_title")
-
-    fg = (text_un and text_un.base) or "#cccccc"
-    # Heuristica del bg: text_unselected.background es el bg canonico del
-    # tema en muchos casos (ayu-dark, nord, gruber-darker, etc.). Pero en
-    # otros (dracula, tokyo-night, ...) ese slot es '#000000' como
-    # placeholder de "transparente / bg del terminal" y el bg real esta
-    # en text_selected.background. Aplicamos la misma heuristica que
-    # zellij_theme_assets._pick_background.
-    bg = zta._pick_background(text_un, text_sel)
-    # Para 'black' (ANSI), usamos el OTRO bg disponible: si bg vino de
-    # text_unselected (ayu-dark), black ← text_selected.background. Si bg
-    # vino de text_selected (dracula), black ← text_unselected.background
-    # (que para dracula es '#000000' = negro real, perfecto).
-    other_bg = None
-    if text_un and text_un.background == bg:
-        other_bg = text_sel and text_sel.background
-    elif text_sel and text_sel.background == bg:
-        other_bg = text_un and text_un.background
-    black = other_bg or "#000000"
-
-    derived = {
-        "fg": fg,
-        "bg": bg,
-        "black": black,
-        "red": (exit_err and exit_err.base) or "#ff5555",
-        "green": (exit_ok and exit_ok.base) or "#50fa7b",
-        "yellow": (table and table.emphasis_0) or "#f1fa8c",
-        "blue": (ribbon_sel and ribbon_sel.emphasis_3) or fg,
-        "magenta": (frame_hl and frame_hl.emphasis_0) or fg,
-        "cyan": (text_un and text_un.emphasis_1) or fg,
-        "white": fg,
-        "orange": (text_un and text_un.emphasis_0) or "#ff8800",
-    }
-    return [ZellijColor(name=s, value=derived[s]) for s in LEGACY_SLOTS]
 
 
 # Fallback cuando el tema activo de Zellij no esta registrado como Textual.

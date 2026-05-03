@@ -115,6 +115,43 @@ cual: comentarios, indentacion, todo.
 
 Si la directiva `theme` no existe en tu archivo, se anade al final.
 
+### Reglas de extraccion de paleta (built-in -> legacy fg/bg/red/...)
+
+Para sincronizar Alacritty y para clonar built-ins a user themes editables,
+el TUI extrae una paleta legacy desde el formato nuevo de Zellij usando
+**una sola regla, sin condicionales por tema**. La regla esta en
+`services/zellij_theme_assets.py::_derive_with_overrides`:
+
+| Slot legacy | Origen en el .kdl |
+|---|---|
+| `bg` | `text_unselected.background` |
+| `fg` | `text_unselected.base` |
+| `black` | `text_selected.background` |
+| `red` | `exit_code_error.base` |
+| `green` | `exit_code_success.base` |
+| `yellow` | `table_title.emphasis_0` |
+| `blue` | `ribbon_selected.emphasis_3` |
+| `magenta` | `frame_highlight.emphasis_0` |
+| `cyan` | `text_unselected.emphasis_1` |
+| `white` | `text_unselected.base` |
+| `orange` | `text_unselected.emphasis_0` |
+
+Cuando un tema concreto tiene datos crudos que no producen el slot
+esperado, se anade una entrada en `THEME_OVERRIDES` (mismo modulo) con
+el motivo. Hoy hay overrides para:
+
+- `ayu-light` → `fg = "#5c6166"` (`text_unselected.base` es blanco
+  y no contrasta con bg light).
+- `dracula`, `ao`, `blade-runner`, `cyber-noir`, `molokai-dark`,
+  `retro-wave` → `bg` corregido (todos esos tienen
+  `text_unselected.background = "#000000"` como placeholder de "usa el
+  bg del terminal" — el bg real esta en `text_selected.background`).
+- `dracula` → `black = "#000000"` adicional para que el ANSI black
+  no acabe igualando al bg.
+
+Cuando veas otro tema con un slot raro, agrega la linea correspondiente
+al dict y commiteamos. Nada de heuristicas escondidas.
+
 ### Sincronizacion automatica con Alacritty al cambiar de tema
 
 Cada vez que aplicas un tema en el Theme Picker (Enter), el TUI tambien

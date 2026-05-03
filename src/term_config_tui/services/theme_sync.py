@@ -49,11 +49,10 @@ def _resolve_zellij_slots(
         if ut.name == zellij_name:
             return {c.name: c.value for c in ut.colors if alacritty.is_valid_hex(c.value)}
 
-    bundled = zta.load_bundled_theme(zellij_name)
-    if bundled is None:
+    derived = zta.derive_legacy_slots_from_bundled(zellij_name)
+    if derived is None:
         return {}
-    derived = zellij_themes._derive_legacy_slots_from_bundled(zellij_name)
-    return {c.name: c.value for c in derived if alacritty.is_valid_hex(c.value)}
+    return {k: v for k, v in derived.items() if alacritty.is_valid_hex(v)}
 
 
 def sync_alacritty_with_zellij_theme(

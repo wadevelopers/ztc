@@ -82,6 +82,41 @@ def test_build_textual_theme_from_legacy_missing_fg_or_bg_returns_none() -> None
     assert zta.build_textual_theme_from_legacy("x", {"bg": "#000"}) is None
 
 
+def test_overrides_applied_in_legacy_derivation() -> None:
+    """Las correcciones de THEME_OVERRIDES deben aplicarse en derive_legacy."""
+    # ayu-light: fg sobreescrito de #fcfcfc a #5c6166.
+    s = zta.derive_legacy_slots_from_bundled("ayu-light")
+    assert s is not None
+    assert s["fg"] == "#5c6166"
+    # dracula: bg de #000000 (text_un.bg) a #282a36, y black explicito.
+    s = zta.derive_legacy_slots_from_bundled("dracula")
+    assert s is not None
+    assert s["bg"] == "#282a36"
+    assert s["black"] == "#000000"
+    # ao: bg de #000000 a #2c5484.
+    s = zta.derive_legacy_slots_from_bundled("ao")
+    assert s is not None
+    assert s["bg"] == "#2c5484"
+
+
+def test_overrides_applied_in_textual_theme() -> None:
+    """Las correcciones tambien afectan al Theme registrado en Textual."""
+    t = zta.load_bundled_theme("ayu-light")
+    th = zta.build_textual_theme(t)
+    assert th is not None
+    assert th.foreground == "#5c6166"
+
+    t = zta.load_bundled_theme("dracula")
+    th = zta.build_textual_theme(t)
+    assert th is not None
+    assert th.background == "#282a36"
+    assert th.dark is True
+
+
+def test_derive_legacy_returns_none_for_unknown() -> None:
+    assert zta.derive_legacy_slots_from_bundled("totally-fake") is None
+
+
 def test_all_bundled_themes_build_valid_textual_themes() -> None:
     """Todos los .kdl vendorizados (excepto 'ansi') deben construir un
     Textual Theme valido. 'ansi' usa indices de paleta del terminal,
