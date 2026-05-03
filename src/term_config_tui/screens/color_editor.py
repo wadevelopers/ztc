@@ -26,7 +26,7 @@ class AlacrittyColorEditorScreen(Screen[None]):
         Binding("enter", "edit", "Editar"),
         Binding("i", "import", "Importar tema"),
         Binding("r", "reload", "Recargar"),
-        Binding("ctrl+s", "save", "Guardar"),
+        Binding("s", "save", "Guardar"),
         Binding("escape", "back", "Volver"),
         Binding("q", "back", "Volver", show=False),
     ]
