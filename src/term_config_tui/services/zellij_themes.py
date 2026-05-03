@@ -75,14 +75,7 @@ def list_user_themes(config_path: Path) -> list[ZellijTheme]:
     out: list[ZellijTheme] = []
     for theme_node in themes_node.nodes:
         colors: list[ZellijColor] = []
-        raw_components: list = []
         for child in theme_node.nodes:
-            # Bloques anidados (text_unselected { ... }) -> componente
-            # de formato nuevo. Se preserva como kdl.Node opaco.
-            if child.nodes:
-                raw_components.append(child)
-                continue
-            # Hoja con valor (fg "#xxx") -> slot legacy.
             if not child.args:
                 continue
             value = child.args[0]
@@ -90,12 +83,7 @@ def list_user_themes(config_path: Path) -> list[ZellijTheme]:
                 continue
             colors.append(ZellijColor(name=child.name, value=value))
         out.append(
-            ZellijTheme(
-                name=theme_node.name,
-                source="user",
-                colors=colors,
-                raw_components=raw_components,
-            )
+            ZellijTheme(name=theme_node.name, source="user", colors=colors)
         )
     return out
 
@@ -111,10 +99,6 @@ def list_all_themes(config_path: Path) -> list[ZellijTheme]:
 # ---------- splice del bloque themes { ... } ----------
 
 _THEMES_HEADER = re.compile(r"^themes\s*\{", re.MULTILINE)
-
-# kdl-py serializa enteros como floats ("255.0"). Lo normalizamos al re-emitir
-# nodos opacos para no introducir ruido en el archivo guardado.
-_INTEGER_FLOAT = re.compile(r"\b(\d+)\.0\b")
 
 
 def find_themes_block(text: str) -> tuple[int, int] | None:
@@ -151,22 +135,12 @@ def find_themes_block(text: str) -> tuple[int, int] | None:
 
 
 def render_themes_block(themes: list[ZellijTheme]) -> str:
-    """Emite KDL del bloque themes { ... }.
-
-    Para cada tema: primero los slots legacy (`name "value"`), despues los
-    raw_components (bloques del formato nuevo) re-emitidos via kdl-py y
-    re-indentados para alinear con el resto.
-    """
+    """Emite KDL limpio del bloque themes { ... }. Slots como `name "value"`."""
     lines = ["themes {"]
     for t in themes:
         lines.append(f"    {t.name} {{")
         for color in t.colors:
             lines.append(f'        {color.name} "{color.value}"')
-        for rc in t.raw_components:
-            text = _INTEGER_FLOAT.sub(r"\1", str(rc).rstrip("\n"))
-            for raw_line in text.splitlines():
-                normalized = raw_line.replace("\t", "    ")
-                lines.append("        " + normalized if normalized else "")
         lines.append("    }")
     lines.append("}")
     return "\n".join(lines)
@@ -260,19 +234,17 @@ def clone_theme(
     if dst_name in by_name:
         raise ValueError(f"Ya existe un user theme '{dst_name}'")
 
-    from term_config_tui.services import zellij_theme_assets as zta
-
     src_user = by_name.get(src_name)
     if src_user is not None:
         colors = list(src_user.colors)
-        raw_components = list(src_user.raw_components)
     else:
+        from term_config_tui.services import zellij_theme_assets as zta
+
         derived = zta.derive_legacy_slots_from_bundled(src_name)
         if derived is None:
             colors = [ZellijColor(name=s, value="#000000") for s in LEGACY_SLOTS]
         else:
             colors = [ZellijColor(name=s, value=derived[s]) for s in LEGACY_SLOTS]
-        raw_components = zta.load_bundled_raw_components(src_name)
 
     if alacritty_path is not None and alacritty_path.exists():
         active = read_active_theme(config_path)
@@ -281,12 +253,7 @@ def clone_theme(
             if overlay:
                 colors = _overlay_color_list(colors, overlay)
 
-    new_theme = ZellijTheme(
-        name=dst_name,
-        source="user",
-        colors=colors,
-        raw_components=raw_components,
-    )
+    new_theme = ZellijTheme(name=dst_name, source="user", colors=colors)
     return upsert_user_theme(config_path, new_theme, backup=backup)
 
 

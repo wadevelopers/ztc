@@ -206,28 +206,6 @@ def _is_dark(hex_value: str | None) -> bool:
     return _rel_luminance(rgb) < 0.5
 
 
-def load_bundled_raw_components(name: str) -> list:
-    """Devuelve los nodos kdl-py del formato nuevo (text_unselected, etc.)
-    del .kdl vendorizado. Lista vacia si no hay tema o no tiene componentes.
-    Estos nodos son opacos: se preservan tal cual para re-emitir.
-    """
-    try:
-        text = (resources.files(ASSETS_PACKAGE) / f"{name}.kdl").read_text(
-            encoding="utf-8"
-        )
-    except (FileNotFoundError, ModuleNotFoundError):
-        return []
-    try:
-        doc = kdl.parse(text)
-    except Exception:
-        return []
-    themes_node = next((n for n in doc.nodes if n.name == "themes"), None)
-    if themes_node is None or not themes_node.nodes:
-        return []
-    theme_node = themes_node.nodes[0]
-    return [child for child in theme_node.nodes if child.nodes]
-
-
 def derive_legacy_slots_from_bundled(name: str) -> dict[str, str] | None:
     """Devuelve un dict slot_name -> hex aplicando la regla unica + overrides.
 
@@ -331,21 +309,11 @@ def build_textual_theme(theme: ZellijUITheme) -> TextualTheme | None:
 
 
 def build_textual_theme_from_legacy(
-    name: str,
-    slots: dict[str, str],
-    *,
-    raw_components: list | None = None,
+    name: str, slots: dict[str, str]
 ) -> TextualTheme | None:
     """Construye un Theme de Textual desde slots legacy (fg, bg, red, ...).
 
-    Si `raw_components` contiene nodos del formato nuevo (text_unselected,
-    ribbon_selected, etc.), se usan PARA primary/accent/error/etc., con
-    los slots legacy del usuario (fg/bg) overlayando background y
-    foreground. Esto da fidelidad maxima al clonar built-ins, mientras
-    permite que el usuario tweakee fg/bg en el editor.
-
-    Sin raw_components, fallback al mapping legacy (blue->primary,
-    cyan->accent, red->error, etc.).
+    Usado para user themes en formato clasico (como custom_dark).
     """
     from textual.theme import Theme
 
@@ -353,24 +321,6 @@ def build_textual_theme_from_legacy(
     bg = slots.get("bg")
     if fg is None or bg is None:
         return None
-
-    if raw_components:
-        ui = _ui_theme_from_raw(name, raw_components)
-        rich = build_textual_theme(ui) if ui else None
-        if rich is not None:
-            return Theme(
-                name=name,
-                primary=rich.primary,
-                secondary=rich.secondary,
-                accent=rich.accent,
-                background=bg,
-                surface=bg,
-                foreground=fg,
-                success=rich.success,
-                warning=rich.warning,
-                error=rich.error,
-                dark=_is_dark(bg),
-            )
 
     return Theme(
         name=name,
@@ -385,15 +335,3 @@ def build_textual_theme_from_legacy(
         error=slots.get("red") or "#ff5555",
         dark=_is_dark(bg),
     )
-
-
-def _ui_theme_from_raw(name: str, raw_components: list) -> ZellijUITheme | None:
-    """Convierte nodos kdl-py de componentes a ZellijUITheme parseado."""
-    components: dict[str, ZellijUIComponent] = {}
-    for rc in raw_components:
-        if rc.name not in _RELEVANT_COMPONENTS:
-            continue
-        components[rc.name] = _parse_component(rc)
-    if not components:
-        return None
-    return ZellijUITheme(name=name, components=components)

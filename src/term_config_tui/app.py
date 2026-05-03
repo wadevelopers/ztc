@@ -81,11 +81,11 @@ class TermConfigApp(App[None]):
             textual_theme = zellij_theme_assets.build_textual_theme(ui_theme)
             if textual_theme is not None:
                 self.register_theme(textual_theme)
-        # User themes (legacy slots + opcionalmente componentes nuevo formato).
+        # User themes (formato legacy).
         for ut in zellij_themes.list_user_themes(self.paths.zellij_config):
             slots = {c.name: c.value for c in ut.colors}
             textual_theme = zellij_theme_assets.build_textual_theme_from_legacy(
-                ut.name, slots, raw_components=ut.raw_components
+                ut.name, slots
             )
             if textual_theme is not None:
                 self.register_theme(textual_theme)

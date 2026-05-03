@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Literal
 
 ThemeSource = Literal["builtin", "user"]
 
@@ -17,10 +17,6 @@ class ZellijTheme:
     name: str
     source: ThemeSource = "builtin"
     colors: list[ZellijColor] = field(default_factory=list)
-    # Componentes del formato nuevo de Zellij (text_unselected, ribbon_*,
-    # frame_*, exit_code_*, table_title). Se guardan como kdl.Node opacos
-    # para preservarlos exactamente al re-emitir.
-    raw_components: list[Any] = field(default_factory=list)
 
     @property
     def is_user(self) -> bool:
