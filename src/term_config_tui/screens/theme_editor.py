@@ -304,8 +304,16 @@ class ThemePickerScreen(Screen[None]):
                     severity="error",
                 )
                 return
+            alacritty_path = getattr(
+                getattr(self.app, "paths", None), "alacritty_config", None
+            )
             try:
-                backup = zellij_themes.clone_theme(self.config_path, src, dst)
+                backup = zellij_themes.clone_theme(
+                    self.config_path,
+                    src,
+                    dst,
+                    alacritty_path=alacritty_path,
+                )
             except ValueError as exc:
                 self.app.notify(str(exc), severity="error")
                 return

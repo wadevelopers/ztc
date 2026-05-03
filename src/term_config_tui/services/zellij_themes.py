@@ -211,13 +211,21 @@ def clone_theme(
     src_name: str,
     dst_name: str,
     *,
+    alacritty_path: Path | None = None,
     backup: bool = True,
 ) -> Path | None:
     """Clona un tema existente bajo dst_name.
 
-    Si src_name es un user theme, copia sus colores. Si es built-in (no
-    tenemos los colores), crea con LEGACY_SLOTS = "#000000" para que el
-    usuario los rellene en el editor.
+    Fuente de los colores:
+    - Si src_name es un user theme, copia sus colores tal cual.
+    - Si es built-in vendorizado, deriva los slots legacy del .kdl.
+    - Si no es ninguno, crea con LEGACY_SLOTS = "#000000".
+
+    Si `alacritty_path` se pasa Y src_name es el tema actualmente activo
+    en config.kdl, los slots que existen en alacritty.toml (fg, bg, 8
+    normal) se overlayan SOBRE el resultado anterior. Esto preserva el
+    estado real que el usuario esta viendo, incluyendo cualquier ajuste
+    manual hecho en el editor de Colores Alacritty desde el ultimo apply.
     """
     if not is_valid_theme_name(dst_name):
         raise ValueError(f"Nombre invalido: {dst_name!r}")
@@ -238,8 +246,56 @@ def clone_theme(
         else:
             colors = [ZellijColor(name=s, value=derived[s]) for s in LEGACY_SLOTS]
 
+    if alacritty_path is not None and alacritty_path.exists():
+        active = read_active_theme(config_path)
+        if active == src_name:
+            overlay = _read_alacritty_legacy_slots(alacritty_path)
+            if overlay:
+                colors = _overlay_color_list(colors, overlay)
+
     new_theme = ZellijTheme(name=dst_name, source="user", colors=colors)
     return upsert_user_theme(config_path, new_theme, backup=backup)
+
+
+def _read_alacritty_legacy_slots(alacritty_path: Path) -> dict[str, str]:
+    """Devuelve {legacy_slot: hex} con los valores actuales de alacritty.toml,
+    invirtiendo el mapping de theme_sync."""
+    from term_config_tui.services import alacritty as ala_svc
+    from term_config_tui.services import toml_io
+    from term_config_tui.services.theme_sync import _LEGACY_TO_ALACRITTY
+
+    doc = toml_io.load_toml(alacritty_path)
+    out: dict[str, str] = {}
+    for legacy_name, (group, alacritty_name) in _LEGACY_TO_ALACRITTY.items():
+        value = ala_svc.read_slot(doc, group, alacritty_name)
+        if value and ala_svc.is_valid_hex(value):
+            out[legacy_name] = ala_svc.normalize_hex(value)
+    return out
+
+
+def _overlay_color_list(
+    colors: list[ZellijColor], overlay: dict[str, str]
+) -> list[ZellijColor]:
+    """Devuelve nueva lista con los slots de overlay sustituidos."""
+    out: list[ZellijColor] = []
+    seen = set()
+    for c in colors:
+        seen.add(c.name)
+        if c.name in overlay:
+            out.append(ZellijColor(name=c.name, value=overlay[c.name]))
+        else:
+            out.append(c)
+    for name, value in overlay.items():
+        if name not in seen:
+            out.append(ZellijColor(name=name, value=value))
+    return out
+
+
+def read_active_theme(config_path: Path) -> str | None:
+    """Atajo a zellij_config.read_active_theme para evitar import cruzado."""
+    from term_config_tui.services import zellij_config
+
+    return zellij_config.read_active_theme(config_path)
 
 
 # Fallback cuando el tema activo de Zellij no esta registrado como Textual.

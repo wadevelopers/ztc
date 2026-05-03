@@ -226,6 +226,21 @@ Esto significa que:
 - Si Zellij saca un tema nuevo que no este vendorizado aqui, el TUI
   cae al fallback hasta que actualicemos los assets.
 
+### Clonar el tema activo preserva tweaks de Alacritty
+
+Cuando clonas el **tema actualmente activo** desde el Theme Picker (`c`),
+los slots actuales de `alacritty.toml` (fg, bg, 8 normales) se overlayan
+sobre los derivados del .kdl. Asi el clon refleja exactamente lo que ves
+en pantalla, incluyendo cualquier ajuste manual que hayas hecho en el
+editor de Colores Alacritty desde el ultimo apply.
+
+Si clonas un tema **distinto al activo**, no se aplica overlay (tendria
+sentido, alacritty representa el tema activo, no el clonado). Vienen
+solo los slots derivados del .kdl.
+
+El slot `orange` (que no esta en alacritty) siempre viene del .kdl
+como fallback.
+
 ### Custom themes (crear / editar / clonar / borrar)
 
 Desde el Theme Picker:

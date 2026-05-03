@@ -210,6 +210,95 @@ def test_clone_ayu_dark_bg_is_text_unselected(tmp_path: Path) -> None:
     assert by_name["bg"] == "#131721"
 
 
+def test_clone_active_theme_overlays_alacritty(tmp_path: Path) -> None:
+    """Cuando se clona el tema activo y hay alacritty.toml, los slots
+    actuales de alacritty deben pisar a los derivados del .kdl."""
+    # Configurar: tema activo = dracula.
+    cfg = tmp_path / "config.kdl"
+    cfg.write_text('theme "dracula"\n', encoding="utf-8")
+
+    # Alacritty con valores tweakeados (distintos al derivado de dracula).
+    ala = tmp_path / "alacritty.toml"
+    ala.write_text(
+        "[colors.primary]\n"
+        'background = "#222222"\n'
+        'foreground = "#eeeeee"\n'
+        "\n[colors.normal]\n"
+        'red = "#ff0000"\n'
+        'green = "#00ff00"\n',
+        encoding="utf-8",
+    )
+
+    zellij_themes.clone_theme(cfg, "dracula", "my-dracula", alacritty_path=ala)
+    by_name = {
+        c.name: c.value for c in zellij_themes.list_user_themes(cfg)[0].colors
+    }
+    # Los slots presentes en alacritty se overlayan (pisan).
+    assert by_name["bg"] == "#222222"
+    assert by_name["fg"] == "#eeeeee"
+    assert by_name["red"] == "#ff0000"
+    assert by_name["green"] == "#00ff00"
+    # Los slots NO presentes en alacritty quedan del derivado del .kdl.
+    # 'orange' no esta en alacritty -> debe venir del .kdl de dracula.
+    assert by_name["orange"] != "#000000"
+
+
+def test_clone_non_active_theme_ignores_alacritty(tmp_path: Path) -> None:
+    """Si se clona un tema que NO es el activo, alacritty no aplica
+    porque alacritty representa OTRO tema en ese momento."""
+    cfg = tmp_path / "config.kdl"
+    cfg.write_text('theme "dracula"\n', encoding="utf-8")
+    ala = tmp_path / "alacritty.toml"
+    ala.write_text(
+        "[colors.primary]\n"
+        'background = "#222222"\n'
+        'foreground = "#eeeeee"\n',
+        encoding="utf-8",
+    )
+    # Cloneamos tokyo-night (NO es el activo).
+    zellij_themes.clone_theme(cfg, "tokyo-night", "my-tn", alacritty_path=ala)
+    by_name = {
+        c.name: c.value for c in zellij_themes.list_user_themes(cfg)[0].colors
+    }
+    # Debe coger los del .kdl de tokyo-night, NO los de alacritty.
+    assert by_name["bg"] != "#222222"
+    assert by_name["fg"] != "#eeeeee"
+
+
+def test_clone_active_user_theme_overlays_alacritty(tmp_path: Path) -> None:
+    """El overlay tambien aplica cuando el activo es un user theme."""
+    cfg = tmp_path / "config.kdl"
+    cfg.write_text(
+        'themes {\n    mio {\n        fg "#aaaaaa"\n        bg "#111111"\n    }\n}\n'
+        'theme "mio"\n',
+        encoding="utf-8",
+    )
+    ala = tmp_path / "alacritty.toml"
+    ala.write_text(
+        '[colors.primary]\nbackground = "#222222"\nforeground = "#eeeeee"\n',
+        encoding="utf-8",
+    )
+    zellij_themes.clone_theme(cfg, "mio", "mio-copia", alacritty_path=ala)
+    themes = zellij_themes.list_user_themes(cfg)
+    clone = next(t for t in themes if t.name == "mio-copia")
+    by_name = {c.name: c.value for c in clone.colors}
+    assert by_name["bg"] == "#222222"
+    assert by_name["fg"] == "#eeeeee"
+
+
+def test_clone_without_alacritty_path_uses_kdl_only(tmp_path: Path) -> None:
+    """Sin alacritty_path, comportamiento clasico: solo .kdl."""
+    cfg = tmp_path / "config.kdl"
+    cfg.write_text('theme "dracula"\n', encoding="utf-8")
+    zellij_themes.clone_theme(cfg, "dracula", "my-dracula")
+    by_name = {
+        c.name: c.value for c in zellij_themes.list_user_themes(cfg)[0].colors
+    }
+    # Sin override de dracula bg, queda como text_unselected.background = #000000.
+    assert by_name["bg"] == "#000000"
+    assert by_name["fg"] == "#ffffff"
+
+
 def test_clone_unknown_uses_black_defaults(tmp_path: Path) -> None:
     cfg = tmp_path / "config.kdl"
     cfg.write_text("// empty\n", encoding="utf-8")
