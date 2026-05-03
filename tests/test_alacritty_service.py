@@ -40,6 +40,33 @@ def test_write_slot_creates_tables_when_missing() -> None:
     assert doc["colors"]["primary"]["background"] == "#000000"
 
 
+def test_delete_slot_removes_existing(tmp_path: Path) -> None:
+    src = tmp_path / "a.toml"
+    shutil.copy2(FIX / "alacritty_min.toml", src)
+    doc = toml_io.load_toml(src)
+    assert alacritty.read_slot(doc, "primary", "background") == "#1e1e2e"
+    assert alacritty.delete_slot(doc, "primary", "background") is True
+    assert alacritty.read_slot(doc, "primary", "background") is None
+    # foreground sigue ahi.
+    assert alacritty.read_slot(doc, "primary", "foreground") == "#cdd6f4"
+
+
+def test_delete_slot_returns_false_if_missing() -> None:
+    doc = tomlkit.document()
+    assert alacritty.delete_slot(doc, "cursor", "text") is False
+
+
+def test_delete_slot_collapses_empty_group(tmp_path: Path) -> None:
+    """Al borrar el ultimo slot del grupo, la tabla del grupo se elimina."""
+    doc = tomlkit.document()
+    alacritty.write_slot(doc, "cursor", "text", "#333333")
+    alacritty.write_slot(doc, "cursor", "cursor", "#333333")
+    alacritty.delete_slot(doc, "cursor", "text")
+    assert "cursor" in doc["colors"]  # type: ignore[index]
+    alacritty.delete_slot(doc, "cursor", "cursor")
+    assert "cursor" not in doc.get("colors", {})
+
+
 def test_write_slot_preserves_other_keys(tmp_path: Path) -> None:
     src = tmp_path / "a.toml"
     shutil.copy2(FIX / "alacritty_min.toml", src)

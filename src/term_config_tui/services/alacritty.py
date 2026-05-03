@@ -67,6 +67,26 @@ def write_slot(doc: TOMLDocument, group: str, name: str, value: str) -> None:
     colors[group][name] = value  # type: ignore[index]
 
 
+def delete_slot(doc: TOMLDocument, group: str, name: str) -> bool:
+    """Borra el slot del TOML. Devuelve True si existia.
+
+    Si el grupo queda vacio tras borrar, tambien se elimina la tabla del
+    grupo (y la tabla `colors` si queda sin nada).
+    """
+    colors = doc.get("colors")
+    if not colors:
+        return False
+    group_table = colors.get(group)
+    if not group_table or name not in group_table:
+        return False
+    del group_table[name]
+    if len(group_table) == 0:
+        del colors[group]
+    if len(colors) == 0:
+        del doc["colors"]
+    return True
+
+
 def read_all_slots(doc: TOMLDocument) -> dict[tuple[str, str], str]:
     out: dict[tuple[str, str], str] = {}
     for group, name in KNOWN_SLOTS:

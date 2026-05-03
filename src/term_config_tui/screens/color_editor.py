@@ -24,6 +24,7 @@ class AlacrittyColorEditorScreen(Screen[None]):
 
     BINDINGS = [
         Binding("enter", "edit", "Editar"),
+        Binding("x", "reset", "Resetear slot"),
         Binding("i", "import", "Importar tema"),
         Binding("r", "reload", "Recargar"),
         Binding("s", "save", "Guardar"),
@@ -182,6 +183,28 @@ class AlacrittyColorEditorScreen(Screen[None]):
         self.action_edit()
 
     # ---------- acciones ----------
+
+    def action_reset(self) -> None:
+        """Borra el slot del TOML para que vuelva a estar 'sin definir'."""
+        option_list = self.query_one("#slot-list", OptionList)
+        if option_list.highlighted is None:
+            return
+        group, name = alacritty.KNOWN_SLOTS[option_list.highlighted]
+        if alacritty.delete_slot(self.doc, group, name):
+            self.dirty = True
+            self._refresh_header()
+            self._rebuild_list()
+            self._refresh_warnings()
+            self.app.notify(
+                f"{group}.{name} reseteado (pulsa 's' para guardar al disco)",
+                severity="information",
+                timeout=6,
+            )
+        else:
+            self.app.notify(
+                f"{group}.{name} ya estaba sin definir",
+                severity="information",
+            )
 
     def action_edit(self) -> None:
         option_list = self.query_one("#slot-list", OptionList)
