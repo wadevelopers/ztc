@@ -115,6 +115,22 @@ def test_overrides_applied_in_textual_theme() -> None:
     assert th.foreground == "#5c6166"
 
 
+def test_bundled_filenames_match_inner_theme_names() -> None:
+    """El stem del .kdl debe coincidir con el nombre del tema dentro.
+
+    Si no coinciden, el picker muestra el stem pero set_active_theme
+    escribe ese stem en config.kdl y Zellij no lo reconoce. Si Zellij
+    saca un .kdl con nombre divergente al vendorizar, hay que renombrar
+    el archivo al nombre interno.
+    """
+    mismatches: list[tuple[str, str]] = []
+    for name in zta.list_bundled_theme_names():
+        theme = zta.load_bundled_theme(name)
+        if theme is not None and theme.name != name:
+            mismatches.append((name, theme.name))
+    assert not mismatches, f"Mismatch stem vs inner name: {mismatches}"
+
+
 def test_derive_legacy_returns_none_for_unknown() -> None:
     assert zta.derive_legacy_slots_from_bundled("totally-fake") is None
 
