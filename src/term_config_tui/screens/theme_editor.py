@@ -11,7 +11,12 @@ from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from term_config_tui.models.theme import ZellijTheme
-from term_config_tui.services import theme_sync, zellij_config, zellij_themes
+from term_config_tui.services import (
+    theme_sync,
+    zellij_config,
+    zellij_theme_assets,
+    zellij_themes,
+)
 from term_config_tui.widgets.confirm import ConfirmByNameModal, PromptModal
 
 
@@ -116,20 +121,30 @@ class ThemePickerScreen(Screen[None]):
         active_marker = "  (activo)" if theme.name == self._active else ""
         meta_widget.update(f"Tipo: {kind}{active_marker}")
 
-        if theme.colors:
+        slot_pairs = self._slot_pairs_for_preview(theme)
+        if slot_pairs:
             lines = []
-            for color in theme.colors:
-                if _looks_like_hex(color.value):
-                    swatch = f"[on {color.value}]      [/]"
-                else:
-                    swatch = "      "
-                lines.append(f"{color.name:<20} {color.value:<10} {swatch}")
+            for slot_name, value in slot_pairs:
+                swatch = (
+                    f"[on {value}]      [/]" if _looks_like_hex(value) else "      "
+                )
+                lines.append(f"{slot_name:<20} {value:<10} {swatch}")
             colors_widget.update("\n".join(lines))
         else:
-            colors_widget.update(
-                "Sin preview de colores: los temas built-in los resuelve Zellij\n"
-                "en tiempo de ejecucion. Pulsa Enter para aplicar."
-            )
+            colors_widget.update("Sin preview de colores. Pulsa Enter para aplicar.")
+
+    def _slot_pairs_for_preview(self, theme: ZellijTheme) -> list[tuple[str, str]]:
+        """Slots para preview. User themes: tal cual. Built-in: derivados
+        del .kdl vendorizado (con overrides aplicados). Si el built-in no
+        esta vendorizado, lista vacia."""
+        if theme.colors:
+            return [(c.name, c.value) for c in theme.colors]
+        if theme.is_user:
+            return []
+        derived = zellij_theme_assets.derive_legacy_slots_from_bundled(theme.name)
+        if derived is None:
+            return []
+        return list(derived.items())
 
     @on(OptionList.OptionHighlighted, "#theme-list")
     def _on_highlight(self, event: OptionList.OptionHighlighted) -> None:

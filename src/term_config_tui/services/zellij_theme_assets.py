@@ -47,9 +47,8 @@ ASSETS_PACKAGE = "term_config_tui.assets.zellij_themes"
 # Filosofia: una sola regla de extraccion, sin condicionales por tema dentro
 # del codigo. Cuando algo sale mal, se anade aqui con su motivo.
 THEME_OVERRIDES: dict[str, dict[str, str]] = {
-    # text_unselected.base = #fcfcfc (blanco) no contrasta con bg light.
-    # El "fg oscuro" de ayu-light vive en ribbon_unselected.background.
-    "ayu-light": {"fg": "#5c6166"},
+    # Sin overrides actualmente. La regla `fg <- ribbon_unselected.background`
+    # ya da el resultado correcto para ayu-light (#5c6166) y todos los demas.
 }
 
 # Componentes UI relevantes para el mapping a Textual.
@@ -219,26 +218,36 @@ def derive_legacy_slots_from_bundled(name: str) -> dict[str, str] | None:
 
 def _derive_with_overrides(name: str, bundled: ZellijUITheme) -> dict[str, str]:
     text_un = bundled.components.get("text_unselected") or ZellijUIComponent()
-    text_sel = bundled.components.get("text_selected") or ZellijUIComponent()
     ribbon_sel = bundled.components.get("ribbon_selected") or ZellijUIComponent()
+    ribbon_un = bundled.components.get("ribbon_unselected") or ZellijUIComponent()
     frame_hl = bundled.components.get("frame_highlight") or ZellijUIComponent()
     exit_err = bundled.components.get("exit_code_error") or ZellijUIComponent()
     exit_ok = bundled.components.get("exit_code_success") or ZellijUIComponent()
     table = bundled.components.get("table_title") or ZellijUIComponent()
 
-    fg = text_un.base or "#cccccc"
     bg = text_un.background or "#000000"
+    # fg <- ribbon_unselected.background. Confirmado en la fuente de Zellij
+    # (impl From<Palette> for Styling): ribbon_unselected.background = palette.fg.
+    # Es decir, el slot canonico de Zellij para "fg" en el formato nuevo.
+    fg = ribbon_un.background or text_un.base or "#cccccc"
+    # white <- text_unselected.base. Es el "fg secundario" usado dentro de
+    # ribbons. Distinto de fg.
+    white = text_un.base or fg
     derived: dict[str, str] = {
         "fg": fg,
+        # bg y black derivan ambos de text_unselected.background. bg lo usan
+        # Alacritty (primary.background) y el TUI (Textual). black lo usa
+        # Zellij internamente como bg de sus plugins (compact-bar, status-bar,
+        # etc.). Por defecto coinciden; el usuario puede editarlos por separado.
         "bg": bg,
-        "black": text_sel.background or "#000000",
+        "black": bg,
         "red": exit_err.base or "#ff5555",
         "green": exit_ok.base or "#50fa7b",
         "yellow": table.emphasis_0 or "#f1fa8c",
         "blue": ribbon_sel.emphasis_3 or fg,
         "magenta": frame_hl.emphasis_0 or fg,
         "cyan": text_un.emphasis_1 or fg,
-        "white": fg,
+        "white": white,
         "orange": text_un.emphasis_0 or "#ff8800",
     }
     overrides = THEME_OVERRIDES.get(name, {})

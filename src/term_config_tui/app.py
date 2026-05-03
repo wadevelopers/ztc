@@ -100,12 +100,22 @@ class TermConfigApp(App[None]):
 
         Si el nombre no esta registrado (built-in nuevo no vendorizado, o
         user theme con problemas de parseo), cae a `textual-dark`.
+
+        Si el target ya es el tema activo, igualmente se fuerza un re-apply
+        invocando el watcher de Textual a mano, para que recoja los hex
+        actualizados del Theme registrado (caso: editar el user theme activo
+        y guardar — sin esto el TUI no se refrescaria hasta reiniciar).
         """
         target = zellij_name if zellij_name else zellij_themes.TEXTUAL_FALLBACK
         if target not in self.available_themes:
             target = zellij_themes.TEXTUAL_FALLBACK
         if self.theme != target:
             self.theme = target
+        else:
+            # Forzar refresh manualmente: Textual no dispara el watcher si
+            # el valor del reactive no cambia, pero el Theme registrado SI
+            # puede haber cambiado (ej. user theme editado).
+            self._watch_theme(target)
 
     @on(OptionList.OptionSelected, "#main-menu")
     def _on_menu_selected(self, event: OptionList.OptionSelected) -> None:

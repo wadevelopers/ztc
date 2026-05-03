@@ -193,10 +193,16 @@ class CustomThemeEditorScreen(Screen[None]):
         if backup is not None:
             msg += f"  (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
-        # Re-registrar el theme en Textual para que su preview use los nuevos hex.
+        # Re-registrar el theme en Textual con los nuevos hex.
         register = getattr(self.app, "register_zellij_themes", None)
         if callable(register):
             register()
+        # Si el tema editado es el activo del TUI, forzar re-apply para que
+        # los cambios sean visibles al instante (sin cerrar y reabrir la app).
+        if getattr(self.app, "theme", None) == self.theme.name:
+            applier = getattr(self.app, "apply_theme_for_zellij", None)
+            if callable(applier):
+                applier(self.theme.name)
 
     def action_back(self) -> None:
         if not self.dirty:

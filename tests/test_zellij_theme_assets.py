@@ -34,7 +34,8 @@ def test_build_textual_theme_dracula() -> None:
     assert theme.name == "dracula"
     # Sin override, dracula bg = text_unselected.background = #000000.
     assert theme.background == "#000000"
-    assert theme.foreground == "#ffffff"
+    # fg <- ribbon_unselected.background = #f8f8f2 (dracula off-white).
+    assert theme.foreground == "#f8f8f2"
     assert theme.primary == "#50fa7b"  # iconic dracula green (ribbon_selected.bg)
     assert theme.dark is True
 

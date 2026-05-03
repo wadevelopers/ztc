@@ -192,8 +192,8 @@ def test_clone_builtin_extracts_colors_from_bundled(tmp_path: Path) -> None:
     assert themes[0].name == "my-dracula"
     by_name = {c.name: c.value for c in themes[0].colors}
     assert list(by_name.keys()) == list(zellij_themes.LEGACY_SLOTS)
-    # fg de dracula = text_unselected.base = #ffffff.
-    assert by_name["fg"] == "#ffffff"
+    # fg de dracula = ribbon_unselected.background = #f8f8f2.
+    assert by_name["fg"] == "#f8f8f2"
     # bg de dracula = text_unselected.background = #000000 (sin override).
     assert by_name["bg"] == "#000000"
     # red = exit_code_error.base = #ff5555.
@@ -296,7 +296,7 @@ def test_clone_without_alacritty_path_uses_kdl_only(tmp_path: Path) -> None:
     }
     # Sin override de dracula bg, queda como text_unselected.background = #000000.
     assert by_name["bg"] == "#000000"
-    assert by_name["fg"] == "#ffffff"
+    assert by_name["fg"] == "#f8f8f2"
 
 
 def test_clone_unknown_uses_black_defaults(tmp_path: Path) -> None:

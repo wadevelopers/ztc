@@ -32,9 +32,9 @@ def test_sync_from_bundled_dracula(tmp_path: Path) -> None:
     assert result.backup is not None
     doc = toml_io.load_toml(ala)
     # Dracula sin override: bg = text_unselected.background = #000000.
-    # fg = text_unselected.base = #ffffff. red = exit_code_error.base.
+    # fg = ribbon_unselected.background = #f8f8f2. red = exit_code_error.base.
     assert alacritty.read_slot(doc, "primary", "background") == "#000000"
-    assert alacritty.read_slot(doc, "primary", "foreground") == "#ffffff"
+    assert alacritty.read_slot(doc, "primary", "foreground") == "#f8f8f2"
     assert alacritty.read_slot(doc, "normal", "red") == "#ff5555"
 
 
