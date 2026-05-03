@@ -32,7 +32,8 @@ def test_build_textual_theme_dracula() -> None:
     theme = zta.build_textual_theme(z)
     assert theme is not None
     assert theme.name == "dracula"
-    assert theme.background == "#282a36"  # bg real
+    # Sin override, dracula bg = text_unselected.background = #000000.
+    assert theme.background == "#000000"
     assert theme.foreground == "#ffffff"
     assert theme.primary == "#50fa7b"  # iconic dracula green (ribbon_selected.bg)
     assert theme.dark is True
@@ -88,15 +89,22 @@ def test_overrides_applied_in_legacy_derivation() -> None:
     s = zta.derive_legacy_slots_from_bundled("ayu-light")
     assert s is not None
     assert s["fg"] == "#5c6166"
-    # dracula: bg de #000000 (text_un.bg) a #282a36, y black explicito.
+    # cyber-noir: bg de #000000 a #0b0e1a (override).
+    s = zta.derive_legacy_slots_from_bundled("cyber-noir")
+    assert s is not None
+    assert s["bg"] == "#0b0e1a"
+
+
+def test_no_override_means_raw_data_wins() -> None:
+    """Sin override, el bg/fg sale tal cual de los componentes."""
+    # dracula NO tiene override: text_un.bg = #000000.
     s = zta.derive_legacy_slots_from_bundled("dracula")
     assert s is not None
-    assert s["bg"] == "#282a36"
-    assert s["black"] == "#000000"
-    # ao: bg de #000000 a #2c5484.
+    assert s["bg"] == "#000000"
+    # ao NO tiene override: text_un.bg = #000000.
     s = zta.derive_legacy_slots_from_bundled("ao")
     assert s is not None
-    assert s["bg"] == "#2c5484"
+    assert s["bg"] == "#000000"
 
 
 def test_overrides_applied_in_textual_theme() -> None:
@@ -105,12 +113,6 @@ def test_overrides_applied_in_textual_theme() -> None:
     th = zta.build_textual_theme(t)
     assert th is not None
     assert th.foreground == "#5c6166"
-
-    t = zta.load_bundled_theme("dracula")
-    th = zta.build_textual_theme(t)
-    assert th is not None
-    assert th.background == "#282a36"
-    assert th.dark is True
 
 
 def test_derive_legacy_returns_none_for_unknown() -> None:

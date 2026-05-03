@@ -51,11 +51,10 @@ THEME_OVERRIDES: dict[str, dict[str, str]] = {
     # El "fg oscuro" de ayu-light vive en ribbon_unselected.background.
     "ayu-light": {"fg": "#5c6166"},
     # text_unselected.background = #000000 es placeholder de transparente.
-    # bg real esta en text_selected.background.
-    "ao": {"bg": "#2c5484"},
+    # bg real esta en text_selected.background. Sin override, el bg queda
+    # en negro puro.
     "blade-runner": {"bg": "#1a1a1a"},
     "cyber-noir": {"bg": "#0b0e1a"},
-    "dracula": {"bg": "#282a36", "black": "#000000"},
     "molokai-dark": {"bg": "#1b1d1e"},
     "retro-wave": {"bg": "#1a1a1a"},
 }

@@ -185,18 +185,18 @@ def test_clone_user_theme_copies_colors(tmp_path: Path) -> None:
 def test_clone_builtin_extracts_colors_from_bundled(tmp_path: Path) -> None:
     cfg = tmp_path / "config.kdl"
     cfg.write_text("// empty\n", encoding="utf-8")
-    # 'dracula' es built-in vendorizado: clonar deberia extraer slots
-    # legacy desde los componentes UI del .kdl bundled.
+    # 'dracula' es built-in vendorizado: clonar extrae slots legacy
+    # desde los componentes UI del .kdl bundled aplicando la regla unica.
     zellij_themes.clone_theme(cfg, "dracula", "my-dracula")
     themes = zellij_themes.list_user_themes(cfg)
     assert themes[0].name == "my-dracula"
     by_name = {c.name: c.value for c in themes[0].colors}
     assert list(by_name.keys()) == list(zellij_themes.LEGACY_SLOTS)
-    # fg de dracula es text_unselected.base = #ffffff.
+    # fg de dracula = text_unselected.base = #ffffff.
     assert by_name["fg"] == "#ffffff"
-    # bg de dracula es text_selected.background = #282a36.
-    assert by_name["bg"] == "#282a36"
-    # red derivado de exit_code_error.base = #ff5555.
+    # bg de dracula = text_unselected.background = #000000 (sin override).
+    assert by_name["bg"] == "#000000"
+    # red = exit_code_error.base = #ff5555.
     assert by_name["red"] == "#ff5555"
 
 
