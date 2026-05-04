@@ -147,27 +147,31 @@ def find_themes_block(text: str) -> tuple[int, int] | None:
 def render_themes_block(themes: list[ZellijTheme]) -> str:
     """Emite KDL del bloque themes { ... }.
 
-    Para cada tema: primero los slots legacy (`name "value"`), despues los
-    raw_components (bloques del formato nuevo) re-emitidos via kdl-py y
-    re-indentados al estilo del resto. Normaliza enteros que kdl-py
-    serializa como float (`255.0` -> `255`).
+    Slots legacy primero. Despues solo los slots ricos expuestos en
+    RICH_SLOTS_TO_EXPOSE (no se vuelcan los demas componentes que el
+    .kdl original pueda tener).
     """
     lines = ["themes {"]
     for t in themes:
         lines.append(f"    {t.name} {{")
         for color in t.colors:
             lines.append(f'        {color.name} "{color.value}"')
-        for rc in t.raw_components:
-            text = _INTEGER_FLOAT.sub(r"\1", str(rc).rstrip("\n"))
-            for raw_line in text.splitlines():
-                normalized = raw_line.replace("\t", "    ")
-                lines.append("        " + normalized if normalized else "")
+
+        # Agrupamos los rich expuestos por componente preservando orden.
+        grouped: dict[str, list[tuple[str, str]]] = {}
+        for component, slot in RICH_SLOTS_TO_EXPOSE:
+            value = get_rich_slot(t, component, slot)
+            if value is not None:
+                grouped.setdefault(component, []).append((slot, value))
+        for component, slot_values in grouped.items():
+            lines.append(f"        {component} {{")
+            for slot, value in slot_values:
+                lines.append(f'            {slot} "{value}"')
+            lines.append("        }")
+
         lines.append("    }")
     lines.append("}")
     return "\n".join(lines)
-
-
-_INTEGER_FLOAT = re.compile(r"\b(\d+)\.0\b")
 
 
 def save_user_themes(

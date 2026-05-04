@@ -67,15 +67,16 @@ def test_renderer_emits_raw_components(tmp_path: Path) -> None:
     assert 'background "#585b70"' in rendered
 
 
-def test_renderer_normalizes_floats(tmp_path: Path) -> None:
-    """kdl-py emite enteros como floats; el renderer los normaliza."""
+def test_renderer_converts_rgb_triples_to_hex(tmp_path: Path) -> None:
+    """RGB triples del formato nuevo (`base 255 200 100`) se convierten
+    a hex string (`base "#ffc864"`) al re-emitir."""
     cfg = tmp_path / "config.kdl"
-    # Valores RGB triples como Zellij guarda en formato nuevo (sin comillas).
     cfg.write_text(
         'themes {\n'
         '    mio {\n'
         '        text_selected {\n'
         '            base 255 200 100\n'
+        '            background 88 91 112\n'
         '        }\n'
         '    }\n'
         '}\n',
@@ -83,10 +84,11 @@ def test_renderer_normalizes_floats(tmp_path: Path) -> None:
     )
     themes = zellij_themes.list_user_themes(cfg)
     rendered = zellij_themes.render_themes_block(themes)
-    # No debe haber sufijos .0 sueltos.
+    assert '"#ffc864"' in rendered
+    assert '"#585b70"' in rendered
+    # Sin sufijos float ni triples sueltos.
     assert "255.0" not in rendered
-    assert "200.0" not in rendered
-    assert "255 200 100" in rendered
+    assert "255 200 100" not in rendered
 
 
 def test_get_set_unset_rich_slot() -> None:
@@ -441,13 +443,14 @@ def test_clone_builtin_preserves_rich_components(tmp_path: Path) -> None:
     cfg.write_text("// empty\n", encoding="utf-8")
     zellij_themes.clone_theme(cfg, "molokai-dark", "my-molokai")
     text = cfg.read_text(encoding="utf-8")
-    # Componentes presentes.
+    # Componentes expuestos presentes.
     assert "text_selected {" in text
     assert "ribbon_selected {" in text
-    # ribbon_selected.background de molokai (verde 0 140 0) preservado.
-    assert "0 140 0" in text
-    # Sin floats sueltos.
-    assert "255.0" not in text
+    # ribbon_selected.background de molokai (#008c00) preservado.
+    assert '"#008c00"' in text
+    # NO se vuelcan los componentes no expuestos (frame_*, exit_code_*, etc.).
+    assert "frame_highlight" not in text
+    assert "exit_code_error" not in text
 
 
 def test_clone_user_theme_preserves_rich_components(tmp_path: Path) -> None:
