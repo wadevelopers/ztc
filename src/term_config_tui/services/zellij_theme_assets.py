@@ -118,6 +118,27 @@ def load_all_bundled_themes() -> list[ZellijUITheme]:
     return out
 
 
+def load_bundled_raw_components(name: str) -> list:
+    """Devuelve los kdl.Node opacos de los bloques anidados (formato nuevo)
+    del tema vendorizado. Lista vacia si no existe el tema o no tiene
+    bloques. Estos nodos se preservan tal cual para re-emitir en clone."""
+    try:
+        text = (resources.files(ASSETS_PACKAGE) / f"{name}.kdl").read_text(
+            encoding="utf-8"
+        )
+    except (FileNotFoundError, ModuleNotFoundError):
+        return []
+    try:
+        doc = kdl.parse(text)
+    except Exception:
+        return []
+    themes_node = next((n for n in doc.nodes if n.name == "themes"), None)
+    if themes_node is None or not themes_node.nodes:
+        return []
+    theme_node = themes_node.nodes[0]
+    return [child for child in theme_node.nodes if child.nodes]
+
+
 def _parse_theme_text(text: str, *, expected_name: str | None = None) -> ZellijUITheme | None:
     try:
         doc = kdl.parse(text)

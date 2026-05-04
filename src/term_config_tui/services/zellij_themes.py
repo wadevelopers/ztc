@@ -258,17 +258,19 @@ def clone_theme(
     if dst_name in by_name:
         raise ValueError(f"Ya existe un user theme '{dst_name}'")
 
+    from term_config_tui.services import zellij_theme_assets as zta
+
     src_user = by_name.get(src_name)
     if src_user is not None:
         colors = list(src_user.colors)
+        raw_components = list(src_user.raw_components)
     else:
-        from term_config_tui.services import zellij_theme_assets as zta
-
         derived = zta.derive_legacy_slots_from_bundled(src_name)
         if derived is None:
             colors = [ZellijColor(name=s, value="#000000") for s in LEGACY_SLOTS]
         else:
             colors = [ZellijColor(name=s, value=derived[s]) for s in LEGACY_SLOTS]
+        raw_components = zta.load_bundled_raw_components(src_name)
 
     if alacritty_path is not None and alacritty_path.exists():
         active = read_active_theme(config_path)
@@ -277,7 +279,12 @@ def clone_theme(
             if overlay:
                 colors = _overlay_color_list(colors, overlay)
 
-    new_theme = ZellijTheme(name=dst_name, source="user", colors=colors)
+    new_theme = ZellijTheme(
+        name=dst_name,
+        source="user",
+        colors=colors,
+        raw_components=raw_components,
+    )
     return upsert_user_theme(config_path, new_theme, backup=backup)
 
 

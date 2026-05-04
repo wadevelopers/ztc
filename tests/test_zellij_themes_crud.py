@@ -409,6 +409,37 @@ def test_clone_without_alacritty_path_uses_kdl_only(tmp_path: Path) -> None:
     assert by_name["fg"] == "#f8f8f2"
 
 
+def test_clone_builtin_preserves_rich_components(tmp_path: Path) -> None:
+    """Al clonar un built-in, los bloques del formato nuevo del .kdl
+    bundled (text_selected, ribbon_selected, etc.) se copian al user
+    theme como raw_components, y aparecen en el config.kdl al guardar."""
+    cfg = tmp_path / "config.kdl"
+    cfg.write_text("// empty\n", encoding="utf-8")
+    zellij_themes.clone_theme(cfg, "molokai-dark", "my-molokai")
+    text = cfg.read_text(encoding="utf-8")
+    # Componentes presentes.
+    assert "text_selected {" in text
+    assert "ribbon_selected {" in text
+    # ribbon_selected.background de molokai (verde 0 140 0) preservado.
+    assert "0 140 0" in text
+    # Sin floats sueltos.
+    assert "255.0" not in text
+
+
+def test_clone_user_theme_preserves_rich_components(tmp_path: Path) -> None:
+    """Si el src es un user theme con raw_components, el clone tambien
+    los preserva (clone de clone)."""
+    cfg = tmp_path / "config.kdl"
+    cfg.write_text("// empty\n", encoding="utf-8")
+    zellij_themes.clone_theme(cfg, "dracula", "my-dracula")
+    zellij_themes.clone_theme(cfg, "my-dracula", "my-dracula-2")
+    themes = {t.name: t for t in zellij_themes.list_user_themes(cfg)}
+    assert "my-dracula-2" in themes
+    component_names = {rc.name for rc in themes["my-dracula-2"].raw_components}
+    assert "text_selected" in component_names
+    assert "ribbon_selected" in component_names
+
+
 def test_clone_unknown_uses_black_defaults(tmp_path: Path) -> None:
     cfg = tmp_path / "config.kdl"
     cfg.write_text("// empty\n", encoding="utf-8")
