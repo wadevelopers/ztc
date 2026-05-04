@@ -134,7 +134,7 @@ class CustomThemeEditorScreen(Screen[None]):
         )
         for component, slot in zellij_themes.RICH_SLOTS_TO_EXPOSE:
             value = self._rich_value(component, slot) or "(sin definir)"
-            label = self._format_row(f"{component}.{slot}", value)
+            label = self._format_row(zellij_themes.display_slot(component, slot), value)
             option_list.add_option(
                 Option(label, id=f"{_RICH_PREFIX}{component}.{slot}")
             )
@@ -187,7 +187,7 @@ class CustomThemeEditorScreen(Screen[None]):
         else:
             component, slot = slot_id.split(".", 1)
             value = self._rich_value(component, slot)
-            display_name = f"{component}.{slot}"
+            display_name = zellij_themes.display_slot(component, slot)
 
         name_widget.update(display_name)
         if value and value.startswith("#"):

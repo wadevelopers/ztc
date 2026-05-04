@@ -81,11 +81,18 @@ class TermConfigApp(App[None]):
             textual_theme = zellij_theme_assets.build_textual_theme(ui_theme)
             if textual_theme is not None:
                 self.register_theme(textual_theme)
-        # User themes (formato legacy).
+        # User themes: si tienen raw_components (modo always-save), usamos el
+        # mismo builder rich-based para que primary/accent/etc. salgan iguales
+        # que en el built-in equivalente. Fallback al builder legacy si no hay
+        # rich (caso raro: tema editado a mano sin bloques ricos).
         for ut in zellij_themes.list_user_themes(self.paths.zellij_config):
-            slots = {c.name: c.value for c in ut.colors}
-            textual_theme = zellij_theme_assets.build_textual_theme_from_legacy(
-                ut.name, slots
+            ui_theme = zellij_theme_assets.user_theme_to_ui_theme(ut)
+            textual_theme = (
+                zellij_theme_assets.build_textual_theme(ui_theme)
+                if ui_theme is not None
+                else zellij_theme_assets.build_textual_theme_from_legacy(
+                    ut.name, {c.name: c.value for c in ut.colors}
+                )
             )
             if textual_theme is not None:
                 self.register_theme(textual_theme)

@@ -9,7 +9,11 @@ from term_config_tui.models.theme import ZellijColor, ZellijTheme
 from term_config_tui.services.atomic import write_atomic
 from term_config_tui.services.backups import make_backup
 
-# Slots del formato legacy (los que usa custom_dark del usuario).
+# Slots de la "Paleta ANSI": fg/bg + 8 colores normales. Mapean 1:1 con
+# Alacritty (primary.{foreground,background} + normal.{8 ANSI}). No
+# incluyen `orange` porque Alacritty no tiene ese concepto: en el modelo
+# nuevo, orange vive en text_unselected.emphasis_0 (rich) y solo Zellij
+# lo consume.
 LEGACY_SLOTS: tuple[str, ...] = (
     "fg",
     "bg",
@@ -21,7 +25,6 @@ LEGACY_SLOTS: tuple[str, ...] = (
     "magenta",
     "cyan",
     "white",
-    "orange",
 )
 
 _VALID_THEME_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_\-]*$")
@@ -144,34 +147,196 @@ def find_themes_block(text: str) -> tuple[int, int] | None:
     return (start, i) if depth == 0 else None
 
 
+# Slots requeridos por el parser de Zellij en cualquier componente que
+# aparezca. Si falta uno, el parse falla entero (kdl/mod.rs:5158-1568).
+# `background` es opcional (default a #000000 upstream).
+_REQUIRED_RICH_SLOTS: tuple[str, ...] = (
+    "base",
+    "emphasis_0",
+    "emphasis_1",
+    "emphasis_2",
+    "emphasis_3",
+)
+
+# Default para campos del Palette de Zellij que no almacenamos en legacy
+# (purple, brown, gold, silver, pink, gray). Coincide con
+# PaletteColor::default() = EightBit(0) = negro.
+_PALETTE_DEFAULT_HEX = "#000000"
+
+_DEFAULT_ORANGE_HEX = "#ff8800"
+
+
+def derive_rich_block(
+    palette: dict[str, str], *, orange_hint: str | None = None
+) -> dict[str, dict[str, str]]:
+    """Replica `From<Palette> for Styling` de Zellij (data.rs:1591) para
+    los componentes que potencialmente emitimos. Devuelve un dict
+    {componente: {slot: hex}} con los 6 slots por componente. El render
+    elige cuáles efectivamente emite (segun RICH_SLOTS_TO_EXPOSE).
+
+    `orange_hint`: la paleta legacy ya no incluye orange (no es de
+    Alacritty). El llamador puede pasar el orange canonico (en el modelo
+    rico vive en `text_unselected.emphasis_0`); si no, usamos un naranja
+    neutro como semilla para temas frescos.
+
+    Asume theme_hue=Dark (no almacenamos hue; en la rama IF Zellij usa
+    Dark si no lo indicas). Para hue=Dark la regla es (fg, bg) ->
+    (palette.white, palette.black).
+    """
+    p = lambda name: palette.get(name, _PALETTE_DEFAULT_HEX)  # noqa: E731
+    fg = p("white")
+    bg = p("black")
+    orange = orange_hint or _DEFAULT_ORANGE_HEX
+    cyan = p("cyan")
+    green = p("green")
+    magenta = p("magenta")
+    red = p("red")
+    blue = p("blue")
+    black = p("black")
+    white = p("white")
+    palette_bg = p("bg")
+    purple = _PALETTE_DEFAULT_HEX
+    brown = _PALETTE_DEFAULT_HEX
+
+    return {
+        "text_unselected": {
+            "base": fg,
+            "background": bg,
+            "emphasis_0": orange,
+            "emphasis_1": cyan,
+            "emphasis_2": green,
+            "emphasis_3": magenta,
+        },
+        "text_selected": {
+            "base": fg,
+            "background": palette_bg,
+            "emphasis_0": orange,
+            "emphasis_1": cyan,
+            "emphasis_2": green,
+            "emphasis_3": magenta,
+        },
+        "ribbon_unselected": {
+            "base": black,
+            "background": p("fg"),
+            "emphasis_0": red,
+            "emphasis_1": white,
+            "emphasis_2": blue,
+            "emphasis_3": magenta,
+        },
+        "ribbon_selected": {
+            "base": black,
+            "background": green,
+            "emphasis_0": red,
+            "emphasis_1": orange,
+            "emphasis_2": magenta,
+            "emphasis_3": blue,
+        },
+        "frame_unselected": {
+            # Sin derivacion upstream (frame_unselected es Option<> y From<Palette>
+            # devuelve None). Tomamos palette.white como base para imitar el
+            # blanco apagado que muestra Zellij con None en la mayoria de temas.
+            "base": white,
+            "background": _PALETTE_DEFAULT_HEX,
+            "emphasis_0": orange,
+            "emphasis_1": cyan,
+            "emphasis_2": magenta,
+            "emphasis_3": brown,
+        },
+        "frame_selected": {
+            "base": green,
+            "background": _PALETTE_DEFAULT_HEX,
+            "emphasis_0": orange,
+            "emphasis_1": cyan,
+            "emphasis_2": magenta,
+            "emphasis_3": brown,
+        },
+        "frame_highlight": {
+            "base": orange,
+            "background": _PALETTE_DEFAULT_HEX,
+            "emphasis_0": magenta,
+            "emphasis_1": purple,
+            "emphasis_2": orange,
+            "emphasis_3": orange,
+        },
+    }
+
+
+def _slots_to_emit() -> dict[str, list[str]]:
+    """Deriva de RICH_SLOTS_TO_EXPOSE qué emitir al .kdl: por cada
+    componente con al menos un slot expuesto, los 5 obligatorios (base +
+    emphasis_0..3) + `background` solo si está expuesto. Mantiene el
+    orden en que cada componente aparece por primera vez en
+    RICH_SLOTS_TO_EXPOSE."""
+    exposed_by_component: dict[str, set[str]] = {}
+    for component, slot in RICH_SLOTS_TO_EXPOSE:
+        exposed_by_component.setdefault(component, set()).add(slot)
+    out: dict[str, list[str]] = {}
+    for component, slots in exposed_by_component.items():
+        emitted = ["base"]
+        if "background" in slots:
+            emitted.append("background")
+        emitted.extend(["emphasis_0", "emphasis_1", "emphasis_2", "emphasis_3"])
+        out[component] = emitted
+    return out
+
+
 def render_themes_block(themes: list[ZellijTheme]) -> str:
     """Emite KDL del bloque themes { ... }.
 
-    Slots legacy primero. Despues solo los slots ricos expuestos en
-    RICH_SLOTS_TO_EXPOSE (no se vuelcan los demas componentes que el
-    .kdl original pueda tener).
+    Por tema emite:
+    - Paleta legacy (LEGACY_SLOTS, 10 colores espejo de Alacritty).
+    - Solo los componentes ricos que tienen al menos un slot expuesto
+      en RICH_SLOTS_TO_EXPOSE. Por cada uno emite los 5 slots
+      obligatorios para Zellij (base + emphasis_0..3) y `background`
+      solo si esta expuesto. Los slots editables vienen de
+      raw_components (overrides del usuario o copiados del bundled);
+      los obligatorios no expuestos se derivan de la paleta legacy.
     """
+    components_to_emit = _slots_to_emit()
     lines = ["themes {"]
     for t in themes:
         lines.append(f"    {t.name} {{")
         for color in t.colors:
+            if color.name not in LEGACY_SLOTS:
+                continue
             lines.append(f'        {color.name} "{color.value}"')
 
-        # Agrupamos los rich expuestos por componente preservando orden.
-        grouped: dict[str, list[tuple[str, str]]] = {}
-        for component, slot in RICH_SLOTS_TO_EXPOSE:
-            value = get_rich_slot(t, component, slot)
-            if value is not None:
-                grouped.setdefault(component, []).append((slot, value))
-        for component, slot_values in grouped.items():
+        palette = {c.name: c.value for c in t.colors if c.name in LEGACY_SLOTS}
+        overrides = _collect_rich_overrides(t, allowed=components_to_emit)
+        orange_hint = overrides.get("text_unselected", {}).get("emphasis_0")
+        derived = derive_rich_block(palette, orange_hint=orange_hint)
+        for component, slots in components_to_emit.items():
             lines.append(f"        {component} {{")
-            for slot, value in slot_values:
+            comp_overrides = overrides.get(component, {})
+            for slot in slots:
+                value = comp_overrides.get(slot, derived[component][slot])
                 lines.append(f'            {slot} "{value}"')
             lines.append("        }")
 
         lines.append("    }")
     lines.append("}")
     return "\n".join(lines)
+
+
+def _collect_rich_overrides(
+    t: ZellijTheme, *, allowed: dict[str, list[str]]
+) -> dict[str, dict[str, str]]:
+    """Lee de raw_components solo los (componente, slot) que esten en
+    `allowed` (los que se emiten al .kdl). Devuelve {componente: {slot:
+    hex}} con valores normalizados."""
+    out: dict[str, dict[str, str]] = {}
+    for rc in t.raw_components:
+        slots = allowed.get(rc.name)
+        if slots is None:
+            continue
+        slot_set = set(slots)
+        for child in rc.nodes:
+            if child.name not in slot_set:
+                continue
+            value = _slot_value_to_hex(list(child.args))
+            if value is not None:
+                out.setdefault(rc.name, {})[child.name] = value
+    return out
 
 
 def save_user_themes(
@@ -329,12 +494,43 @@ def _overlay_color_list(
     return out
 
 
-# Slots ricos del formato nuevo expuestos en el editor unificado.
+# Abreviaciones de slot solo para visualizacion. Al guardar al .kdl se
+# usan los nombres canonicos de Zellij. El display es para que la fila
+# entre en una columna compacta del editor/preview.
+_SLOT_DISPLAY_ABBREV: dict[str, str] = {
+    "background": "backgr",
+    "emphasis_0": "emph_0",
+    "emphasis_1": "emph_1",
+    "emphasis_2": "emph_2",
+}
+
+
+def display_slot(component: str, slot: str) -> str:
+    """Etiqueta visible para un (componente, slot) rico. Usa abreviaciones
+    para los slots largos. NO se usa al renderizar al .kdl."""
+    return f"{component}.{_SLOT_DISPLAY_ABBREV.get(slot, slot)}"
+
+
+# Slots ricos expuestos en el editor + preview. 7 componentes x 2 slots
+# principales (background, base) + 1 extra (text_unselected.emphasis_0,
+# que es el "orange canonico" que Zellij usa internamente).
 RICH_SLOTS_TO_EXPOSE: list[tuple[str, str]] = [
+    ("text_unselected", "background"),
+    ("text_unselected", "base"),
+    ("text_unselected", "emphasis_0"),
+    ("text_unselected", "emphasis_1"),
+    ("text_unselected", "emphasis_2"),
     ("text_selected", "background"),
     ("text_selected", "base"),
+    ("ribbon_unselected", "background"),
+    ("ribbon_unselected", "base"),
+    ("ribbon_unselected", "emphasis_0"),
     ("ribbon_selected", "background"),
     ("ribbon_selected", "base"),
+    ("ribbon_selected", "emphasis_0"),
+    ("frame_unselected", "base"),
+    ("frame_selected", "base"),
+    ("frame_highlight", "base"),
 ]
 
 
@@ -401,7 +597,7 @@ TEXTUAL_FALLBACK = "textual-dark"
 
 
 def default_legacy_slots() -> list[ZellijColor]:
-    """11 slots con valores neutros para crear un tema nuevo desde cero."""
+    """10 slots con valores neutros para crear un tema nuevo desde cero."""
     defaults = {
         "fg": "#cccccc",
         "bg": "#1e1e1e",
@@ -413,6 +609,5 @@ def default_legacy_slots() -> list[ZellijColor]:
         "magenta": "#cc00cc",
         "cyan": "#00cccc",
         "white": "#ffffff",
-        "orange": "#ff8800",
     }
     return [ZellijColor(name=s, value=defaults[s]) for s in LEGACY_SLOTS]

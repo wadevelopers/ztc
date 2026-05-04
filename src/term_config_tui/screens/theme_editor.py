@@ -19,6 +19,8 @@ from term_config_tui.services import (
 )
 from term_config_tui.widgets.confirm import ConfirmByNameModal, PromptModal
 
+_HEADER_PREFIX = "header:"
+
 
 class ThemePickerScreen(Screen[None]):
     """Pantalla para elegir el tema activo de Zellij."""
@@ -89,20 +91,43 @@ class ThemePickerScreen(Screen[None]):
 
         option_list = self.query_one("#theme-list", OptionList)
         option_list.clear_options()
-        active_index = 0
-        for i, theme in enumerate(self._themes):
-            label = self._format_option(theme)
-            option_list.add_option(Option(label, id=theme.name))
-            if theme.name == self._active:
-                active_index = i
-        if self._themes:
-            option_list.highlighted = active_index
-            self._show_info(self._themes[active_index])
+
+        user_themes = [t for t in self._themes if t.is_user]
+        builtin_themes = [t for t in self._themes if not t.is_user]
+
+        active_index: int | None = None
+
+        def add_section(header_id: str, header_label: str, themes: list[ZellijTheme]) -> None:
+            nonlocal active_index
+            if not themes:
+                return
+            option_list.add_option(
+                Option(header_label, id=_HEADER_PREFIX + header_id, disabled=True)
+            )
+            for theme in themes:
+                option_list.add_option(Option(self._format_option(theme), id=theme.name))
+                if active_index is None and theme.name == self._active:
+                    active_index = option_list.option_count - 1
+
+        add_section("user", "── User themes ──", user_themes)
+        add_section("builtin", "── Built-in ──", builtin_themes)
+
+        if option_list.option_count == 0:
+            return
+
+        # Si no hay tema activo o no esta en la lista, posicionarse en el
+        # primer item seleccionable (saltando el header inicial).
+        if active_index is None:
+            active_index = 1 if option_list.option_count > 1 else 0
+        option_list.highlighted = active_index
+        opt = option_list.get_option_at_index(active_index)
+        theme = self._theme_by_name(opt.id) if opt.id else None
+        if theme is not None:
+            self._show_info(theme)
 
     def _format_option(self, theme: ZellijTheme) -> str:
         marker = "* " if theme.name == self._active else "  "
-        tag = "[user]" if theme.is_user else "[builtin]"
-        return f"{marker}{theme.name:<24} {tag}"
+        return f"{marker}{theme.name}"
 
     def _refresh_status(self) -> None:
         status = self.query_one("#status", Static)
@@ -163,7 +188,7 @@ class ThemePickerScreen(Screen[None]):
             for component, slot in zellij_themes.RICH_SLOTS_TO_EXPOSE:
                 value = zellij_themes.get_rich_slot(theme, component, slot)
                 if value is not None:
-                    out.append((f"{component}.{slot}", value))
+                    out.append((zellij_themes.display_slot(component, slot), value))
             return out
 
         bundled = zellij_theme_assets.load_bundled_theme(theme.name)
@@ -175,12 +200,12 @@ class ThemePickerScreen(Screen[None]):
                 continue
             value = getattr(comp, slot, None)
             if value is not None:
-                out.append((f"{component}.{slot}", value))
+                out.append((zellij_themes.display_slot(component, slot), value))
         return out
 
     @on(OptionList.OptionHighlighted, "#theme-list")
     def _on_highlight(self, event: OptionList.OptionHighlighted) -> None:
-        if event.option.id is None:
+        if event.option.id is None or event.option.id.startswith(_HEADER_PREFIX):
             return
         theme = self._theme_by_name(event.option.id)
         if theme is not None:
@@ -188,7 +213,7 @@ class ThemePickerScreen(Screen[None]):
 
     @on(OptionList.OptionSelected, "#theme-list")
     def _on_select(self, event: OptionList.OptionSelected) -> None:
-        if event.option.id is None:
+        if event.option.id is None or event.option.id.startswith(_HEADER_PREFIX):
             return
         self._apply(event.option.id)
 
@@ -197,8 +222,9 @@ class ThemePickerScreen(Screen[None]):
         if option_list.highlighted is None:
             return
         option = option_list.get_option_at_index(option_list.highlighted)
-        if option.id is not None:
-            self._apply(option.id)
+        if option.id is None or option.id.startswith(_HEADER_PREFIX):
+            return
+        self._apply(option.id)
 
     def _apply(self, name: str) -> None:
         if name == self._active:
@@ -267,7 +293,7 @@ class ThemePickerScreen(Screen[None]):
         if option_list.highlighted is None:
             return None
         opt = option_list.get_option_at_index(option_list.highlighted)
-        if opt.id is None:
+        if opt.id is None or opt.id.startswith(_HEADER_PREFIX):
             return None
         return self._theme_by_name(opt.id)
 

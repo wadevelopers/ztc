@@ -115,11 +115,11 @@ def test_get_set_unset_rich_slot() -> None:
     assert len(t.raw_components) == 0
 
 
-def test_save_round_trip_preserves_raw_components(tmp_path: Path) -> None:
-    """save_user_themes -> list_user_themes preserva raw_components."""
+def test_save_round_trip_preserves_rich_overrides(tmp_path: Path) -> None:
+    """Bajo Option C, guardar un theme con un slot rico expande a las 6
+    componentes activas (text_*, ribbon_*, frame_*) con derivacion + el
+    override del usuario. El override puntual se preserva exactamente."""
     cfg = tmp_path / "config.kdl"
-    cfg.write_text("// header\n", encoding="utf-8")
-    # Cargo un theme inicial con raw_components via render directo.
     cfg.write_text(
         '// header\n'
         'themes {\n'
@@ -127,20 +127,25 @@ def test_save_round_trip_preserves_raw_components(tmp_path: Path) -> None:
         '        fg "#fff"\n'
         '        text_selected {\n'
         '            base "#aaa"\n'
-        '            background "#222"\n'
+        '            background "#222222"\n'
         '        }\n'
         '    }\n'
         '}\n',
         encoding="utf-8",
     )
     themes = zellij_themes.list_user_themes(cfg)
-    # Re-guardar.
     zellij_themes.save_user_themes(cfg, themes, backup=False)
-    # Re-cargar y verificar que raw_components siguen alli.
     themes_again = zellij_themes.list_user_themes(cfg)
     assert len(themes_again) == 1
-    assert len(themes_again[0].raw_components) == 1
-    assert themes_again[0].raw_components[0].name == "text_selected"
+    component_names = {rc.name for rc in themes_again[0].raw_components}
+    assert "text_selected" in component_names
+    assert "ribbon_selected" in component_names
+    assert "frame_selected" in component_names
+    # El override puntual del usuario sobrevive al round-trip.
+    assert (
+        zellij_themes.get_rich_slot(themes_again[0], "text_selected", "background")
+        == "#222222"
+    )
 
 
 def test_is_valid_theme_name() -> None:
@@ -188,6 +193,7 @@ def test_find_themes_block_handles_brace_in_string() -> None:
 
 
 def test_render_themes_block_format() -> None:
+    """Modo always-save: cada tema emite legacy + las 7 componentes ricas."""
     themes = [
         ZellijTheme(
             name="t1",
@@ -196,7 +202,18 @@ def test_render_themes_block_format() -> None:
         )
     ]
     text = zellij_themes.render_themes_block(themes)
-    assert text == 'themes {\n    t1 {\n        fg "#fff"\n        bg "#000"\n    }\n}'
+    assert text.startswith('themes {\n    t1 {\n        fg "#fff"\n        bg "#000"\n')
+    # Las 7 componentes activas presentes.
+    for comp in (
+        "text_unselected",
+        "text_selected",
+        "ribbon_unselected",
+        "ribbon_selected",
+        "frame_unselected",
+        "frame_selected",
+        "frame_highlight",
+    ):
+        assert f"{comp} {{" in text
 
 
 def test_save_user_themes_replaces_existing_block(tmp_path: Path) -> None:
@@ -375,7 +392,7 @@ def test_clone_active_theme_overlays_alacritty(tmp_path: Path) -> None:
     assert by_name["red"] == "#ff0000"
     assert by_name["green"] == "#00ff00"
     # Los slots NO presentes en alacritty quedan del derivado del .kdl.
-    assert by_name["orange"] != "#000000"
+    assert by_name["yellow"] != "#000000"
 
 
 def test_clone_non_active_theme_ignores_alacritty(tmp_path: Path) -> None:
@@ -436,21 +453,27 @@ def test_clone_without_alacritty_path_uses_kdl_only(tmp_path: Path) -> None:
 
 
 def test_clone_builtin_preserves_rich_components(tmp_path: Path) -> None:
-    """Al clonar un built-in, los bloques del formato nuevo del .kdl
-    bundled (text_selected, ribbon_selected, etc.) se copian al user
-    theme como raw_components, y aparecen en el config.kdl al guardar."""
+    """Al clonar un built-in se emiten las 6 componentes activas
+    (text_*, ribbon_*, frame_*) tomando los valores hand-tuned del .kdl
+    bundled como override sobre la derivacion legacy. Los componentes
+    obscuros (table_*, list_*, exit_code_*, multiplayer_*) no se vuelcan."""
     cfg = tmp_path / "config.kdl"
     cfg.write_text("// empty\n", encoding="utf-8")
     zellij_themes.clone_theme(cfg, "molokai-dark", "my-molokai")
     text = cfg.read_text(encoding="utf-8")
-    # Componentes expuestos presentes.
+    # Las 6 componentes activas presentes.
+    assert "text_unselected {" in text
     assert "text_selected {" in text
+    assert "ribbon_unselected {" in text
     assert "ribbon_selected {" in text
+    assert "frame_selected {" in text
+    assert "frame_highlight {" in text
     # ribbon_selected.background de molokai (#008c00) preservado.
     assert '"#008c00"' in text
-    # NO se vuelcan los componentes no expuestos (frame_*, exit_code_*, etc.).
-    assert "frame_highlight" not in text
-    assert "exit_code_error" not in text
+    # Componentes no activos no se emiten.
+    assert "table_title" not in text
+    assert "list_unselected" not in text
+    assert "multiplayer_user_colors" not in text
 
 
 def test_clone_user_theme_preserves_rich_components(tmp_path: Path) -> None:
@@ -491,6 +514,117 @@ def test_clone_rejects_invalid_name(tmp_path: Path) -> None:
     cfg.write_text("// empty\n", encoding="utf-8")
     with pytest.raises(ValueError):
         zellij_themes.clone_theme(cfg, "dracula", "1invalid")
+
+
+def test_render_always_emits_legacy_plus_rich(tmp_path: Path) -> None:
+    """Modo always-save: cualquier tema emite legacy + 7 componentes ricas
+    aunque no tenga raw_components. Los slots ricos vienen de la
+    derivacion desde el legacy."""
+    themes = [
+        ZellijTheme(
+            name="t",
+            source="user",
+            colors=[
+                ZellijColor("fg", "#aabbcc"),
+                ZellijColor("bg", "#112233"),
+            ],
+        )
+    ]
+    text = zellij_themes.render_themes_block(themes)
+    assert 'fg "#aabbcc"' in text
+    assert 'bg "#112233"' in text
+    # Sin raw_components, igual emite las 7 componentes ricas derivadas.
+    assert "text_selected" in text
+    assert "ribbon_selected" in text
+    assert "frame_selected" in text
+
+
+def test_render_drops_orange_legacy_slot() -> None:
+    """orange ya no es legacy. Si llega un ZellijColor 'orange', no se
+    emite en el bloque legacy del KDL."""
+    theme = ZellijTheme(
+        name="t",
+        source="user",
+        colors=[
+            ZellijColor("fg", "#ffffff"),
+            ZellijColor("orange", "#ff8800"),  # ignorado al renderizar
+        ],
+    )
+    text = zellij_themes.render_themes_block([theme])
+    # No aparece como nodo legacy 'orange'.
+    assert "        orange " not in text
+
+
+def test_render_emits_only_components_with_exposed_slots(tmp_path: Path) -> None:
+    """Solo se emiten componentes que tienen al menos un slot expuesto.
+    Por componente: 5 slots obligatorios para Zellij (base + emphasis_0..3)
+    + `background` solo si esta expuesto. Override del usuario gana sobre
+    derivacion."""
+    legacy_dict = {"red": "#ff0000", "green": "#00ff00", "blue": "#0000ff"}
+    legacy = [
+        ZellijColor(name=s, value=legacy_dict.get(s, "#abcdef"))
+        for s in zellij_themes.LEGACY_SLOTS
+    ]
+    theme = ZellijTheme(name="t", source="user", colors=legacy)
+    zellij_themes.set_rich_slot(theme, "text_selected", "background", "#deadbe")
+    text = zellij_themes.render_themes_block([theme])
+
+    # Componentes con `background` expuesto -> emiten 6 slots.
+    for component in ("text_unselected", "text_selected", "ribbon_unselected", "ribbon_selected"):
+        assert f"{component} {{" in text, f"falta {component}"
+        for slot in ("base", "background", "emphasis_0", "emphasis_1", "emphasis_2", "emphasis_3"):
+            block_start = text.index(f"{component} {{")
+            block_end = text.index("}", block_start)
+            block = text[block_start:block_end]
+            assert f"{slot} " in block, f"{component}.{slot} ausente"
+
+    # frame_*: solo `base` expuesto -> emiten 5 slots (sin background).
+    for component in ("frame_unselected", "frame_selected", "frame_highlight"):
+        assert f"{component} {{" in text, f"falta {component}"
+        block_start = text.index(f"{component} {{")
+        block_end = text.index("}", block_start)
+        block = text[block_start:block_end]
+        for slot in ("base", "emphasis_0", "emphasis_1", "emphasis_2", "emphasis_3"):
+            assert f"{slot} " in block, f"{component}.{slot} ausente"
+        assert "background " not in block, f"{component}.background no debe emitirse"
+
+    # exit_code_error sin slots expuestos -> no aparece en el .kdl.
+    assert "exit_code_error" not in text
+
+    # Override puntual presente.
+    assert '"#deadbe"' in text
+    # Slot derivado: ribbon_selected.background = palette.green.
+    assert 'background "#00ff00"' in text
+
+
+def test_derive_rich_block_matches_zellij_from_palette() -> None:
+    """Smoke test del puerto Python de From<Palette> for Styling.
+    Orange viene de orange_hint (text_unselected.emphasis_0 en el modelo
+    rico); el palette legacy ya no lo incluye."""
+    palette = {
+        "fg": "#f0f0f0",
+        "bg": "#101010",
+        "black": "#000000",
+        "red": "#ff0000",
+        "green": "#00ff00",
+        "yellow": "#ffff00",
+        "blue": "#0000ff",
+        "magenta": "#ff00ff",
+        "cyan": "#00ffff",
+        "white": "#ffffff",
+    }
+    derived = zellij_themes.derive_rich_block(palette, orange_hint="#ffa500")
+    # Tabs activa: ribbon_selected.background = palette.green.
+    assert derived["ribbon_selected"]["background"] == "#00ff00"
+    assert derived["ribbon_selected"]["base"] == "#000000"
+    # Tabs inactiva: ribbon_unselected.background = palette.fg.
+    assert derived["ribbon_unselected"]["background"] == "#f0f0f0"
+    # Frame highlight (active border): base = orange_hint.
+    assert derived["frame_highlight"]["base"] == "#ffa500"
+    # Frame selected: base = palette.green.
+    assert derived["frame_selected"]["base"] == "#00ff00"
+    # text_unselected.background = palette.black (theme_hue=Dark).
+    assert derived["text_unselected"]["background"] == "#000000"
 
 
 def test_default_legacy_slots() -> None:

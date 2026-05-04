@@ -19,7 +19,10 @@ en zellij-utils/src/data.rs):
 - blue     <- ribbon_selected.emphasis_3
 - magenta  <- frame_highlight.emphasis_0
 - cyan     <- text_unselected.emphasis_1
-- orange   <- text_unselected.emphasis_0
+
+`orange` no se incluye: la Paleta ANSI espeja Alacritty (que no tiene
+ese slot). El "orange" canonico de Zellij vive en
+text_unselected.emphasis_0 dentro del bloque rico.
 """
 
 from __future__ import annotations
@@ -35,13 +38,32 @@ if TYPE_CHECKING:
 
 ASSETS_PACKAGE = "term_config_tui.assets.zellij_themes"
 
-# Correcciones puntuales sobre la paleta legacy derivada. Cada entrada
-# apunta a slots LEGACY (fg, bg, black, red, green, yellow, blue,
-# magenta, cyan, white, orange). Los valores aqui pisan los derivados
-# del .kdl al aplicar/clonar/sincronizar el tema.
-THEME_OVERRIDES: dict[str, dict[str, str]] = {
-    "ayu-light": {"white": "#5c6166"},
-    "catppuccin-latte": {"red": "#ea76cb"},
+# Correcciones puntuales sobre los componentes ricos del .kdl bundled.
+# Estructura: {tema_nombre: {(componente, slot): hex}}. Se aplican al
+# parsear/cargar el .kdl bundled (a nivel kdl.Node), por lo que afectan
+# tanto al render del tema built-in como a sus clones y a la
+# sincronizacion con Alacritty (los slots legacy se derivan del rico).
+RICH_THEME_OVERRIDES: dict[str, dict[tuple[str, str], str]] = {
+    # ayu-light bundle trae text_unselected.base = #fcfcfc (casi blanco
+    # sobre bg claro -> ilegible). Patcheamos al fg legible del tema.
+    "ayu-light": {("text_unselected", "base"): "#5c6166"},
+}
+
+# Correcciones puntuales SOLO sobre la paleta legacy derivada (afectan
+# unicamente la sincronizacion con Alacritty: la Paleta ANSI espeja
+# 1:1 a primary.{fg,bg} + normal.{8 ANSI}). Usar cuando el slot rico
+# correspondiente debe quedar tal cual el bundle pero el legacy
+# derivado da un valor pobre para el terminal. Estructura:
+# {tema: {slot_legacy: hex}}.
+LEGACY_THEME_OVERRIDES: dict[str, dict[str, str]] = {
+    # gruber-darker: ribbon_unselected.background = #282828 (correcto
+    # como bg de tabs inactivas de Zellij), pero deriva a legacy fg que
+    # va a primary.foreground en Alacritty. #282828 sobre #181818
+    # (primary.background) deja el texto del terminal casi invisible.
+    "gruber-darker": {"fg": "#696969"},
+    # tokyo-night-light: el fg derivado da poco contraste contra el bg
+    # claro en el terminal.
+    "tokyo-night-light": {"fg": "#64709f"},
 }
 
 # Componentes UI relevantes para el mapping a Textual.
@@ -129,7 +151,32 @@ def load_bundled_raw_components(name: str) -> list:
     if themes_node is None or not themes_node.nodes:
         return []
     theme_node = themes_node.nodes[0]
+    _apply_rich_overrides(name, theme_node)
     return [child for child in theme_node.nodes if child.nodes]
+
+
+def _apply_rich_overrides(theme_name: str, theme_node: "kdl.Node") -> None:
+    """Patchea in-place los slots ricos de un theme_node segun
+    RICH_THEME_OVERRIDES. Si el slot no existe en el .kdl original lo
+    crea; si existe, sobrescribe sus args."""
+    overrides = RICH_THEME_OVERRIDES.get(theme_name)
+    if not overrides:
+        return
+    for (component, slot), hex_value in overrides.items():
+        comp_node = next(
+            (n for n in theme_node.nodes if n.name == component), None
+        )
+        if comp_node is None:
+            comp_node = kdl.parse(f"{component} {{\n}}\n").nodes[0]
+            theme_node.nodes.append(comp_node)
+        slot_node = next(
+            (n for n in comp_node.nodes if n.name == slot), None
+        )
+        if slot_node is None:
+            slot_node = kdl.parse(f'{slot} "{hex_value}"\n').nodes[0]
+            comp_node.nodes.append(slot_node)
+        else:
+            slot_node.args = [hex_value]
 
 
 def _parse_theme_text(text: str, *, expected_name: str | None = None) -> ZellijUITheme | None:
@@ -146,6 +193,8 @@ def _parse_theme_text(text: str, *, expected_name: str | None = None) -> ZellijU
     if expected_name is not None and name != expected_name:
         # Algunos archivos pueden no coincidir; preferimos el del archivo.
         pass
+
+    _apply_rich_overrides(name, theme_node)
 
     components: dict[str, ZellijUIComponent] = {}
     for child in theme_node.nodes:
@@ -265,10 +314,25 @@ def _derive_slots(bundled: ZellijUITheme) -> dict[str, str]:
         "magenta": frame_hl.emphasis_0 or fg,
         "cyan": text_un.emphasis_1 or fg,
         "white": white,
-        "orange": text_un.emphasis_0 or "#ff8800",
     }
-    derived.update(THEME_OVERRIDES.get(bundled.name, {}))
+    derived.update(LEGACY_THEME_OVERRIDES.get(bundled.name, {}))
     return derived
+
+
+def user_theme_to_ui_theme(user_theme) -> ZellijUITheme | None:
+    """Adapta un ZellijTheme (user theme con raw_components) a un
+    ZellijUITheme. Permite que build_textual_theme() funcione tanto para
+    built-ins como para user themes con bloques ricos."""
+    if not user_theme.raw_components:
+        return None
+    components: dict[str, ZellijUIComponent] = {}
+    for rc in user_theme.raw_components:
+        if rc.name not in _RELEVANT_COMPONENTS:
+            continue
+        components[rc.name] = _parse_component(rc)
+    if not components:
+        return None
+    return ZellijUITheme(name=user_theme.name, components=components)
 
 
 def build_textual_theme(theme: ZellijUITheme) -> TextualTheme | None:
