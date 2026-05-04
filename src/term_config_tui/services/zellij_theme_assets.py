@@ -35,6 +35,22 @@ if TYPE_CHECKING:
 
 ASSETS_PACKAGE = "term_config_tui.assets.zellij_themes"
 
+# Correcciones puntuales sobre la paleta legacy derivada. Cada entrada
+# apunta a slots LEGACY (fg, bg, black, red, green, yellow, blue,
+# magenta, cyan, white, orange). Los valores aqui pisan los derivados
+# del .kdl al aplicar/clonar/sincronizar el tema.
+THEME_OVERRIDES: dict[str, dict[str, str]] = {
+    "ayu-light": {"white": "#5c6166"},
+    "catppuccin-latte": {"red": "#ea76cb"},
+}
+
+# Temas built-in que no se pueden clonar a un user theme legacy editable
+# porque su rendering usa decisiones del formato nuevo que la paleta
+# legacy no captura adecuadamente. El picker bloquea clonarlos.
+NON_CLONEABLE_THEMES: frozenset[str] = frozenset({
+    "gruber-darker",
+})
+
 # Componentes UI relevantes para el mapping a Textual.
 _RELEVANT_COMPONENTS = (
     "text_unselected",
@@ -207,7 +223,6 @@ def _derive_slots(bundled: ZellijUITheme) -> dict[str, str]:
     frame_hl = bundled.components.get("frame_highlight") or ZellijUIComponent()
     exit_err = bundled.components.get("exit_code_error") or ZellijUIComponent()
     exit_ok = bundled.components.get("exit_code_success") or ZellijUIComponent()
-    table = bundled.components.get("table_title") or ZellijUIComponent()
 
     bg = text_un.background or "#000000"
     # fg <- ribbon_unselected.background. Confirmado en la fuente de Zellij
@@ -227,13 +242,14 @@ def _derive_slots(bundled: ZellijUITheme) -> dict[str, str]:
         "black": bg,
         "red": exit_err.base or "#ff5555",
         "green": exit_ok.base or "#50fa7b",
-        "yellow": table.emphasis_0 or "#f1fa8c",
+        "yellow": exit_err.emphasis_0 or "#f1fa8c",
         "blue": ribbon_sel.emphasis_3 or fg,
         "magenta": frame_hl.emphasis_0 or fg,
         "cyan": text_un.emphasis_1 or fg,
         "white": white,
         "orange": text_un.emphasis_0 or "#ff8800",
     }
+    derived.update(THEME_OVERRIDES.get(bundled.name, {}))
     return derived
 
 

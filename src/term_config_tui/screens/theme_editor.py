@@ -309,6 +309,15 @@ class ThemePickerScreen(Screen[None]):
         if theme is None:
             return
         src = theme.name
+        if src in zellij_theme_assets.NON_CLONEABLE_THEMES:
+            self.app.notify(
+                f"'{src}' no se puede clonar: usa decisiones del formato "
+                "nuevo de Zellij que no se reproducen en la paleta legacy "
+                "editable.",
+                severity="warning",
+                timeout=10,
+            )
+            return
 
         def after(dst: str | None) -> None:
             if not dst:
