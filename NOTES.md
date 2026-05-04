@@ -170,17 +170,23 @@ sincroniza estos slots de `alacritty.toml`:
 | `blue` | `[colors.normal] blue` |
 | `magenta` | `[colors.normal] magenta` |
 | `cyan` | `[colors.normal] cyan` |
-| `white` | `[colors.normal] white` |
+| `white` | `[colors.normal] white` (ademas `[colors.primary] foreground`) |
 
-Para temas built-in los colores se derivan del .kdl vendorizado (los
-mismos que se usan al clonar). Para user themes, se leen los slots del
-bloque `themes { }`. Si un slot no esta definido en el origen, no se
-toca en Alacritty (preserva lo que tengas).
+Y desde el formato nuevo de Zellij:
 
-`[colors.bright]`, `[colors.selection]`, `[colors.cursor]` y todas las
-demas secciones (`[window]`, `[font]`, etc.) **no se tocan**. Despues de
-sincronizar puedes seguir editando manualmente desde la pantalla de
-Colores Alacritty.
+| Slot Zellij (rich) | Slot Alacritty |
+|---|---|
+| `text_selected.background` | `[colors.selection] background` |
+| `text_selected.base` | `[colors.selection] text` |
+
+Para temas built-in todo se deriva del .kdl vendorizado. Para user
+themes, se leen los slots del bloque `themes { }` (legacy + componentes
+ricos). Si un slot no esta definido en el origen, no se toca en
+Alacritty (preserva lo que tengas).
+
+`[colors.bright]`, `[colors.cursor]` y todas las demas secciones
+(`[window]`, `[font]`, etc.) **no se tocan**. Despues de sincronizar
+puedes seguir editando manualmente desde Colores Alacritty.
 
 Solo se escribe si hay cambios efectivos. Si el slot ya tenia el valor
 correcto, no genera diff ni backup. Cuando sí escribe, crea el backup
@@ -236,26 +242,47 @@ Desde el Theme Picker:
 
 | Tecla | Accion |
 |---|---|
-| `n` | Nuevo user theme (PromptModal pide nombre, abre editor con 11 slots por defecto) |
-| `e` | Editar el user theme seleccionado (built-in no se puede editar) |
-| `c` | Clonar el seleccionado bajo nuevo nombre. Si es user, copia colores. Si es built-in, crea con todos los slots a `#000000` para que rellenes |
+| `n` | Nuevo user theme (pide nombre, abre editor) |
+| `e` | Editar el user theme seleccionado |
+| `c` | Clonar el seleccionado bajo nuevo nombre |
 | `d` | Borrar user theme (confirm-by-name) |
 
-El editor de custom theme muestra los **11 slots legacy**
-(`fg`, `bg`, `black`..`white`, `orange`) mas cualquier otro slot que ya
-estuviera definido. Enter abre el modal de hex; Ctrl+S guarda.
+Al clonar un built-in, el clon hereda **toda** la informacion del .kdl
+original: la paleta legacy (11 slots) y los componentes del formato
+nuevo de Zellij (text_selected, ribbon_selected, etc.). Asi el clon
+renderiza igual que el built-in en Zellij.
 
-Al guardar, el TUI **regenera el bloque entero `themes { ... }`** y lo
-splicea en el lugar exacto del config.kdl (con balance de llaves
-tolerando llaves dentro de strings). El resto del archivo se preserva.
+### Editor de user themes
+
+El editor muestra dos secciones:
+
+- **Paleta ANSI**: los 11 slots legacy (`fg`, `bg`, `black`, `red`,
+  `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `orange`).
+  Mapean a `colors.primary.*` y `colors.normal.*` de Alacritty.
+- **UI (Zellij)**: 4 slots ricos del formato nuevo:
+  - `text_selected.background` → `colors.selection.background` de
+    Alacritty (color de fondo cuando seleccionas texto).
+  - `text_selected.base` → `colors.selection.text`.
+  - `ribbon_selected.background` → bg del tab activo de Zellij.
+  - `ribbon_selected.base` → texto del tab activo.
+
+**Atajos en el editor:**
+
+| Tecla | Accion |
+|---|---|
+| `Enter` | Editar el slot seleccionado (modal con preview) |
+| `x` | Resetear el slot (eliminar la asignacion del theme) |
+| `s` | Guardar al config.kdl |
+| `Esc` | Volver (con confirm si hay cambios sin guardar) |
+
+Otros componentes del formato nuevo no expuestos en el editor (ej.
+`frame_highlight`, `exit_code_*`, etc.) se **preservan opacos** en
+`raw_components`: viajan con el clon pero no se editan desde el TUI.
+Zellij los usa al renderizar.
 
 **Limitacion**: comentarios `//` y `/-` dentro del bloque themes se
-pierden al re-escribir. Si tienes anotaciones importantes ahi, sacalas
-fuera del bloque.
-
-Solo se soporta el **formato legacy** (`fg "#hex"`). El formato nuevo de
-componentes UI (`text_unselected { ... }`) se preserva al leer pero el
-editor no lo expone bien — si tu tema usa eso, edita a mano.
+pierden al re-escribir el archivo. Si tienes anotaciones importantes
+ahi, ponlas fuera del bloque.
 
 ---
 

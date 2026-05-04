@@ -44,13 +44,6 @@ THEME_OVERRIDES: dict[str, dict[str, str]] = {
     "catppuccin-latte": {"red": "#ea76cb"},
 }
 
-# Temas built-in que no se pueden clonar a un user theme legacy editable
-# porque su rendering usa decisiones del formato nuevo que la paleta
-# legacy no captura adecuadamente. El picker bloquea clonarlos.
-NON_CLONEABLE_THEMES: frozenset[str] = frozenset({
-    "gruber-darker",
-})
-
 # Componentes UI relevantes para el mapping a Textual.
 _RELEVANT_COMPONENTS = (
     "text_unselected",
