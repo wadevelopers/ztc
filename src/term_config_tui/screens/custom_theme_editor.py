@@ -11,7 +11,7 @@ from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from term_config_tui.models.theme import ZellijColor, ZellijTheme
-from term_config_tui.services import zellij_themes
+from term_config_tui.services import theme_sync, zellij_config, zellij_themes
 from term_config_tui.widgets.confirm import (
     ConfirmByNameModal,
     EditColorModal,
@@ -309,6 +309,27 @@ class CustomThemeEditorScreen(Screen[None]):
         if backup is not None:
             msg += f"  (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
+
+        # Si el tema editado es el activo en Zellij, propagar a alacritty.toml.
+        active = zellij_config.read_active_theme(self.config_path)
+        if active == self.theme.name:
+            alacritty_path = getattr(
+                getattr(self.app, "paths", None), "alacritty_config", None
+            )
+            if alacritty_path is not None:
+                try:
+                    theme_sync.sync_alacritty_with_zellij_theme(
+                        zellij_theme_name=self.theme.name,
+                        alacritty_path=alacritty_path,
+                        zellij_config_path=self.config_path,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    self.app.notify(
+                        f"Error sincronizando Alacritty: {exc}",
+                        severity="error",
+                        timeout=8,
+                    )
+
         register = getattr(self.app, "register_zellij_themes", None)
         if callable(register):
             register()
