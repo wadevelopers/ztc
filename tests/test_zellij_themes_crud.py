@@ -10,6 +10,113 @@ from term_config_tui.models.theme import ZellijColor, ZellijTheme
 from term_config_tui.services import zellij_themes
 
 
+def test_parser_captures_raw_components(tmp_path: Path) -> None:
+    """Bloques anidados en un user theme (formato nuevo) se preservan en
+    raw_components."""
+    cfg = tmp_path / "config.kdl"
+    cfg.write_text(
+        'themes {\n'
+        '    mio {\n'
+        '        fg "#cdd6f4"\n'
+        '        bg "#1e1e2e"\n'
+        '        text_selected {\n'
+        '            base "#aaaaaa"\n'
+        '            background "#585b70"\n'
+        '        }\n'
+        '        ribbon_selected {\n'
+        '            background "#a6e3a1"\n'
+        '        }\n'
+        '    }\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    themes = zellij_themes.list_user_themes(cfg)
+    assert len(themes) == 1
+    t = themes[0]
+    # Slots legacy se siguen capturando.
+    assert {c.name for c in t.colors} == {"fg", "bg"}
+    # raw_components contiene los bloques anidados.
+    assert len(t.raw_components) == 2
+    component_names = {rc.name for rc in t.raw_components}
+    assert component_names == {"text_selected", "ribbon_selected"}
+
+
+def test_renderer_emits_raw_components(tmp_path: Path) -> None:
+    """Round-trip: parsear un theme con raw_components y re-emitirlo
+    debe preservar los bloques anidados."""
+    cfg = tmp_path / "config.kdl"
+    original = (
+        'themes {\n'
+        '    mio {\n'
+        '        fg "#cdd6f4"\n'
+        '        bg "#1e1e2e"\n'
+        '        text_selected {\n'
+        '            base "#aaaaaa"\n'
+        '            background "#585b70"\n'
+        '        }\n'
+        '    }\n'
+        '}\n'
+    )
+    cfg.write_text(original, encoding="utf-8")
+    themes = zellij_themes.list_user_themes(cfg)
+    rendered = zellij_themes.render_themes_block(themes)
+    # El render debe contener tanto slots legacy como bloque rich.
+    assert 'fg "#cdd6f4"' in rendered
+    assert "text_selected {" in rendered
+    assert 'base "#aaaaaa"' in rendered
+    assert 'background "#585b70"' in rendered
+
+
+def test_renderer_normalizes_floats(tmp_path: Path) -> None:
+    """kdl-py emite enteros como floats; el renderer los normaliza."""
+    cfg = tmp_path / "config.kdl"
+    # Valores RGB triples como Zellij guarda en formato nuevo (sin comillas).
+    cfg.write_text(
+        'themes {\n'
+        '    mio {\n'
+        '        text_selected {\n'
+        '            base 255 200 100\n'
+        '        }\n'
+        '    }\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    themes = zellij_themes.list_user_themes(cfg)
+    rendered = zellij_themes.render_themes_block(themes)
+    # No debe haber sufijos .0 sueltos.
+    assert "255.0" not in rendered
+    assert "200.0" not in rendered
+    assert "255 200 100" in rendered
+
+
+def test_save_round_trip_preserves_raw_components(tmp_path: Path) -> None:
+    """save_user_themes -> list_user_themes preserva raw_components."""
+    cfg = tmp_path / "config.kdl"
+    cfg.write_text("// header\n", encoding="utf-8")
+    # Cargo un theme inicial con raw_components via render directo.
+    cfg.write_text(
+        '// header\n'
+        'themes {\n'
+        '    mio {\n'
+        '        fg "#fff"\n'
+        '        text_selected {\n'
+        '            base "#aaa"\n'
+        '            background "#222"\n'
+        '        }\n'
+        '    }\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    themes = zellij_themes.list_user_themes(cfg)
+    # Re-guardar.
+    zellij_themes.save_user_themes(cfg, themes, backup=False)
+    # Re-cargar y verificar que raw_components siguen alli.
+    themes_again = zellij_themes.list_user_themes(cfg)
+    assert len(themes_again) == 1
+    assert len(themes_again[0].raw_components) == 1
+    assert themes_again[0].raw_components[0].name == "text_selected"
+
+
 def test_is_valid_theme_name() -> None:
     assert zellij_themes.is_valid_theme_name("dracula")
     assert zellij_themes.is_valid_theme_name("custom_dark")

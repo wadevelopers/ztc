@@ -75,7 +75,12 @@ def list_user_themes(config_path: Path) -> list[ZellijTheme]:
     out: list[ZellijTheme] = []
     for theme_node in themes_node.nodes:
         colors: list[ZellijColor] = []
+        raw_components: list = []
         for child in theme_node.nodes:
+            if child.nodes:
+                # Bloque anidado (formato nuevo): text_selected { ... }, etc.
+                raw_components.append(child)
+                continue
             if not child.args:
                 continue
             value = child.args[0]
@@ -83,7 +88,12 @@ def list_user_themes(config_path: Path) -> list[ZellijTheme]:
                 continue
             colors.append(ZellijColor(name=child.name, value=value))
         out.append(
-            ZellijTheme(name=theme_node.name, source="user", colors=colors)
+            ZellijTheme(
+                name=theme_node.name,
+                source="user",
+                colors=colors,
+                raw_components=raw_components,
+            )
         )
     return out
 
@@ -135,15 +145,29 @@ def find_themes_block(text: str) -> tuple[int, int] | None:
 
 
 def render_themes_block(themes: list[ZellijTheme]) -> str:
-    """Emite KDL limpio del bloque themes { ... }. Slots como `name "value"`."""
+    """Emite KDL del bloque themes { ... }.
+
+    Para cada tema: primero los slots legacy (`name "value"`), despues los
+    raw_components (bloques del formato nuevo) re-emitidos via kdl-py y
+    re-indentados al estilo del resto. Normaliza enteros que kdl-py
+    serializa como float (`255.0` -> `255`).
+    """
     lines = ["themes {"]
     for t in themes:
         lines.append(f"    {t.name} {{")
         for color in t.colors:
             lines.append(f'        {color.name} "{color.value}"')
+        for rc in t.raw_components:
+            text = _INTEGER_FLOAT.sub(r"\1", str(rc).rstrip("\n"))
+            for raw_line in text.splitlines():
+                normalized = raw_line.replace("\t", "    ")
+                lines.append("        " + normalized if normalized else "")
         lines.append("    }")
     lines.append("}")
     return "\n".join(lines)
+
+
+_INTEGER_FLOAT = re.compile(r"\b(\d+)\.0\b")
 
 
 def save_user_themes(
