@@ -29,6 +29,22 @@ _LEGACY_TO_ALACRITTY: dict[str, list[tuple[str, str]]] = {
     "cyan": [("normal", "cyan")],
 }
 
+# Mapping de slots ricos (formato nuevo de Zellij) a destinos Alacritty.
+# (component, slot) -> [(alacritty_group, alacritty_name), ...]
+_RICH_TO_ALACRITTY: dict[tuple[str, str], list[tuple[str, str]]] = {
+    ("text_selected", "background"): [("selection", "background")],
+    ("text_selected", "base"): [("selection", "text")],
+}
+
+_RICH_COMPONENT_SLOTS = (
+    "base",
+    "background",
+    "emphasis_0",
+    "emphasis_1",
+    "emphasis_2",
+    "emphasis_3",
+)
+
 
 @dataclass
 class SyncResult:
@@ -40,11 +56,10 @@ class SyncResult:
 def _resolve_zellij_slots(
     zellij_name: str, *, config_path: Path
 ) -> dict[str, str]:
-    """Devuelve un dict slot_name -> hex para el tema dado.
+    """Devuelve un dict slot_name -> hex (paleta legacy) para el tema dado.
 
-    Prioriza user themes definidos en config.kdl. Si no es user, intenta
-    derivar slots desde los .kdl vendorizados. Si tampoco esta vendorizado,
-    devuelve un dict vacio.
+    Prioriza user themes definidos en config.kdl. Si no es user, deriva
+    desde los .kdl vendorizados. Si tampoco esta vendorizado, devuelve {}.
     """
     for ut in zellij_themes.list_user_themes(config_path):
         if ut.name == zellij_name:
@@ -54,6 +69,35 @@ def _resolve_zellij_slots(
     if derived is None:
         return {}
     return {k: v for k, v in derived.items() if alacritty.is_valid_hex(v)}
+
+
+def _resolve_zellij_rich_slots(
+    zellij_name: str, *, config_path: Path
+) -> dict[tuple[str, str], str]:
+    """Devuelve {(component, slot): hex} con los slots del formato nuevo
+    para el tema dado. Para user themes lee de raw_components, para
+    built-in carga el .kdl vendorizado."""
+    out: dict[tuple[str, str], str] = {}
+
+    for ut in zellij_themes.list_user_themes(config_path):
+        if ut.name == zellij_name:
+            for rc in ut.raw_components:
+                comp = zta._parse_component(rc)
+                for slot in _RICH_COMPONENT_SLOTS:
+                    value = getattr(comp, slot, None)
+                    if value and alacritty.is_valid_hex(value):
+                        out[(rc.name, slot)] = value
+            return out
+
+    bundled = zta.load_bundled_theme(zellij_name)
+    if bundled is None:
+        return out
+    for comp_name, comp in bundled.components.items():
+        for slot in _RICH_COMPONENT_SLOTS:
+            value = getattr(comp, slot, None)
+            if value and alacritty.is_valid_hex(value):
+                out[(comp_name, slot)] = value
+    return out
 
 
 def sync_alacritty_with_zellij_theme(
@@ -75,7 +119,10 @@ def sync_alacritty_with_zellij_theme(
         )
 
     slots = _resolve_zellij_slots(zellij_theme_name, config_path=zellij_config_path)
-    if not slots:
+    rich_slots = _resolve_zellij_rich_slots(
+        zellij_theme_name, config_path=zellij_config_path
+    )
+    if not slots and not rich_slots:
         return SyncResult(
             backup=None,
             updated={},
@@ -84,10 +131,8 @@ def sync_alacritty_with_zellij_theme(
 
     doc = toml_io.load_toml(alacritty_path)
     updated: dict[tuple[str, str], str] = {}
-    for legacy_name, destinations in _LEGACY_TO_ALACRITTY.items():
-        value = slots.get(legacy_name)
-        if value is None:
-            continue
+
+    def _apply(value: str, destinations: list[tuple[str, str]]) -> None:
         normalized = alacritty.normalize_hex(value)
         for group, alacritty_name in destinations:
             current = alacritty.read_slot(doc, group, alacritty_name)
@@ -99,6 +144,16 @@ def sync_alacritty_with_zellij_theme(
                 continue
             alacritty.write_slot(doc, group, alacritty_name, normalized)
             updated[(group, alacritty_name)] = normalized
+
+    for legacy_name, destinations in _LEGACY_TO_ALACRITTY.items():
+        value = slots.get(legacy_name)
+        if value is not None:
+            _apply(value, destinations)
+
+    for rich_key, destinations in _RICH_TO_ALACRITTY.items():
+        value = rich_slots.get(rich_key)
+        if value is not None:
+            _apply(value, destinations)
 
     if not updated:
         return SyncResult(backup=None, updated={}, skipped_reason="Sin cambios")

@@ -174,13 +174,17 @@ def _parse_component(node: kdl.Node) -> ZellijUIComponent:
 
 
 def _rgb_args_to_hex(args: list) -> str | None:
-    """Convierte argumentos KDL (RGB triples como 255 200 100) a '#rrggbb'.
+    """Convierte argumentos KDL a '#rrggbb'. Soporta dos formatos:
 
-    Tolera enteros y floats. Single-arg como `0` se interpreta como
-    'sin color' y devuelve None (Zellij usa esto como transparente).
+    - Hex string (user theme): un argumento como "#rrggbb" o "#rgb".
+    - RGB triple (bundled): tres enteros 0-255.
+
+    Single-int (`0`) se interpreta como transparente y devuelve None.
     """
     if not args:
         return None
+    if len(args) == 1 and isinstance(args[0], str) and args[0].startswith("#"):
+        return args[0].lower()
     nums: list[int] = []
     for a in args:
         if isinstance(a, (int, float)):
@@ -188,7 +192,7 @@ def _rgb_args_to_hex(args: list) -> str | None:
         else:
             return None
     if len(nums) == 1:
-        return None  # transparente / default terminal
+        return None
     if len(nums) < 3:
         return None
     r, g, b = nums[0], nums[1], nums[2]

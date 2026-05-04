@@ -136,6 +136,50 @@ def test_sync_no_changes_returns_no_backup(tmp_path: Path) -> None:
     assert result.skipped_reason == "Sin cambios"
 
 
+def test_sync_propagates_text_selected_to_alacritty_selection(tmp_path: Path) -> None:
+    """El bg/text de la seleccion en alacritty se sincroniza desde
+    text_selected.{background,base} del .kdl Zellij."""
+    ala = _make_alacritty(tmp_path)
+    cfg = _empty_zellij_config(tmp_path)
+    # ayu-dark tiene text_selected.background = #475266 y .base = #cccac2.
+    theme_sync.sync_alacritty_with_zellij_theme(
+        zellij_theme_name="ayu-dark",
+        alacritty_path=ala,
+        zellij_config_path=cfg,
+    )
+    doc = toml_io.load_toml(ala)
+    assert alacritty.read_slot(doc, "selection", "background") == "#475266"
+    assert alacritty.read_slot(doc, "selection", "text") == "#cccac2"
+
+
+def test_sync_user_theme_with_rich_components(tmp_path: Path) -> None:
+    """Si un user theme tiene raw_components, sus text_selected.* van
+    a alacritty.selection.*."""
+    cfg = tmp_path / "config.kdl"
+    cfg.write_text(
+        'themes {\n'
+        '    mio {\n'
+        '        fg "#aaaaaa"\n'
+        '        bg "#111111"\n'
+        '        text_selected {\n'
+        '            base "#ffffff"\n'
+        '            background "#5566aa"\n'
+        '        }\n'
+        '    }\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    ala = _make_alacritty(tmp_path)
+    theme_sync.sync_alacritty_with_zellij_theme(
+        zellij_theme_name="mio",
+        alacritty_path=ala,
+        zellij_config_path=cfg,
+    )
+    doc = toml_io.load_toml(ala)
+    assert alacritty.read_slot(doc, "selection", "background") == "#5566aa"
+    assert alacritty.read_slot(doc, "selection", "text") == "#ffffff"
+
+
 def test_sync_preserves_other_alacritty_sections(tmp_path: Path) -> None:
     ala = _make_alacritty(tmp_path)
     cfg = _empty_zellij_config(tmp_path)
