@@ -14,12 +14,11 @@ from pathlib import Path
 from term_config_tui.services import alacritty, toml_io, zellij_themes
 from term_config_tui.services import zellij_theme_assets as zta
 
-# En Zellij, `palette.fg` es el bg de los ribbons; el color del texto
-# canonico vive en `palette.white` (text_unselected.base). Por eso
-# primary.foreground se sincroniza desde `white`, no desde `fg`.
+# Mapping 1:1 entre los 10 slots de la Paleta ANSI y los slots
+# correspondientes de Alacritty. fg/bg -> primary, los 8 ANSI -> normal.
 _LEGACY_TO_ALACRITTY: dict[str, list[tuple[str, str]]] = {
+    "fg": [("primary", "foreground")],
     "bg": [("primary", "background")],
-    "white": [("normal", "white"), ("primary", "foreground")],
     "black": [("normal", "black")],
     "red": [("normal", "red")],
     "green": [("normal", "green")],
@@ -27,6 +26,7 @@ _LEGACY_TO_ALACRITTY: dict[str, list[tuple[str, str]]] = {
     "blue": [("normal", "blue")],
     "magenta": [("normal", "magenta")],
     "cyan": [("normal", "cyan")],
+    "white": [("normal", "white")],
 }
 
 # Mapping de slots ricos (formato nuevo de Zellij) a destinos Alacritty.

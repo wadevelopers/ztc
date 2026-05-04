@@ -31,12 +31,10 @@ def test_sync_from_bundled_dracula(tmp_path: Path) -> None:
     assert result.skipped_reason is None
     assert result.backup is not None
     doc = toml_io.load_toml(ala)
-    # primary.background = bg = text_unselected.background = #000000.
-    # primary.foreground = white = text_unselected.base = #ffffff (NO el
-    # slot fg que es ribbon_un.bg; ese es el bg de ribbons de Zellij).
-    # red = exit_code_error.base.
+    # Mapping 1:1 Paleta ANSI -> Alacritty. fg <- ribbon_un.background
+    # (#f8f8f2 en dracula); white <- text_un.base (#ffffff).
     assert alacritty.read_slot(doc, "primary", "background") == "#000000"
-    assert alacritty.read_slot(doc, "primary", "foreground") == "#ffffff"
+    assert alacritty.read_slot(doc, "primary", "foreground") == "#f8f8f2"
     assert alacritty.read_slot(doc, "normal", "white") == "#ffffff"
     assert alacritty.read_slot(doc, "normal", "red") == "#ff5555"
 
@@ -64,8 +62,8 @@ def test_sync_from_user_theme(tmp_path: Path) -> None:
     assert result.skipped_reason is None
     doc = toml_io.load_toml(ala)
     assert alacritty.read_slot(doc, "primary", "background") == "#123456"
-    # primary.foreground viene de white, no de fg.
-    assert alacritty.read_slot(doc, "primary", "foreground") == "#dddddd"
+    # Mapping 1:1: primary.foreground <- legacy fg.
+    assert alacritty.read_slot(doc, "primary", "foreground") == "#abcdef"
     assert alacritty.read_slot(doc, "normal", "white") == "#dddddd"
     assert alacritty.read_slot(doc, "normal", "red") == "#ff0000"
     assert alacritty.read_slot(doc, "normal", "green") == "#00ff00"

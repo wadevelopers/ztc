@@ -383,12 +383,9 @@ def test_clone_active_theme_overlays_alacritty(tmp_path: Path) -> None:
     by_name = {
         c.name: c.value for c in zellij_themes.list_user_themes(cfg)[0].colors
     }
-    # primary.background -> bg slot, primary.foreground -> white slot.
-    # En el modelo nuevo "fg" es para ribbons (no se sincroniza desde
-    # alacritty), pero si alacritty tiene primary.foreground tweakeado,
-    # eso aparece en el slot "white" del clon.
+    # Mapping 1:1: primary.foreground -> fg, primary.background -> bg.
     assert by_name["bg"] == "#222222"
-    assert by_name["white"] == "#eeeeee"
+    assert by_name["fg"] == "#eeeeee"
     assert by_name["red"] == "#ff0000"
     assert by_name["green"] == "#00ff00"
     # Los slots NO presentes en alacritty quedan del derivado del .kdl.
@@ -414,7 +411,7 @@ def test_clone_non_active_theme_ignores_alacritty(tmp_path: Path) -> None:
     }
     # Debe coger los del .kdl de tokyo-night, NO los de alacritty.
     assert by_name["bg"] != "#222222"
-    assert by_name["white"] != "#eeeeee"
+    assert by_name["fg"] != "#eeeeee"
 
 
 def test_clone_active_user_theme_overlays_alacritty(tmp_path: Path) -> None:
@@ -435,8 +432,8 @@ def test_clone_active_user_theme_overlays_alacritty(tmp_path: Path) -> None:
     clone = next(t for t in themes if t.name == "mio-copia")
     by_name = {c.name: c.value for c in clone.colors}
     assert by_name["bg"] == "#222222"
-    # primary.foreground se overlaya al slot 'white' del clon (no 'fg').
-    assert by_name["white"] == "#eeeeee"
+    # Mapping 1:1: primary.foreground -> fg.
+    assert by_name["fg"] == "#eeeeee"
 
 
 def test_clone_without_alacritty_path_uses_kdl_only(tmp_path: Path) -> None:
