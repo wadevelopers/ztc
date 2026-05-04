@@ -121,22 +121,31 @@ class ThemePickerScreen(Screen[None]):
         active_marker = "  (activo)" if theme.name == self._active else ""
         meta_widget.update(f"Tipo: {kind}{active_marker}")
 
-        slot_pairs = self._slot_pairs_for_preview(theme)
-        if slot_pairs:
-            lines = []
-            for slot_name, value in slot_pairs:
-                swatch = (
-                    f"[on {value}]      [/]" if _looks_like_hex(value) else "      "
-                )
-                lines.append(f"{slot_name:<20} {value:<10} {swatch}")
-            colors_widget.update("\n".join(lines))
-        else:
+        legacy_pairs = self._legacy_pairs_for_preview(theme)
+        rich_pairs = self._rich_pairs_for_preview(theme)
+        if not legacy_pairs and not rich_pairs:
             colors_widget.update("Sin preview de colores. Pulsa Enter para aplicar.")
+            return
 
-    def _slot_pairs_for_preview(self, theme: ZellijTheme) -> list[tuple[str, str]]:
-        """Slots para preview. User themes: tal cual. Built-in: derivados
-        del .kdl vendorizado (con overrides aplicados). Si el built-in no
-        esta vendorizado, lista vacia."""
+        lines: list[str] = []
+        if legacy_pairs:
+            lines.append("[dim]── Paleta ANSI ──[/dim]")
+            for slot_name, value in legacy_pairs:
+                lines.append(self._render_slot_row(slot_name, value))
+        if rich_pairs:
+            if lines:
+                lines.append("")
+            lines.append("[dim]── UI (Zellij) ──[/dim]")
+            for slot_name, value in rich_pairs:
+                lines.append(self._render_slot_row(slot_name, value))
+        colors_widget.update("\n".join(lines))
+
+    @staticmethod
+    def _render_slot_row(name: str, value: str) -> str:
+        swatch = f"[on {value}]      [/]" if _looks_like_hex(value) else "      "
+        return f"{name:<28} {value:<10} {swatch}"
+
+    def _legacy_pairs_for_preview(self, theme: ZellijTheme) -> list[tuple[str, str]]:
         if theme.colors:
             return [(c.name, c.value) for c in theme.colors]
         if theme.is_user:
@@ -145,6 +154,29 @@ class ThemePickerScreen(Screen[None]):
         if derived is None:
             return []
         return list(derived.items())
+
+    def _rich_pairs_for_preview(self, theme: ZellijTheme) -> list[tuple[str, str]]:
+        """Slots ricos expuestos. Para user themes lee de raw_components,
+        para built-in carga del .kdl vendorizado."""
+        out: list[tuple[str, str]] = []
+        if theme.is_user:
+            for component, slot in zellij_themes.RICH_SLOTS_TO_EXPOSE:
+                value = zellij_themes.get_rich_slot(theme, component, slot)
+                if value is not None:
+                    out.append((f"{component}.{slot}", value))
+            return out
+
+        bundled = zellij_theme_assets.load_bundled_theme(theme.name)
+        if bundled is None:
+            return out
+        for component, slot in zellij_themes.RICH_SLOTS_TO_EXPOSE:
+            comp = bundled.components.get(component)
+            if comp is None:
+                continue
+            value = getattr(comp, slot, None)
+            if value is not None:
+                out.append((f"{component}.{slot}", value))
+        return out
 
     @on(OptionList.OptionHighlighted, "#theme-list")
     def _on_highlight(self, event: OptionList.OptionHighlighted) -> None:
