@@ -89,6 +89,30 @@ def test_renderer_normalizes_floats(tmp_path: Path) -> None:
     assert "255 200 100" in rendered
 
 
+def test_get_set_unset_rich_slot() -> None:
+    """Helpers para manipular slots ricos del theme."""
+    t = ZellijTheme(name="test", source="user")
+    # Set crea el componente desde cero
+    zellij_themes.set_rich_slot(t, "text_selected", "background", "#5566aa")
+    assert zellij_themes.get_rich_slot(t, "text_selected", "background") == "#5566aa"
+    # Set en componente existente agrega slot nuevo
+    zellij_themes.set_rich_slot(t, "text_selected", "base", "#ffffff")
+    assert zellij_themes.get_rich_slot(t, "text_selected", "base") == "#ffffff"
+    # Set sobre slot existente actualiza
+    zellij_themes.set_rich_slot(t, "text_selected", "background", "#aabbcc")
+    assert zellij_themes.get_rich_slot(t, "text_selected", "background") == "#aabbcc"
+    # Get inexistente devuelve None
+    assert zellij_themes.get_rich_slot(t, "foo", "bar") is None
+    # Unset elimina el slot
+    zellij_themes.unset_rich_slot(t, "text_selected", "background")
+    assert zellij_themes.get_rich_slot(t, "text_selected", "background") is None
+    # base sigue ahi
+    assert zellij_themes.get_rich_slot(t, "text_selected", "base") == "#ffffff"
+    # Unset del ultimo slot elimina la componente entera
+    zellij_themes.unset_rich_slot(t, "text_selected", "base")
+    assert len(t.raw_components) == 0
+
+
 def test_save_round_trip_preserves_raw_components(tmp_path: Path) -> None:
     """save_user_themes -> list_user_themes preserva raw_components."""
     cfg = tmp_path / "config.kdl"

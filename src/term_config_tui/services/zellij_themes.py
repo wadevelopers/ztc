@@ -325,6 +325,66 @@ def _overlay_color_list(
     return out
 
 
+# Slots ricos del formato nuevo expuestos en el editor unificado.
+RICH_SLOTS_TO_EXPOSE: list[tuple[str, str]] = [
+    ("text_selected", "background"),
+    ("text_selected", "base"),
+    ("ribbon_selected", "background"),
+    ("ribbon_selected", "base"),
+]
+
+
+def _slot_value_to_hex(args: list) -> str | None:
+    """Args de un kdl.Node de slot rico a hex. Acepta hex string o RGB."""
+    if not args:
+        return None
+    if isinstance(args[0], str) and args[0].startswith("#"):
+        return args[0].lower()
+    nums = [int(a) for a in args[:3] if isinstance(a, (int, float))]
+    if len(nums) < 3:
+        return None
+    return f"#{nums[0]:02x}{nums[1]:02x}{nums[2]:02x}"
+
+
+def get_rich_slot(theme: ZellijTheme, component: str, slot: str) -> str | None:
+    """Lee el valor hex de un slot rico del theme. None si no existe."""
+    for rc in theme.raw_components:
+        if rc.name != component:
+            continue
+        for child in rc.nodes:
+            if child.name == slot:
+                return _slot_value_to_hex(list(child.args))
+    return None
+
+
+def set_rich_slot(
+    theme: ZellijTheme, component: str, slot: str, hex_value: str
+) -> None:
+    """Escribe (crea si hace falta) un slot rico en el theme."""
+    rc = next((c for c in theme.raw_components if c.name == component), None)
+    if rc is None:
+        rc = kdl.parse(f'{component} {{\n    {slot} "{hex_value}"\n}}\n').nodes[0]
+        theme.raw_components.append(rc)
+        return
+    slot_node = next((n for n in rc.nodes if n.name == slot), None)
+    if slot_node is None:
+        new_node = kdl.parse(f'{slot} "{hex_value}"\n').nodes[0]
+        rc.nodes.append(new_node)
+    else:
+        slot_node.args = [hex_value]
+
+
+def unset_rich_slot(theme: ZellijTheme, component: str, slot: str) -> None:
+    """Elimina el slot rico del theme. Si la componente queda vacia, la
+    elimina tambien."""
+    rc = next((c for c in theme.raw_components if c.name == component), None)
+    if rc is None:
+        return
+    rc.nodes = [n for n in rc.nodes if n.name != slot]
+    if not rc.nodes:
+        theme.raw_components.remove(rc)
+
+
 def read_active_theme(config_path: Path) -> str | None:
     """Atajo a zellij_config.read_active_theme para evitar import cruzado."""
     from term_config_tui.services import zellij_config

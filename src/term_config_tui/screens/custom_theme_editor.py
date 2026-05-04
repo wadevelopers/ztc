@@ -17,12 +17,17 @@ from term_config_tui.widgets.confirm import (
     EditColorModal,
 )
 
+_LEGACY_PREFIX = "legacy:"
+_RICH_PREFIX = "rich:"
+_HEADER_PREFIX = "header:"
+
 
 class CustomThemeEditorScreen(Screen[None]):
-    """Edita los slots de color de un user theme y los guarda en config.kdl."""
+    """Edita los slots de un user theme: paleta legacy + slots ricos."""
 
     BINDINGS = [
         Binding("enter", "edit", "Editar slot"),
+        Binding("x", "reset", "Resetear slot"),
         Binding("s", "save", "Guardar"),
         Binding("escape", "back", "Volver"),
         Binding("q", "back", "Volver", show=False),
@@ -40,7 +45,7 @@ class CustomThemeEditorScreen(Screen[None]):
         height: 1fr;
     }
     OptionList {
-        width: 50;
+        width: 60;
         border-right: solid $panel;
     }
     #detail {
@@ -60,11 +65,11 @@ class CustomThemeEditorScreen(Screen[None]):
     def __init__(self, config_path: Path, theme: ZellijTheme) -> None:
         super().__init__()
         self.config_path = config_path
-        # Trabajamos sobre una copia mutable para no afectar el modelo origen.
         self.theme = ZellijTheme(
             name=theme.name,
             source="user",
             colors=list(theme.colors),
+            raw_components=list(theme.raw_components),
         )
         self.dirty = False
 
@@ -91,8 +96,7 @@ class CustomThemeEditorScreen(Screen[None]):
             f"[b]theme: {self.theme.name}[/b]{dirty}    {self.config_path}"
         )
 
-    def _all_slot_names(self) -> list[str]:
-        """Slots a mostrar: legacy estandar + cualquier extra que tenga el tema."""
+    def _legacy_slot_names(self) -> list[str]:
         defined = {c.name for c in self.theme.colors}
         ordered = list(zellij_themes.LEGACY_SLOTS)
         for name in defined:
@@ -100,45 +104,100 @@ class CustomThemeEditorScreen(Screen[None]):
                 ordered.append(name)
         return ordered
 
-    def _value_for(self, slot: str) -> str | None:
+    def _legacy_value(self, slot: str) -> str | None:
         for c in self.theme.colors:
             if c.name == slot:
                 return c.value
         return None
 
+    def _rich_value(self, component: str, slot: str) -> str | None:
+        return zellij_themes.get_rich_slot(self.theme, component, slot)
+
     def _rebuild_list(self) -> None:
         option_list = self.query_one("#slot-list", OptionList)
         prev = option_list.highlighted
         option_list.clear_options()
-        for slot in self._all_slot_names():
-            value = self._value_for(slot) or "(sin definir)"
-            label = self._format_row(slot, value)
-            option_list.add_option(Option(label, id=slot))
-        if option_list.option_count:
-            option_list.highlighted = (
-                prev if prev is not None and prev < option_list.option_count else 0
+
+        # Header de seccion legacy
+        option_list.add_option(
+            Option("── Paleta ANSI ──", id=_HEADER_PREFIX + "ansi", disabled=True)
+        )
+        for slot in self._legacy_slot_names():
+            value = self._legacy_value(slot) or "(sin definir)"
+            option_list.add_option(
+                Option(self._format_row(slot, value), id=_LEGACY_PREFIX + slot)
             )
+
+        # Header de seccion rich
+        option_list.add_option(
+            Option("── UI (Zellij) ──", id=_HEADER_PREFIX + "ui", disabled=True)
+        )
+        for component, slot in zellij_themes.RICH_SLOTS_TO_EXPOSE:
+            value = self._rich_value(component, slot) or "(sin definir)"
+            label = self._format_row(f"{component}.{slot}", value)
+            option_list.add_option(
+                Option(label, id=f"{_RICH_PREFIX}{component}.{slot}")
+            )
+
+        if option_list.option_count:
+            # Saltar el header inicial: si prev no aplica, ir al primer slot real (idx 1).
+            if prev is None or prev >= option_list.option_count:
+                option_list.highlighted = 1
+            else:
+                option_list.highlighted = prev
             self._show_detail_at(option_list.highlighted)
 
-    def _format_row(self, slot: str, value: str) -> str:
+    def _format_row(self, label: str, value: str) -> str:
         swatch = f"[on {value}]      [/]" if value.startswith("#") else "      "
-        return f"{slot:<14} {value:<10} {swatch}"
+        return f"{label:<26} {value:<10} {swatch}"
+
+    def _slot_at(self, index: int) -> tuple[str, str | None] | None:
+        """Devuelve ('legacy', slot) o ('rich', 'component.slot') segun
+        el option en el indice. None si es header u out of bounds."""
+        option_list = self.query_one("#slot-list", OptionList)
+        if index is None or not 0 <= index < option_list.option_count:
+            return None
+        opt = option_list.get_option_at_index(index)
+        if opt.id is None or opt.id.startswith(_HEADER_PREFIX):
+            return None
+        if opt.id.startswith(_LEGACY_PREFIX):
+            return ("legacy", opt.id[len(_LEGACY_PREFIX):])
+        if opt.id.startswith(_RICH_PREFIX):
+            return ("rich", opt.id[len(_RICH_PREFIX):])
+        return None
 
     def _show_detail_at(self, index: int | None) -> None:
         if index is None:
             return
-        slot = self._all_slot_names()[index]
-        value = self._value_for(slot)
+        slot_info = self._slot_at(index)
         name_widget = self.query_one("#detail-name", Static)
         swatch_widget = self.query_one("#big-swatch", Static)
         meta_widget = self.query_one("#detail-meta", Static)
-        name_widget.update(slot)
+
+        if slot_info is None:
+            name_widget.update("(seleccion)")
+            swatch_widget.update("")
+            meta_widget.update("Mueve para elegir un slot.")
+            return
+
+        kind, slot_id = slot_info
+        if kind == "legacy":
+            value = self._legacy_value(slot_id)
+            display_name = slot_id
+        else:
+            component, slot = slot_id.split(".", 1)
+            value = self._rich_value(component, slot)
+            display_name = f"{component}.{slot}"
+
+        name_widget.update(display_name)
         if value and value.startswith("#"):
             big = "\n".join(
                 [f"[on {value}]                                                  [/]"] * 3
             )
             swatch_widget.update(big)
-            meta_widget.update(f"Valor actual: {value}\nEnter para editar.")
+            meta_widget.update(
+                f"Valor actual: {value}\nEnter para editar / x para resetear."
+            )
         else:
             swatch_widget.update("")
             meta_widget.update(
@@ -157,28 +216,85 @@ class CustomThemeEditorScreen(Screen[None]):
 
     def action_edit(self) -> None:
         option_list = self.query_one("#slot-list", OptionList)
-        if option_list.highlighted is None:
+        slot_info = self._slot_at(option_list.highlighted)
+        if slot_info is None:
             return
-        slot = self._all_slot_names()[option_list.highlighted]
-        current = self._value_for(slot) or ""
+        kind, slot_id = slot_info
 
-        def after(value: str | None) -> None:
-            if value is None:
+        if kind == "legacy":
+            slot = slot_id
+            current = self._legacy_value(slot) or ""
+            label = f"{self.theme.name}.{slot}"
+
+            def after_legacy(value: str | None) -> None:
+                if value is None:
+                    return
+                for i, c in enumerate(self.theme.colors):
+                    if c.name == slot:
+                        self.theme.colors[i] = ZellijColor(name=slot, value=value)
+                        break
+                else:
+                    self.theme.colors.append(ZellijColor(name=slot, value=value))
+                self.dirty = True
+                self._refresh_header()
+                self._rebuild_list()
+
+            self.app.push_screen(
+                EditColorModal(slot_label=label, initial=current),
+                after_legacy,
+            )
+        else:
+            component, slot = slot_id.split(".", 1)
+            current = self._rich_value(component, slot) or ""
+            label = f"{self.theme.name}.{component}.{slot}"
+
+            def after_rich(value: str | None) -> None:
+                if value is None:
+                    return
+                zellij_themes.set_rich_slot(self.theme, component, slot, value)
+                self.dirty = True
+                self._refresh_header()
+                self._rebuild_list()
+
+            self.app.push_screen(
+                EditColorModal(slot_label=label, initial=current),
+                after_rich,
+            )
+
+    def action_reset(self) -> None:
+        option_list = self.query_one("#slot-list", OptionList)
+        slot_info = self._slot_at(option_list.highlighted)
+        if slot_info is None:
+            return
+        kind, slot_id = slot_info
+
+        if kind == "legacy":
+            slot = slot_id
+            before = len(self.theme.colors)
+            self.theme.colors = [c for c in self.theme.colors if c.name != slot]
+            if len(self.theme.colors) == before:
+                self.app.notify(
+                    f"{slot} ya estaba sin definir", severity="information"
+                )
                 return
-            # Reemplaza o anade el slot.
-            for i, c in enumerate(self.theme.colors):
-                if c.name == slot:
-                    self.theme.colors[i] = ZellijColor(name=slot, value=value)
-                    break
-            else:
-                self.theme.colors.append(ZellijColor(name=slot, value=value))
             self.dirty = True
-            self._refresh_header()
-            self._rebuild_list()
+        else:
+            component, slot = slot_id.split(".", 1)
+            if self._rich_value(component, slot) is None:
+                self.app.notify(
+                    f"{component}.{slot} ya estaba sin definir",
+                    severity="information",
+                )
+                return
+            zellij_themes.unset_rich_slot(self.theme, component, slot)
+            self.dirty = True
 
-        self.app.push_screen(
-            EditColorModal(slot_label=f"{self.theme.name}.{slot}", initial=current),
-            after,
+        self._refresh_header()
+        self._rebuild_list()
+        self.app.notify(
+            "Slot reseteado (pulsa 's' para guardar al disco)",
+            severity="information",
+            timeout=5,
         )
 
     def action_save(self) -> None:
@@ -193,12 +309,9 @@ class CustomThemeEditorScreen(Screen[None]):
         if backup is not None:
             msg += f"  (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
-        # Re-registrar el theme en Textual con los nuevos hex.
         register = getattr(self.app, "register_zellij_themes", None)
         if callable(register):
             register()
-        # Si el tema editado es el activo del TUI, forzar re-apply para que
-        # los cambios sean visibles al instante (sin cerrar y reabrir la app).
         if getattr(self.app, "theme", None) == self.theme.name:
             applier = getattr(self.app, "apply_theme_for_zellij", None)
             if callable(applier):
@@ -218,7 +331,7 @@ class CustomThemeEditorScreen(Screen[None]):
                 title="Hay cambios sin guardar",
                 message=(
                     "Si vuelves ahora, perderas los cambios del tema. "
-                    "Cancela y pulsa Ctrl+S para guardar."
+                    "Cancela y pulsa s para guardar."
                 ),
                 expected="descartar",
                 confirm_label="Descartar cambios",
