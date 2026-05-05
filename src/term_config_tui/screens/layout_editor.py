@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 from textual import on
@@ -13,14 +12,10 @@ from textual.widgets.option_list import Option
 from textual.widgets.tree import TreeNode
 
 from term_config_tui.models.layout import Layout, Pane, Tab
-from term_config_tui.services import kdl_io, layout_ops, zellij_session
+from term_config_tui.services import kdl_io, layout_ops
 from term_config_tui.widgets.confirm import (
     ConfirmByNameModal,
-    NewSessionModal,
-    NewSessionResult,
     PaneEditModal,
-    PickSessionModal,
-    PostSaveLayoutModal,
     PromptModal,
 )
 
@@ -397,133 +392,11 @@ class LayoutEditorScreen(Screen[None]):
             return
         self.dirty = False
         self._refresh_header()
-        self.app.push_screen(
-            PostSaveLayoutModal(
-                layout_name=self.layout_model.name,
-                backup_name=backup.name if backup else None,
-            ),
-            self._after_post_save,
-        )
-
-    def _after_post_save(self, choice: str | None) -> None:
-        if choice in (None, "close"):
-            return
-        if choice == "new_session":
-            self._flow_new_session()
-        elif choice == "recreate":
-            self._flow_recreate()
-        elif choice == "sessions":
-            self._flow_open_sessions()
-
-    def _flow_new_session(self) -> None:
-        if zellij_session.is_inside_zellij():
-            self.app.notify(
-                "Estas dentro de zellij; no se puede crear otra sesion desde aqui. "
-                "Detach (Ctrl+O d) y vuelve a lanzar el TUI fuera de zellij.",
-                severity="warning",
-                timeout=10,
-            )
-            return
-
-        def after(result: NewSessionResult | None) -> None:
-            if result is None:
-                return
-            argv = zellij_session.new_session_argv(
-                result.name, layout=self.layout_model.name
-            )
-            try:
-                with self.app.suspend():
-                    subprocess.run(argv, check=False)
-            except Exception as exc:  # noqa: BLE001
-                self.app.notify(f"Error al lanzar zellij: {exc}", severity="error")
-
-        self.app.push_screen(
-            NewSessionModal(title=f"Nueva sesion con layout '{self.layout_model.name}'"),
-            after,
-        )
-
-    def _flow_recreate(self) -> None:
-        if zellij_session.is_inside_zellij():
-            self.app.notify(
-                "Estas dentro de zellij; no se puede recrear sesiones desde aqui. "
-                "Detach (Ctrl+O d) y vuelve a lanzar el TUI fuera de zellij.",
-                severity="warning",
-                timeout=10,
-            )
-            return
-
-        sessions = zellij_session.list_sessions()
-        running = [s for s in sessions if s.state == "running"]
-        if not running:
-            self.app.notify(
-                "No hay sesiones vivas que recrear. Crea una nueva en su lugar.",
-                severity="information",
-            )
-            return
-
-        current = zellij_session.current_session_name()
-        options = [
-            (s.name, f"{'* ' if s.is_current else '  '}{s.name}    {s.raw_line or ''}")
-            for s in running
-        ]
-
-        def after_pick(name: str | None) -> None:
-            if name is None:
-                return
-            self._confirm_and_recreate(name)
-
-        self.app.push_screen(
-            PickSessionModal(
-                title=f"Recrear con layout '{self.layout_model.name}'",
-                options=options,
-                current_session=current,
-            ),
-            after_pick,
-        )
-
-    def _confirm_and_recreate(self, name: str) -> None:
-        def after_confirm(ok: bool) -> None:
-            if not ok:
-                return
-            self._do_recreate(name)
-
-        self.app.push_screen(
-            ConfirmByNameModal(
-                title="Recrear sesion",
-                message=(
-                    f"Esto cerrara la sesion '{name}' (todos los procesos dentro "
-                    f"se cierran) y la creara de nuevo con el layout "
-                    f"'{self.layout_model.name}'."
-                ),
-                expected=name,
-                confirm_label="Recrear",
-            ),
-            after_confirm,
-        )
-
-    def _do_recreate(self, name: str) -> None:
-        ok, out = zellij_session.kill_session(name)
-        if not ok:
-            self.app.notify(
-                f"No se pudo cerrar '{name}': {out or 'sin output'}",
-                severity="error",
-                timeout=10,
-            )
-            return
-        argv = zellij_session.new_session_argv(name, layout=self.layout_model.name)
-        try:
-            with self.app.suspend():
-                subprocess.run(argv, check=False)
-        except Exception as exc:  # noqa: BLE001
-            self.app.notify(f"Error al recrear: {exc}", severity="error")
-
-    def _flow_open_sessions(self) -> None:
-        from term_config_tui.screens.session_manager import SessionManagerScreen
-
-        self.app.pop_screen()  # cierra editor
-        self.app.push_screen(
-            SessionManagerScreen(layouts_dir=self.layouts_dir)
-        )
+        msg = f"Layout '{self.layout_model.name}' guardado."
+        if backup is not None:
+            msg += f"  (backup: {backup.name})"
+        msg += "  Para lanzarlo: usa zsm."
+        self.app.notify(msg, severity="information", timeout=8)
 
     def action_back(self) -> None:
         if not self.dirty:

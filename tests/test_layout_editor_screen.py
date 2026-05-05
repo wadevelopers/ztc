@@ -13,7 +13,6 @@ from term_config_tui.services import kdl_io
 from term_config_tui.widgets.confirm import (
     ConfirmByNameModal,
     PaneEditModal,
-    PostSaveLayoutModal,
 )
 
 FIX = Path(__file__).parent / "fixtures" / "zellij"
@@ -34,7 +33,7 @@ async def test_layout_list_shows_existing(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
     app = TermConfigApp(paths=paths)
     async with app.run_test() as pilot:
-        await pilot.press("down", "down", "enter")  # navega a "Layouts Zellij"
+        await pilot.press("down", "enter")  # navega a "Layouts Zellij"
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, LayoutListScreen)
@@ -50,7 +49,7 @@ async def test_layout_editor_opens_and_renders_preview(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
     app = TermConfigApp(paths=paths)
     async with app.run_test() as pilot:
-        await pilot.press("down", "down", "enter", "enter")  # menu -> layouts -> dev
+        await pilot.press("down", "enter", "enter")  # menu -> layouts -> dev
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, LayoutEditorScreen)
@@ -71,7 +70,7 @@ async def test_layout_editor_save_writes_file(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
     app = TermConfigApp(paths=paths)
     async with app.run_test() as pilot:
-        await pilot.press("down", "down", "enter", "enter")
+        await pilot.press("down", "enter", "enter")
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, LayoutEditorScreen)
@@ -95,7 +94,7 @@ async def test_layout_editor_back_with_unsaved_prompts(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
     app = TermConfigApp(paths=paths)
     async with app.run_test() as pilot:
-        await pilot.press("down", "down", "enter", "enter")
+        await pilot.press("down", "enter", "enter")
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, LayoutEditorScreen)
@@ -109,7 +108,7 @@ async def test_pane_edit_modal_returns_changes(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
     app = TermConfigApp(paths=paths)
     async with app.run_test() as pilot:
-        await pilot.press("down", "down", "enter", "enter")
+        await pilot.press("down", "enter", "enter")
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, LayoutEditorScreen)
@@ -129,28 +128,27 @@ async def test_pane_edit_modal_returns_changes(tmp_path: Path) -> None:
         assert app.screen.layout_model.tabs[0].children[0].command == "btop"
 
 
-async def test_layout_editor_save_opens_post_save_modal(tmp_path: Path) -> None:
+async def test_layout_editor_save_notifies_and_stays(tmp_path: Path) -> None:
+    """Despues del split de sesiones a zsm, save solo guarda y notifica."""
     paths = _paths_with_layout(tmp_path)
     app = TermConfigApp(paths=paths)
     async with app.run_test() as pilot:
-        await pilot.press("down", "down", "enter", "enter")
+        await pilot.press("down", "enter", "enter")
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, LayoutEditorScreen)
         screen.action_save()
         await pilot.pause()
-        assert isinstance(app.screen, PostSaveLayoutModal)
-        # Cerrar modal con Esc.
-        await pilot.press("escape")
-        await pilot.pause()
+        # No abre modal: queda en el editor.
         assert isinstance(app.screen, LayoutEditorScreen)
+        assert not screen.dirty
 
 
 async def test_layout_list_new_creates_file(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
     app = TermConfigApp(paths=paths)
     async with app.run_test() as pilot:
-        await pilot.press("down", "down", "enter")  # abrir layouts
+        await pilot.press("down", "enter")  # abrir layouts
         await pilot.pause()
         screen = app.screen
         assert isinstance(screen, LayoutListScreen)
