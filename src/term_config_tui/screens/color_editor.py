@@ -231,7 +231,8 @@ class AlacrittyColorEditorScreen(Screen[None]):
         def after(path_str: str | None) -> None:
             if not path_str:
                 return
-            path = Path(path_str).expanduser()
+            raw = Path(path_str).expanduser()
+            path = raw if raw.is_absolute() else (self.alacritty_path.parent / raw)
             try:
                 count = alacritty.import_theme_file(self.doc, path)
             except FileNotFoundError:
@@ -260,7 +261,7 @@ class AlacrittyColorEditorScreen(Screen[None]):
         self.app.push_screen(
             PromptModal(
                 title="Importar tema desde archivo",
-                placeholder="ruta a otro alacritty.toml",
+                placeholder="nombre de archivo (junto a alacritty.toml) o ruta absoluta",
                 confirm_label="Importar",
             ),
             after,
