@@ -205,6 +205,205 @@ def test_writing_new_slot_after_include_appends(tmp_path: Path) -> None:
     assert doc.lines[-1] == "color1 #ff0000"
 
 
+# ---------- expansion de includes (lectura) ----------
+
+
+def test_include_expanded_for_reads(tmp_path: Path) -> None:
+    """Un slot definido solo en un include se ve via read_slot."""
+    theme = tmp_path / "theme.conf"
+    theme.write_text(
+        "background #1a1b26\nforeground #c0caf5\ncolor1 #f7768e\n",
+        encoding="utf-8",
+    )
+    main = tmp_path / "kitty.conf"
+    main.write_text("include theme.conf\nfont_size 12.0\n", encoding="utf-8")
+    backend = KittyBackend()
+    doc = backend.load(main)
+    assert backend.read_slot(doc, ("primary", "background")) == "#1a1b26"
+    assert backend.read_slot(doc, ("primary", "foreground")) == "#c0caf5"
+    assert backend.read_slot(doc, ("normal", "red")) == "#f7768e"
+
+
+def test_include_relative_path(tmp_path: Path) -> None:
+    """Path relativo se resuelve contra el archivo padre, no el CWD."""
+    sub = tmp_path / "themes"
+    sub.mkdir()
+    (sub / "tokyo.conf").write_text("color1 #f7768e\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text("include themes/tokyo.conf\n", encoding="utf-8")
+    backend = KittyBackend()
+    doc = backend.load(main)
+    assert backend.read_slot(doc, ("normal", "red")) == "#f7768e"
+
+
+def test_include_absolute_path(tmp_path: Path) -> None:
+    theme = tmp_path / "absolute_theme.conf"
+    theme.write_text("color2 #00ff00\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text(f"include {theme}\n", encoding="utf-8")
+    backend = KittyBackend()
+    doc = backend.load(main)
+    assert backend.read_slot(doc, ("normal", "green")) == "#00ff00"
+
+
+def test_include_missing_file_silently_ignored(tmp_path: Path) -> None:
+    main = tmp_path / "kitty.conf"
+    main.write_text("include nonexistent.conf\ncolor1 #ff0000\n", encoding="utf-8")
+    backend = KittyBackend()
+    doc = backend.load(main)
+    # No crashea; lo que esta en main funciona normal.
+    assert backend.read_slot(doc, ("normal", "red")) == "#ff0000"
+
+
+def test_main_overrides_include_when_after(tmp_path: Path) -> None:
+    """Si main tiene la key DESPUES del include, gana main."""
+    theme = tmp_path / "theme.conf"
+    theme.write_text("color1 #aaaaaa\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text(
+        "include theme.conf\ncolor1 #bbbbbb\n", encoding="utf-8"
+    )
+    backend = KittyBackend()
+    doc = backend.load(main)
+    assert backend.read_slot(doc, ("normal", "red")) == "#bbbbbb"
+
+
+def test_include_overrides_main_when_after(tmp_path: Path) -> None:
+    """Si main tiene la key ANTES del include, gana el include."""
+    theme = tmp_path / "theme.conf"
+    theme.write_text("color1 #aaaaaa\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text(
+        "color1 #bbbbbb\ninclude theme.conf\n", encoding="utf-8"
+    )
+    backend = KittyBackend()
+    doc = backend.load(main)
+    assert backend.read_slot(doc, ("normal", "red")) == "#aaaaaa"
+
+
+def test_nested_include(tmp_path: Path) -> None:
+    """include de un archivo que tiene su propio include."""
+    inner = tmp_path / "inner.conf"
+    inner.write_text("color1 #112233\n", encoding="utf-8")
+    middle = tmp_path / "middle.conf"
+    middle.write_text("include inner.conf\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text("include middle.conf\n", encoding="utf-8")
+    backend = KittyBackend()
+    doc = backend.load(main)
+    assert backend.read_slot(doc, ("normal", "red")) == "#112233"
+
+
+def test_circular_include_does_not_loop(tmp_path: Path) -> None:
+    """Un include circular hits depth limit en lugar de loopear."""
+    a = tmp_path / "a.conf"
+    b = tmp_path / "b.conf"
+    a.write_text("color1 #a1a1a1\ninclude b.conf\n", encoding="utf-8")
+    b.write_text("color2 #b2b2b2\ninclude a.conf\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text("include a.conf\n", encoding="utf-8")
+    backend = KittyBackend()
+    doc = backend.load(main)
+    # No infinite loop: el read termina y devuelve algo razonable.
+    assert backend.read_slot(doc, ("normal", "red")) == "#a1a1a1"
+    assert backend.read_slot(doc, ("normal", "green")) == "#b2b2b2"
+
+
+# ---------- escritura con includes ----------
+
+
+def test_write_slot_only_in_include_appends_to_main(tmp_path: Path) -> None:
+    """Si el slot solo esta en el include, write_slot appendea al main
+    (gana via last-wins de kitty)."""
+    theme = tmp_path / "theme.conf"
+    theme.write_text("color1 #aaaaaa\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text("include theme.conf\n", encoding="utf-8")
+    backend = KittyBackend()
+    doc = backend.load(main)
+    backend.write_slot(doc, ("normal", "red"), "#ff0000")
+    # No tocamos el include.
+    assert "color1 #aaaaaa" in theme.read_text(encoding="utf-8")
+    # Append al main.
+    assert doc.lines[-1] == "color1 #ff0000"
+    # Y el effective ahora es el del main.
+    assert backend.read_slot(doc, ("normal", "red")) == "#ff0000"
+
+
+def test_write_slot_already_in_main_updates_in_place(tmp_path: Path) -> None:
+    """Si la entrada ganadora viene del main, update in-place (no append)."""
+    theme = tmp_path / "theme.conf"
+    theme.write_text("color1 #aaaaaa\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text(
+        "include theme.conf\ncolor1 #bbbbbb\nfont_size 12.0\n",
+        encoding="utf-8",
+    )
+    backend = KittyBackend()
+    doc = backend.load(main)
+    backend.write_slot(doc, ("normal", "red"), "#ff0000")
+    # La linea de main fue actualizada in-place; no se agrego nada al final.
+    assert doc.lines == [
+        "include theme.conf",
+        "color1 #ff0000",
+        "font_size 12.0",
+    ]
+
+
+def test_write_slot_when_include_after_main_appends(tmp_path: Path) -> None:
+    """Main tiene color1 ANTES del include (que tambien tiene color1).
+    El effective viene del include. write_slot debe appendear, no
+    actualizar la linea del main (porque el include la sobrescribiria)."""
+    theme = tmp_path / "theme.conf"
+    theme.write_text("color1 #aaaaaa\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text(
+        "color1 #bbbbbb\ninclude theme.conf\n", encoding="utf-8"
+    )
+    backend = KittyBackend()
+    doc = backend.load(main)
+    backend.write_slot(doc, ("normal", "red"), "#ff0000")
+    # La linea original de main no se toco.
+    assert doc.lines[0] == "color1 #bbbbbb"
+    # Append al final.
+    assert doc.lines[-1] == "color1 #ff0000"
+    # Effective: el append.
+    assert backend.read_slot(doc, ("normal", "red")) == "#ff0000"
+
+
+def test_delete_slot_only_removes_from_main(tmp_path: Path) -> None:
+    """Borrar un slot que esta en main Y en include: solo se borra del
+    main; el del include vuelve a ser efectivo."""
+    theme = tmp_path / "theme.conf"
+    theme.write_text("color1 #aaaaaa\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text(
+        "include theme.conf\ncolor1 #bbbbbb\n", encoding="utf-8"
+    )
+    backend = KittyBackend()
+    doc = backend.load(main)
+    assert backend.read_slot(doc, ("normal", "red")) == "#bbbbbb"
+    assert backend.delete_slot(doc, ("normal", "red")) is True
+    # Despues del delete, gana el del include.
+    assert backend.read_slot(doc, ("normal", "red")) == "#aaaaaa"
+    # El theme.conf no se tocó.
+    assert "color1 #aaaaaa" in theme.read_text(encoding="utf-8")
+
+
+def test_delete_slot_only_in_include_returns_false(tmp_path: Path) -> None:
+    """Si el slot esta solo en el include, delete devuelve False
+    (no tocamos includes)."""
+    theme = tmp_path / "theme.conf"
+    theme.write_text("color1 #aaaaaa\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text("include theme.conf\n", encoding="utf-8")
+    backend = KittyBackend()
+    doc = backend.load(main)
+    assert backend.delete_slot(doc, ("normal", "red")) is False
+    # El effective sigue siendo el del include.
+    assert backend.read_slot(doc, ("normal", "red")) == "#aaaaaa"
+
+
 # ---------- comentarios y formato ----------
 
 

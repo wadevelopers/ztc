@@ -10,25 +10,39 @@ Sintaxis (verificado contra https://sw.kovidgoyal.net/kitty/conf):
   cielab(...)) se preservan tal cual; el editor los muestra con swatch
   vacio y solo se reemplazan si el usuario edita explicitamente.
 
-Duplicados: kitty aplica last-occurrence-wins. `read_slot` devuelve la
-ultima ocurrencia; `write_slot` actualiza la ultima. Si el slot no
-existe, se appendea al final.
+Includes (`include otro.conf`):
+- Lectura: se expanden recursivamente con depth limit (5) para reflejar
+  la realidad de kitty (la mayoria de configs incluyen un tema y los
+  colores viven alli). Path relativo se resuelve contra el archivo
+  padre. `globinclude` y `envinclude` NO se expanden — solo `include`.
+  Si un include no existe, se ignora silenciosamente.
+- Escritura: se toca SOLO el archivo principal (`default_config_path`).
+  No modificamos archivos incluidos del usuario (temas, etc.).
+  Si el slot ya esta en el archivo principal y nada despues lo
+  sobrescribe, se actualiza la linea. Si solo viene de un include,
+  se appendea al final del principal — kitty aplica last-wins en
+  orden de carga, asi que nuestra linea (procesada al final) gana.
 
-Includes (`include otro.conf`, `globinclude pat`): no se expanden al
-leer. Esto significa que un slot definido en un archivo incluido no
-se ve aca y, si lo escribimos en el archivo principal, kitty resolvera
-segun su orden de carga (no garantizamos precedencia frente a includes).
+Duplicados dentro del mismo archivo: kitty aplica last-occurrence-wins.
+`read_slot` resuelve linealizando main+includes en orden de procesamiento
+y devolviendo la ultima coincidencia. `write_slot` actualiza la entrada
+ganadora si es del main; si es de un include, appendea al main.
 """
 
 from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from term_config_tui.services.atomic import write_atomic
 from term_config_tui.services.backups import make_backup
 from term_config_tui.services.colors import CanonicalSlot
+
+# Profundidad maxima para expandir `include`. Evita loops por
+# circular includes y tambien acota el costo de parsing.
+_MAX_INCLUDE_DEPTH = 5
 
 # Mapping canonico -> nombre de key en kitty.conf.
 _CANONICAL_TO_KITTY: dict[CanonicalSlot, str] = {
@@ -73,20 +87,32 @@ _HEX_RE = re.compile(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
 
 class KittyDoc:
-    """Documento Kitty: lista de lineas (sin terminadores `\\n`).
+    """Documento Kitty: lineas del archivo principal + path para
+    resolver includes relativos.
 
-    Mantiene las lineas tal cual vinieron del archivo; las modificaciones
-    tocan la linea ganadora (ultima ocurrencia de la key) y appendean
-    al final cuando la key no existe.
+    Solo se mutan las `lines` del principal. Los archivos incluidos
+    se leen on-demand al hacer `read_slot` para reflejar el estado
+    efectivo (last-wins en orden de procesamiento).
     """
 
-    def __init__(self, lines: list[str]) -> None:
+    def __init__(self, path: Path, lines: list[str]) -> None:
+        self.path = path
         self.lines = lines
 
     def to_text(self) -> str:
-        # Re-emite como en el original: una linea por elemento + LF
-        # final si habia (preservamos el comportamiento "termina en \\n").
+        # Re-emite como en el original: una linea por elemento + LF final.
         return "\n".join(self.lines) + "\n"
+
+
+@dataclass(frozen=True)
+class _Entry:
+    """Una entrada key=value en orden de procesamiento, con info de origen."""
+
+    key: str
+    value: str
+    main_line_idx: int | None
+    """Indice en `lines` del archivo principal si la entrada vino del
+    main; None si vino de un include."""
 
 
 def _parse_line(line: str) -> tuple[str, str] | None:
@@ -100,8 +126,75 @@ def _parse_line(line: str) -> tuple[str, str] | None:
     return m.group(1), m.group(2)
 
 
-def _last_index_of_key(lines: list[str], key: str) -> int | None:
-    """Indice de la ultima ocurrencia de `key` en `lines`, o None."""
+def _read_lines(path: Path) -> list[str]:
+    """Lee un archivo y devuelve sus lineas sin terminadores. Vacio si no existe."""
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8")
+    if text.endswith("\n"):
+        text = text[:-1]
+    return text.split("\n") if text else []
+
+
+def _linearize(
+    file_path: Path,
+    lines: list[str],
+    *,
+    in_main: bool,
+    depth: int = 0,
+) -> list[_Entry]:
+    """Procesa `lines` top-to-bottom; en cada `include otro.conf`
+    recursivamente expande. Devuelve lista de entradas en orden de
+    procesamiento de kitty (el ultimo de la lista es el "ganador" para
+    cada key).
+
+    `file_path` es el path del archivo cuyas `lines` se procesan; se
+    usa para resolver paths relativos en `include`. `in_main=True` solo
+    para el archivo principal (de ahi sale `main_line_idx`).
+    """
+    if depth > _MAX_INCLUDE_DEPTH:
+        return []
+    out: list[_Entry] = []
+    base = file_path.parent
+    for i, line in enumerate(lines):
+        parsed = _parse_line(line)
+        if parsed is None:
+            continue
+        key, value = parsed
+        if key == "include":
+            target = Path(value)
+            if not target.is_absolute():
+                target = base / target
+            try:
+                inc_lines = _read_lines(target)
+            except OSError:
+                continue
+            out.extend(
+                _linearize(target, inc_lines, in_main=False, depth=depth + 1)
+            )
+            continue
+        # globinclude / envinclude: no soportadas (caja de pandora);
+        # las dejamos pasar como entradas no-color para no perderlas.
+        out.append(
+            _Entry(
+                key=key,
+                value=value,
+                main_line_idx=i if in_main else None,
+            )
+        )
+    return out
+
+
+def _last_entry_for_key(entries: list[_Entry], key: str) -> _Entry | None:
+    """Devuelve la ultima entrada con esa key (la que gana)."""
+    for e in reversed(entries):
+        if e.key == key:
+            return e
+    return None
+
+
+def _last_index_of_key_in_main(lines: list[str], key: str) -> int | None:
+    """Indice de la ultima ocurrencia de `key` en `lines` del main, o None."""
     for i in range(len(lines) - 1, -1, -1):
         parsed = _parse_line(lines[i])
         if parsed is not None and parsed[0] == key:
@@ -144,48 +237,56 @@ class KittyBackend:
         return list(KNOWN_SLOTS)
 
     def load(self, path: Path) -> KittyDoc:
-        if not path.exists():
-            return KittyDoc(lines=[])
-        text = path.read_text(encoding="utf-8")
-        # split sin keepends, descartando el ultimo "" si el archivo
-        # termina en \\n (lo restauramos en to_text).
-        if text.endswith("\n"):
-            text = text[:-1]
-        return KittyDoc(lines=text.split("\n") if text else [])
+        return KittyDoc(path=path, lines=_read_lines(path))
 
     def save(self, doc: KittyDoc, path: Path) -> Path | None:
         backup = make_backup(path) if path.exists() else None
         write_atomic(path, doc.to_text())
         return backup
 
+    def _effective_entries(self, doc: KittyDoc) -> list[_Entry]:
+        return _linearize(doc.path, doc.lines, in_main=True)
+
     def read_slot(self, doc: KittyDoc, slot: CanonicalSlot) -> str | None:
         key = _CANONICAL_TO_KITTY.get(slot)
         if key is None:
             return None
-        idx = _last_index_of_key(doc.lines, key)
-        if idx is None:
+        entries = self._effective_entries(doc)
+        last = _last_entry_for_key(entries, key)
+        if last is None:
             return None
-        parsed = _parse_line(doc.lines[idx])
-        if parsed is None:
-            return None
-        return _normalize_value_if_hex(parsed[1])
+        return _normalize_value_if_hex(last.value)
 
     def write_slot(self, doc: KittyDoc, slot: CanonicalSlot, value: str) -> None:
+        """Escribe SOLO al archivo principal.
+
+        - Si la entrada ganadora es del main: actualiza esa linea.
+        - Si la entrada ganadora viene de un include (o no existe):
+          appendea al final del main para que kitty la procese al final
+          y gane via last-wins.
+        """
         key = _CANONICAL_TO_KITTY.get(slot)
         if key is None:
             return
-        idx = _last_index_of_key(doc.lines, key)
+        entries = self._effective_entries(doc)
+        last = _last_entry_for_key(entries, key)
         new_line = f"{key} {value}"
-        if idx is None:
-            doc.lines.append(new_line)
+        if last is not None and last.main_line_idx is not None:
+            doc.lines[last.main_line_idx] = new_line
         else:
-            doc.lines[idx] = new_line
+            doc.lines.append(new_line)
 
     def delete_slot(self, doc: KittyDoc, slot: CanonicalSlot) -> bool:
+        """Borra la ultima ocurrencia del main. No toca includes.
+
+        Despues del delete, si el slot estaba siendo provisto por un
+        include, ese valor pasa a ser el efectivo (semantica correcta
+        de kitty). Devuelve True si habia algo que borrar en el main.
+        """
         key = _CANONICAL_TO_KITTY.get(slot)
         if key is None:
             return False
-        idx = _last_index_of_key(doc.lines, key)
+        idx = _last_index_of_key_in_main(doc.lines, key)
         if idx is None:
             return False
         del doc.lines[idx]
