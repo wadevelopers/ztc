@@ -6,3 +6,15 @@ __pycache__/
 .ruff_cache/
 dist/
 build/
+
+# Reglas y landing page para agentes IA (uso personal local).
+.claude/
+AGENTS.md
+
+# Tooling local: exportador de transcripts de Codex y similares.
+scripts/
+
+# Estado local: configs de prueba, transcripts efimeros.
+.config/
+codex-transcript-current.md
+rollout-*.jsonl
