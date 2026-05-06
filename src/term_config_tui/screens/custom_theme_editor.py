@@ -310,22 +310,22 @@ class CustomThemeEditorScreen(Screen[None]):
             msg += f"  (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
 
-        # Si el tema editado es el activo en Zellij, propagar a alacritty.toml.
+        # Si el tema editado es el activo en Zellij, propagar al backend de la terminal.
         active = zellij_config.read_active_theme(self.config_path)
         if active == self.theme.name:
-            alacritty_path = getattr(
-                getattr(self.app, "paths", None), "alacritty_config", None
-            )
-            if alacritty_path is not None:
+            backend = getattr(self.app, "backend", None)
+            backend_path = getattr(self.app, "backend_path", None)
+            if backend is not None and backend_path is not None:
                 try:
-                    theme_sync.sync_alacritty_with_zellij_theme(
+                    theme_sync.sync_terminal_with_zellij_theme(
                         zellij_theme_name=self.theme.name,
-                        alacritty_path=alacritty_path,
+                        backend=backend,
+                        backend_path=backend_path,
                         zellij_config_path=self.config_path,
                     )
                 except Exception as exc:  # noqa: BLE001
                     self.app.notify(
-                        f"Error sincronizando Alacritty: {exc}",
+                        f"Error sincronizando terminal: {exc}",
                         severity="error",
                         timeout=8,
                     )

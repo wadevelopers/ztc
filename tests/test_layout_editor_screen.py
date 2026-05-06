@@ -25,13 +25,16 @@ def _paths_with_layout(tmp_path: Path) -> Paths:
     return Paths(
         zellij_config=tmp_path / "config.kdl",
         zellij_layouts_dir=layouts_dir,
-        alacritty_config=tmp_path / "alacritty.toml",
     )
+
+
+def _make_app(tmp_path: Path, paths: Paths) -> TermConfigApp:
+    return TermConfigApp(paths=paths, backend_path=tmp_path / "alacritty.toml")
 
 
 async def test_layout_list_shows_existing(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("down", "enter")  # navega a "Layouts Zellij"
         await pilot.pause()
@@ -47,7 +50,7 @@ async def test_layout_list_shows_existing(tmp_path: Path) -> None:
 
 async def test_layout_editor_opens_and_renders_preview(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("down", "enter", "enter")  # menu -> layouts -> dev
         await pilot.pause()
@@ -68,7 +71,7 @@ async def test_layout_editor_opens_and_renders_preview(tmp_path: Path) -> None:
 
 async def test_layout_editor_save_writes_file(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("down", "enter", "enter")
         await pilot.pause()
@@ -92,7 +95,7 @@ async def test_layout_editor_save_writes_file(tmp_path: Path) -> None:
 
 async def test_layout_editor_back_with_unsaved_prompts(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("down", "enter", "enter")
         await pilot.pause()
@@ -106,7 +109,7 @@ async def test_layout_editor_back_with_unsaved_prompts(tmp_path: Path) -> None:
 
 async def test_pane_edit_modal_returns_changes(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("down", "enter", "enter")
         await pilot.pause()
@@ -131,7 +134,7 @@ async def test_pane_edit_modal_returns_changes(tmp_path: Path) -> None:
 async def test_layout_editor_save_notifies_and_stays(tmp_path: Path) -> None:
     """Despues del split de sesiones a zsm, save solo guarda y notifica."""
     paths = _paths_with_layout(tmp_path)
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("down", "enter", "enter")
         await pilot.pause()
@@ -146,7 +149,7 @@ async def test_layout_editor_save_notifies_and_stays(tmp_path: Path) -> None:
 
 async def test_layout_list_new_creates_file(tmp_path: Path) -> None:
     paths = _paths_with_layout(tmp_path)
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("down", "enter")  # abrir layouts
         await pilot.pause()

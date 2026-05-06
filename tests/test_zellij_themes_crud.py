@@ -8,6 +8,7 @@ import pytest
 
 from term_config_tui.models.theme import ZellijColor, ZellijTheme
 from term_config_tui.services import zellij_themes
+from term_config_tui.services.terminals.alacritty import AlacrittyBackend
 
 
 def test_parser_captures_raw_components(tmp_path: Path) -> None:
@@ -379,7 +380,10 @@ def test_clone_active_theme_overlays_alacritty(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    zellij_themes.clone_theme(cfg, "dracula", "my-dracula", alacritty_path=ala)
+    zellij_themes.clone_theme(
+        cfg, "dracula", "my-dracula",
+        backend=AlacrittyBackend(), backend_path=ala,
+    )
     by_name = {
         c.name: c.value for c in zellij_themes.list_user_themes(cfg)[0].colors
     }
@@ -405,7 +409,10 @@ def test_clone_non_active_theme_ignores_alacritty(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     # Cloneamos tokyo-night (NO es el activo).
-    zellij_themes.clone_theme(cfg, "tokyo-night", "my-tn", alacritty_path=ala)
+    zellij_themes.clone_theme(
+        cfg, "tokyo-night", "my-tn",
+        backend=AlacrittyBackend(), backend_path=ala,
+    )
     by_name = {
         c.name: c.value for c in zellij_themes.list_user_themes(cfg)[0].colors
     }
@@ -427,7 +434,10 @@ def test_clone_active_user_theme_overlays_alacritty(tmp_path: Path) -> None:
         '[colors.primary]\nbackground = "#222222"\nforeground = "#eeeeee"\n',
         encoding="utf-8",
     )
-    zellij_themes.clone_theme(cfg, "mio", "mio-copia", alacritty_path=ala)
+    zellij_themes.clone_theme(
+        cfg, "mio", "mio-copia",
+        backend=AlacrittyBackend(), backend_path=ala,
+    )
     themes = zellij_themes.list_user_themes(cfg)
     clone = next(t for t in themes if t.name == "mio-copia")
     by_name = {c.name: c.value for c in clone.colors}
@@ -436,8 +446,8 @@ def test_clone_active_user_theme_overlays_alacritty(tmp_path: Path) -> None:
     assert by_name["fg"] == "#eeeeee"
 
 
-def test_clone_without_alacritty_path_uses_kdl_only(tmp_path: Path) -> None:
-    """Sin alacritty_path, comportamiento clasico: solo .kdl."""
+def test_clone_without_backend_uses_kdl_only(tmp_path: Path) -> None:
+    """Sin backend, comportamiento clasico: solo .kdl."""
     cfg = tmp_path / "config.kdl"
     cfg.write_text('theme "dracula"\n', encoding="utf-8")
     zellij_themes.clone_theme(cfg, "dracula", "my-dracula")

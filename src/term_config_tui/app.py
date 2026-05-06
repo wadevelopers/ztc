@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -9,10 +11,12 @@ from textual.widgets.option_list import Option
 
 from term_config_tui import __version__
 from term_config_tui.models.config import Paths
-from term_config_tui.screens.color_editor import AlacrittyColorEditorScreen
+from term_config_tui.screens.color_editor import ColorEditorScreen
 from term_config_tui.screens.layout_list import LayoutListScreen
 from term_config_tui.screens.theme_editor import ThemePickerScreen
 from term_config_tui.services import zellij_config, zellij_theme_assets, zellij_themes
+from term_config_tui.services.terminals import TerminalBackend
+from term_config_tui.services.terminals.alacritty import AlacrittyBackend
 
 
 class TermConfigApp(App[None]):
@@ -44,9 +48,19 @@ class TermConfigApp(App[None]):
     }
     """
 
-    def __init__(self, paths: Paths | None = None) -> None:
+    def __init__(
+        self,
+        paths: Paths | None = None,
+        backend: TerminalBackend | None = None,
+        backend_path: Path | None = None,
+    ) -> None:
         super().__init__()
         self.paths = paths or Paths.default()
+        # En Fase A, sin deteccion: hardcodea Alacritty. Tests pueden
+        # inyectar un backend distinto (ej. FakeBackend) o un path tmp
+        # para no tocar ~/.config/alacritty.
+        self.backend = backend or AlacrittyBackend()
+        self.backend_path = backend_path or self.backend.default_config_path()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -59,7 +73,7 @@ class TermConfigApp(App[None]):
             yield OptionList(
                 Option("Tema Zellij", id="themes"),
                 Option("Layouts Zellij", id="layouts"),
-                Option("Colores Alacritty", id="colors"),
+                Option("Colores de terminal", id="colors"),
                 id="main-menu",
             )
         yield Footer()
@@ -130,8 +144,9 @@ class TermConfigApp(App[None]):
             self.push_screen(LayoutListScreen(layouts_dir=self.paths.zellij_layouts_dir))
         elif event.option.id == "colors":
             self.push_screen(
-                AlacrittyColorEditorScreen(
-                    alacritty_path=self.paths.alacritty_config,
+                ColorEditorScreen(
+                    backend=self.backend,
+                    backend_path=self.backend_path,
                     zellij_config_path=self.paths.zellij_config,
                 )
             )

@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import kdl
 
 from term_config_tui.models.theme import ZellijColor, ZellijTheme
 from term_config_tui.services.atomic import write_atomic
 from term_config_tui.services.backups import make_backup
+
+if TYPE_CHECKING:
+    from term_config_tui.services.terminals import TerminalBackend
 
 # Slots de la "Paleta ANSI": fg/bg + 8 colores normales. Mapean 1:1 con
 # Alacritty (primary.{foreground,background} + normal.{8 ANSI}). No
@@ -404,7 +408,8 @@ def clone_theme(
     src_name: str,
     dst_name: str,
     *,
-    alacritty_path: Path | None = None,
+    backend: "TerminalBackend | None" = None,
+    backend_path: Path | None = None,
     backup: bool = True,
 ) -> Path | None:
     """Clona un tema existente bajo dst_name.
@@ -414,11 +419,12 @@ def clone_theme(
     - Si es built-in vendorizado, deriva los slots legacy del .kdl.
     - Si no es ninguno, crea con LEGACY_SLOTS = "#000000".
 
-    Si `alacritty_path` se pasa Y src_name es el tema actualmente activo
-    en config.kdl, los slots que existen en alacritty.toml (fg, bg, 8
-    normal) se overlayan SOBRE el resultado anterior. Esto preserva el
-    estado real que el usuario esta viendo, incluyendo cualquier ajuste
-    manual hecho en el editor de Colores Alacritty desde el ultimo apply.
+    Si `backend` y `backend_path` se pasan Y src_name es el tema
+    actualmente activo en config.kdl, los slots que existen en el
+    archivo de la terminal (fg, bg, 8 normal) se overlayan SOBRE el
+    resultado anterior. Esto preserva el estado real que el usuario
+    esta viendo, incluyendo cualquier ajuste manual hecho en el editor
+    de colores desde el ultimo apply.
     """
     if not is_valid_theme_name(dst_name):
         raise ValueError(f"Nombre invalido: {dst_name!r}")
@@ -441,10 +447,10 @@ def clone_theme(
             colors = [ZellijColor(name=s, value=derived[s]) for s in LEGACY_SLOTS]
         raw_components = zta.load_bundled_raw_components(src_name)
 
-    if alacritty_path is not None and alacritty_path.exists():
+    if backend is not None and backend_path is not None and backend_path.exists():
         active = read_active_theme(config_path)
         if active == src_name:
-            overlay = _read_alacritty_legacy_slots(alacritty_path)
+            overlay = _read_terminal_legacy_slots(backend, backend_path)
             if overlay:
                 colors = _overlay_color_list(colors, overlay)
 
@@ -457,21 +463,22 @@ def clone_theme(
     return upsert_user_theme(config_path, new_theme, backup=backup)
 
 
-def _read_alacritty_legacy_slots(alacritty_path: Path) -> dict[str, str]:
-    """Devuelve {legacy_slot: hex} con los valores actuales de alacritty.toml,
-    invirtiendo el mapping de theme_sync."""
-    from term_config_tui.services import alacritty as ala_svc
-    from term_config_tui.services import toml_io
-    from term_config_tui.services.theme_sync import _LEGACY_TO_ALACRITTY
+def _read_terminal_legacy_slots(
+    backend: "TerminalBackend", backend_path: Path
+) -> dict[str, str]:
+    """Devuelve {legacy_slot: hex} con los valores actuales del archivo
+    de la terminal, invirtiendo el mapping de theme_sync."""
+    from term_config_tui.services.colors import is_valid_hex, normalize_hex
+    from term_config_tui.services.theme_sync import _LEGACY_TO_CANONICAL
 
-    doc = toml_io.load_toml(alacritty_path)
+    doc = backend.load(backend_path)
     out: dict[str, str] = {}
-    for legacy_name, destinations in _LEGACY_TO_ALACRITTY.items():
-        # Tomamos el primer destino que tenga valor en el TOML.
-        for group, alacritty_name in destinations:
-            value = ala_svc.read_slot(doc, group, alacritty_name)
-            if value and ala_svc.is_valid_hex(value):
-                out[legacy_name] = ala_svc.normalize_hex(value)
+    for legacy_name, destinations in _LEGACY_TO_CANONICAL.items():
+        # Tomamos el primer destino que tenga valor en el doc.
+        for slot in destinations:
+            value = backend.read_slot(doc, slot)
+            if value and is_valid_hex(value):
+                out[legacy_name] = normalize_hex(value)
                 break
     return out
 

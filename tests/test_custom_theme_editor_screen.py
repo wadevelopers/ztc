@@ -31,13 +31,16 @@ def _paths_with_user_themes(tmp_path: Path) -> Paths:
     return Paths(
         zellij_config=cfg,
         zellij_layouts_dir=tmp_path / "layouts",
-        alacritty_config=tmp_path / "alacritty.toml",
     )
+
+
+def _make_app(tmp_path: Path, paths: Paths) -> TermConfigApp:
+    return TermConfigApp(paths=paths, backend_path=tmp_path / "alacritty.toml")
 
 
 async def test_picker_clone_action_creates_user_theme(tmp_path: Path) -> None:
     paths = _paths_with_user_themes(tmp_path)
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("enter")  # menu -> Tema Zellij
         await pilot.pause()
@@ -58,7 +61,7 @@ async def test_picker_clone_action_creates_user_theme(tmp_path: Path) -> None:
 
 async def test_picker_delete_user_theme(tmp_path: Path) -> None:
     paths = _paths_with_user_themes(tmp_path)
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("enter")
         await pilot.pause()
@@ -77,7 +80,7 @@ async def test_picker_delete_user_theme(tmp_path: Path) -> None:
 
 async def test_picker_delete_blocks_builtin(tmp_path: Path) -> None:
     paths = _paths_with_user_themes(tmp_path)
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("enter")
         await pilot.pause()
@@ -99,7 +102,7 @@ async def test_picker_delete_blocks_builtin(tmp_path: Path) -> None:
 
 async def test_custom_theme_editor_save_writes_block(tmp_path: Path) -> None:
     paths = _paths_with_user_themes(tmp_path)
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("enter")
         await pilot.pause()

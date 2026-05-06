@@ -18,13 +18,18 @@ def _make_paths(tmp_path: Path, config_src: Path) -> Paths:
     return Paths(
         zellij_config=cfg,
         zellij_layouts_dir=tmp_path / "layouts",
-        alacritty_config=tmp_path / "alacritty.toml",
     )
+
+
+def _make_app(tmp_path: Path, paths: Paths) -> TermConfigApp:
+    """Crea TermConfigApp con backend_path apuntando al tmp para no
+    tocar ~/.config/alacritty real."""
+    return TermConfigApp(paths=paths, backend_path=tmp_path / "alacritty.toml")
 
 
 async def test_theme_picker_lists_themes_and_marks_active(tmp_path: Path) -> None:
     paths = _make_paths(tmp_path, FIX / "config_with_user_themes.kdl")
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("enter")
         await pilot.pause()
@@ -45,7 +50,7 @@ async def test_theme_picker_lists_themes_and_marks_active(tmp_path: Path) -> Non
 async def test_app_registers_bundled_and_user_themes(tmp_path: Path) -> None:
     paths = _make_paths(tmp_path, FIX / "config_with_user_themes.kdl")
     # El fixture define `custom_dark` y `midnight` como user themes con fg/bg.
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as _:
         # Built-in vendorizado registrado.
         assert "dracula" in app.available_themes
@@ -58,14 +63,14 @@ async def test_app_registers_bundled_and_user_themes(tmp_path: Path) -> None:
 async def test_app_applies_active_zellij_theme_on_mount(tmp_path: Path) -> None:
     paths = _make_paths(tmp_path, FIX / "config_with_user_themes.kdl")
     # config_with_user_themes tiene `theme "custom_dark"`.
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as _:
         assert app.theme == "custom_dark"
 
 
 async def test_theme_picker_apply_changes_textual_theme(tmp_path: Path) -> None:
     paths = _make_paths(tmp_path, FIX / "config_with_user_themes.kdl")
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("enter")  # menu -> Tema Zellij
         await pilot.pause()
@@ -86,7 +91,7 @@ async def test_theme_picker_apply_changes_textual_theme(tmp_path: Path) -> None:
 
 async def test_theme_picker_apply_writes_config(tmp_path: Path) -> None:
     paths = _make_paths(tmp_path, FIX / "config_with_user_themes.kdl")
-    app = TermConfigApp(paths=paths)
+    app = _make_app(tmp_path, paths)
     async with app.run_test() as pilot:
         await pilot.press("enter")
         await pilot.pause()

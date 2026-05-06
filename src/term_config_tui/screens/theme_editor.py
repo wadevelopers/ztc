@@ -246,32 +246,34 @@ class ThemePickerScreen(Screen[None]):
         self._reload()
 
     def _sync_alacritty(self, zellij_name: str) -> None:
-        """Propaga bg/fg/normal.* a alacritty.toml. No bloqueante: si falla, avisa."""
-        alacritty_path = getattr(getattr(self.app, "paths", None), "alacritty_config", None)
-        if alacritty_path is None:
+        """Propaga bg/fg/normal.* al backend de la terminal. No bloqueante: si falla, avisa."""
+        backend = getattr(self.app, "backend", None)
+        backend_path = getattr(self.app, "backend_path", None)
+        if backend is None or backend_path is None:
             return
         try:
-            result = theme_sync.sync_alacritty_with_zellij_theme(
+            result = theme_sync.sync_terminal_with_zellij_theme(
                 zellij_theme_name=zellij_name,
-                alacritty_path=alacritty_path,
+                backend=backend,
+                backend_path=backend_path,
                 zellij_config_path=self.config_path,
             )
         except Exception as exc:  # noqa: BLE001
             self.app.notify(
-                f"Error al sincronizar Alacritty: {exc}",
+                f"Error al sincronizar terminal: {exc}",
                 severity="error",
                 timeout=8,
             )
             return
         if result.skipped_reason:
             self.app.notify(
-                f"Alacritty no actualizado: {result.skipped_reason}",
+                f"{backend.display_name} no actualizado: {result.skipped_reason}",
                 severity="warning",
                 timeout=6,
             )
             return
         n = len(result.updated)
-        msg = f"Alacritty actualizado: {n} slot(s)"
+        msg = f"{backend.display_name} actualizado: {n} slot(s)"
         if result.backup is not None:
             msg += f" (backup: {result.backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
@@ -377,15 +379,15 @@ class ThemePickerScreen(Screen[None]):
                     severity="error",
                 )
                 return
-            alacritty_path = getattr(
-                getattr(self.app, "paths", None), "alacritty_config", None
-            )
+            backend = getattr(self.app, "backend", None)
+            backend_path = getattr(self.app, "backend_path", None)
             try:
                 backup = zellij_themes.clone_theme(
                     self.config_path,
                     src,
                     dst,
-                    alacritty_path=alacritty_path,
+                    backend=backend,
+                    backend_path=backend_path,
                 )
             except ValueError as exc:
                 self.app.notify(str(exc), severity="error")

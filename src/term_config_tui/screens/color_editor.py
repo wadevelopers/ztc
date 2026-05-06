@@ -10,16 +10,19 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
-from term_config_tui.services import alacritty, colors, toml_io, zellij_config, zellij_themes
+from term_config_tui.services import colors, zellij_config, zellij_themes
+from term_config_tui.services.terminals import TerminalBackend
+from term_config_tui.services.terminals.alacritty import AlacrittyBackend
 from term_config_tui.widgets.confirm import EditColorModal, PromptModal
 
 
-class AlacrittyColorEditorScreen(Screen[None]):
-    """Editor de colores de Alacritty.
+class ColorEditorScreen(Screen[None]):
+    """Editor de colores de la terminal activa.
 
     Lista los slots conocidos con sus valores y swatches. Permite editar uno
-    por modal, importar desde otro alacritty.toml, ver avisos de contraste y
-    guardar con backup.
+    por modal, ver avisos de contraste y guardar con backup. La capability
+    de "importar tema desde archivo" se expone solo si el backend la soporta
+    (hoy: solo Alacritty).
     """
 
     BINDINGS = [
@@ -33,7 +36,7 @@ class AlacrittyColorEditorScreen(Screen[None]):
     ]
 
     DEFAULT_CSS = """
-    AlacrittyColorEditorScreen {
+    ColorEditorScreen {
         layout: vertical;
     }
     #header-info {
@@ -73,11 +76,18 @@ class AlacrittyColorEditorScreen(Screen[None]):
     }
     """
 
-    def __init__(self, alacritty_path: Path, zellij_config_path: Path) -> None:
+    def __init__(
+        self,
+        backend: TerminalBackend,
+        backend_path: Path,
+        zellij_config_path: Path,
+    ) -> None:
         super().__init__()
-        self.alacritty_path = alacritty_path
+        self.backend = backend
+        self.backend_path = backend_path
         self.zellij_config_path = zellij_config_path
-        self.doc = toml_io.load_toml(alacritty_path)
+        self.slots = backend.supported_slots()
+        self.doc = backend.load(backend_path)
         self.dirty = False
 
     def compose(self) -> ComposeResult:
@@ -105,17 +115,17 @@ class AlacrittyColorEditorScreen(Screen[None]):
     def _refresh_header(self) -> None:
         dirty = " *" if self.dirty else ""
         self.query_one("#header-info", Static).update(
-            f"[b]alacritty colors[/b]{dirty}    {self.alacritty_path}"
+            f"[b]{self.backend.display_name} colors[/b]{dirty}    {self.backend_path}"
         )
 
     def _rebuild_list(self) -> None:
         option_list = self.query_one("#slot-list", OptionList)
         previous_index = option_list.highlighted
         option_list.clear_options()
-        for group, name in alacritty.KNOWN_SLOTS:
-            value = alacritty.read_slot(self.doc, group, name) or "(sin definir)"
-            label = self._format_row(group, name, value)
-            option_list.add_option(Option(label, id=f"{group}.{name}"))
+        for slot in self.slots:
+            value = self.backend.read_slot(self.doc, slot) or "(sin definir)"
+            label = self._format_row(slot[0], slot[1], value)
+            option_list.add_option(Option(label, id=f"{slot[0]}.{slot[1]}"))
         if option_list.option_count:
             option_list.highlighted = (
                 previous_index
@@ -133,8 +143,9 @@ class AlacrittyColorEditorScreen(Screen[None]):
     def _show_detail_at(self, index: int | None) -> None:
         if index is None:
             return
-        group, name = alacritty.KNOWN_SLOTS[index]
-        value = alacritty.read_slot(self.doc, group, name)
+        slot = self.slots[index]
+        group, name = slot
+        value = self.backend.read_slot(self.doc, slot)
         name_widget = self.query_one("#detail-name", Static)
         swatch_widget = self.query_one("#big-swatch", Static)
         meta_widget = self.query_one("#detail-meta", Static)
@@ -163,13 +174,13 @@ class AlacrittyColorEditorScreen(Screen[None]):
                             zellij_bg = color.value
                             break
                     break
-        slots = {
-            (group, name): value
-            for group, name in alacritty.KNOWN_SLOTS
-            for value in [alacritty.read_slot(self.doc, group, name)]
+        slot_values = {
+            slot: value
+            for slot in self.slots
+            for value in [self.backend.read_slot(self.doc, slot)]
             if value is not None
         }
-        warnings = colors.compute_warnings(slots, zellij_bg=zellij_bg)
+        warnings = colors.compute_warnings(slot_values, zellij_bg=zellij_bg)
         widget = self.query_one("#warnings", Static)
         if not warnings:
             widget.update("[green]Sin avisos.[/]")
@@ -191,24 +202,24 @@ class AlacrittyColorEditorScreen(Screen[None]):
     # ---------- acciones ----------
 
     def action_reset(self) -> None:
-        """Borra el slot del TOML para que vuelva a estar 'sin definir'."""
+        """Borra el slot del archivo para que vuelva a estar 'sin definir'."""
         option_list = self.query_one("#slot-list", OptionList)
         if option_list.highlighted is None:
             return
-        group, name = alacritty.KNOWN_SLOTS[option_list.highlighted]
-        if alacritty.delete_slot(self.doc, group, name):
+        slot = self.slots[option_list.highlighted]
+        if self.backend.delete_slot(self.doc, slot):
             self.dirty = True
             self._refresh_header()
             self._rebuild_list()
             self._refresh_warnings()
             self.app.notify(
-                f"{group}.{name} reseteado (pulsa 's' para guardar al disco)",
+                f"{slot[0]}.{slot[1]} reseteado (pulsa 's' para guardar al disco)",
                 severity="information",
                 timeout=6,
             )
         else:
             self.app.notify(
-                f"{group}.{name} ya estaba sin definir",
+                f"{slot[0]}.{slot[1]} ya estaba sin definir",
                 severity="information",
             )
 
@@ -216,31 +227,41 @@ class AlacrittyColorEditorScreen(Screen[None]):
         option_list = self.query_one("#slot-list", OptionList)
         if option_list.highlighted is None:
             return
-        group, name = alacritty.KNOWN_SLOTS[option_list.highlighted]
-        current = alacritty.read_slot(self.doc, group, name) or ""
+        slot = self.slots[option_list.highlighted]
+        current = self.backend.read_slot(self.doc, slot) or ""
 
         def after(value: str | None) -> None:
             if value is None:
                 return
-            alacritty.write_slot(self.doc, group, name, value)
+            self.backend.write_slot(self.doc, slot, value)
             self.dirty = True
             self._refresh_header()
             self._rebuild_list()
             self._refresh_warnings()
 
         self.app.push_screen(
-            EditColorModal(slot_label=f"{group}.{name}", initial=current),
+            EditColorModal(slot_label=f"{slot[0]}.{slot[1]}", initial=current),
             after,
         )
 
     def action_import(self) -> None:
+        # Capability solo de Alacritty: import desde otro alacritty.toml.
+        if not isinstance(self.backend, AlacrittyBackend):
+            self.app.notify(
+                f"Importar tema no soportado en {self.backend.display_name}.",
+                severity="warning",
+                timeout=6,
+            )
+            return
+        backend = self.backend  # narrowing para el closure
+
         def after(path_str: str | None) -> None:
             if not path_str:
                 return
             raw = Path(path_str).expanduser()
-            path = raw if raw.is_absolute() else (self.alacritty_path.parent / raw)
+            path = raw if raw.is_absolute() else (self.backend_path.parent / raw)
             try:
-                count = alacritty.import_theme_file(self.doc, path)
+                count = backend.import_theme_file(self.doc, path)
             except FileNotFoundError:
                 self.app.notify(f"No existe: {path}", severity="error", timeout=8)
                 return
@@ -266,15 +287,15 @@ class AlacrittyColorEditorScreen(Screen[None]):
 
         self.app.push_screen(
             PromptModal(
-                title="Importar tema desde archivo",
-                placeholder="nombre de archivo (junto a alacritty.toml) o ruta absoluta",
+                title=f"Importar tema desde archivo",
+                placeholder=f"nombre de archivo (junto a {self.backend_path.name}) o ruta absoluta",
                 confirm_label="Importar",
             ),
             after,
         )
 
     def action_reload(self) -> None:
-        self.doc = toml_io.load_toml(self.alacritty_path)
+        self.doc = self.backend.load(self.backend_path)
         self.dirty = False
         self._refresh_header()
         self._rebuild_list()
@@ -283,13 +304,13 @@ class AlacrittyColorEditorScreen(Screen[None]):
 
     def action_save(self) -> None:
         try:
-            backup = toml_io.dump_toml(self.doc, self.alacritty_path)
+            backup = self.backend.save(self.doc, self.backend_path)
         except Exception as exc:  # noqa: BLE001
             self.app.notify(f"Error al guardar: {exc}", severity="error", timeout=10)
             return
         self.dirty = False
         self._refresh_header()
-        msg = f"Guardado: {self.alacritty_path.name}"
+        msg = f"Guardado: {self.backend_path.name}"
         if backup is not None:
             msg += f"  (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)

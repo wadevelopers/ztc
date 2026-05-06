@@ -3,7 +3,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from term_config_tui.services import alacritty, theme_sync, toml_io
+from term_config_tui.services import theme_sync
+from term_config_tui.services.terminals.alacritty import AlacrittyBackend
 
 ALA_FIX = Path(__file__).parent / "fixtures" / "alacritty"
 
@@ -20,23 +21,28 @@ def _empty_zellij_config(tmp_path: Path) -> Path:
     return cfg
 
 
+def _read(backend: AlacrittyBackend, path: Path, slot: tuple[str, str]) -> str | None:
+    return backend.read_slot(backend.load(path), slot)
+
+
 def test_sync_from_bundled_dracula(tmp_path: Path) -> None:
     ala = _make_alacritty(tmp_path)
     cfg = _empty_zellij_config(tmp_path)
-    result = theme_sync.sync_alacritty_with_zellij_theme(
+    backend = AlacrittyBackend()
+    result = theme_sync.sync_terminal_with_zellij_theme(
         zellij_theme_name="dracula",
-        alacritty_path=ala,
+        backend=backend,
+        backend_path=ala,
         zellij_config_path=cfg,
     )
     assert result.skipped_reason is None
     assert result.backup is not None
-    doc = toml_io.load_toml(ala)
     # Mapping 1:1 Paleta ANSI -> Alacritty. fg <- ribbon_un.background
     # (#f8f8f2 en dracula); white <- text_un.base (#ffffff).
-    assert alacritty.read_slot(doc, "primary", "background") == "#000000"
-    assert alacritty.read_slot(doc, "primary", "foreground") == "#f8f8f2"
-    assert alacritty.read_slot(doc, "normal", "white") == "#ffffff"
-    assert alacritty.read_slot(doc, "normal", "red") == "#ff5555"
+    assert _read(backend, ala, ("primary", "background")) == "#000000"
+    assert _read(backend, ala, ("primary", "foreground")) == "#f8f8f2"
+    assert _read(backend, ala, ("normal", "white")) == "#ffffff"
+    assert _read(backend, ala, ("normal", "red")) == "#ff5555"
 
 
 def test_sync_from_user_theme(tmp_path: Path) -> None:
@@ -54,33 +60,36 @@ def test_sync_from_user_theme(tmp_path: Path) -> None:
         '}\n',
         encoding="utf-8",
     )
-    result = theme_sync.sync_alacritty_with_zellij_theme(
+    backend = AlacrittyBackend()
+    result = theme_sync.sync_terminal_with_zellij_theme(
         zellij_theme_name="mio",
-        alacritty_path=ala,
+        backend=backend,
+        backend_path=ala,
         zellij_config_path=cfg,
     )
     assert result.skipped_reason is None
-    doc = toml_io.load_toml(ala)
-    assert alacritty.read_slot(doc, "primary", "background") == "#123456"
+    assert _read(backend, ala, ("primary", "background")) == "#123456"
     # Mapping 1:1: primary.foreground <- legacy fg.
-    assert alacritty.read_slot(doc, "primary", "foreground") == "#abcdef"
-    assert alacritty.read_slot(doc, "normal", "white") == "#dddddd"
-    assert alacritty.read_slot(doc, "normal", "red") == "#ff0000"
-    assert alacritty.read_slot(doc, "normal", "green") == "#00ff00"
+    assert _read(backend, ala, ("primary", "foreground")) == "#abcdef"
+    assert _read(backend, ala, ("normal", "white")) == "#dddddd"
+    assert _read(backend, ala, ("normal", "red")) == "#ff0000"
+    assert _read(backend, ala, ("normal", "green")) == "#00ff00"
 
 
 def test_sync_only_writes_changed_slots(tmp_path: Path) -> None:
     ala = _make_alacritty(tmp_path)
     cfg = _empty_zellij_config(tmp_path)
+    backend = AlacrittyBackend()
     # Pre-set primary.background al MISMO valor que pondria dracula
     # (sin override, bg = text_unselected.background = #000000).
-    doc = toml_io.load_toml(ala)
-    alacritty.write_slot(doc, "primary", "background", "#000000")
-    toml_io.dump_toml(doc, ala, backup=False)
+    doc = backend.load(ala)
+    backend.write_slot(doc, ("primary", "background"), "#000000")
+    backend.save(doc, ala)
 
-    result = theme_sync.sync_alacritty_with_zellij_theme(
+    result = theme_sync.sync_terminal_with_zellij_theme(
         zellij_theme_name="dracula",
-        alacritty_path=ala,
+        backend=backend,
+        backend_path=ala,
         zellij_config_path=cfg,
     )
     # Aunque haya otros slots a actualizar, primary.background NO debe estar
@@ -93,9 +102,11 @@ def test_sync_only_writes_changed_slots(tmp_path: Path) -> None:
 def test_sync_no_alacritty_file(tmp_path: Path) -> None:
     cfg = _empty_zellij_config(tmp_path)
     ala = tmp_path / "no.toml"
-    result = theme_sync.sync_alacritty_with_zellij_theme(
+    backend = AlacrittyBackend()
+    result = theme_sync.sync_terminal_with_zellij_theme(
         zellij_theme_name="dracula",
-        alacritty_path=ala,
+        backend=backend,
+        backend_path=ala,
         zellij_config_path=cfg,
     )
     assert result.skipped_reason and "No existe" in result.skipped_reason
@@ -105,9 +116,11 @@ def test_sync_no_alacritty_file(tmp_path: Path) -> None:
 def test_sync_unknown_theme(tmp_path: Path) -> None:
     ala = _make_alacritty(tmp_path)
     cfg = _empty_zellij_config(tmp_path)
-    result = theme_sync.sync_alacritty_with_zellij_theme(
+    backend = AlacrittyBackend()
+    result = theme_sync.sync_terminal_with_zellij_theme(
         zellij_theme_name="nonexistent-theme-name",
-        alacritty_path=ala,
+        backend=backend,
+        backend_path=ala,
         zellij_config_path=cfg,
     )
     assert result.skipped_reason and "sin colores" in result.skipped_reason
@@ -117,16 +130,19 @@ def test_sync_unknown_theme(tmp_path: Path) -> None:
 def test_sync_no_changes_returns_no_backup(tmp_path: Path) -> None:
     ala = _make_alacritty(tmp_path)
     cfg = _empty_zellij_config(tmp_path)
+    backend = AlacrittyBackend()
     # Aplicar dracula una vez.
-    theme_sync.sync_alacritty_with_zellij_theme(
+    theme_sync.sync_terminal_with_zellij_theme(
         zellij_theme_name="dracula",
-        alacritty_path=ala,
+        backend=backend,
+        backend_path=ala,
         zellij_config_path=cfg,
     )
     # Aplicar de nuevo: nada deberia cambiar.
-    result = theme_sync.sync_alacritty_with_zellij_theme(
+    result = theme_sync.sync_terminal_with_zellij_theme(
         zellij_theme_name="dracula",
-        alacritty_path=ala,
+        backend=backend,
+        backend_path=ala,
         zellij_config_path=cfg,
     )
     assert result.backup is None
@@ -139,15 +155,16 @@ def test_sync_propagates_text_selected_to_alacritty_selection(tmp_path: Path) ->
     text_selected.{background,base} del .kdl Zellij."""
     ala = _make_alacritty(tmp_path)
     cfg = _empty_zellij_config(tmp_path)
+    backend = AlacrittyBackend()
     # ayu-dark tiene text_selected.background = #475266 y .base = #cccac2.
-    theme_sync.sync_alacritty_with_zellij_theme(
+    theme_sync.sync_terminal_with_zellij_theme(
         zellij_theme_name="ayu-dark",
-        alacritty_path=ala,
+        backend=backend,
+        backend_path=ala,
         zellij_config_path=cfg,
     )
-    doc = toml_io.load_toml(ala)
-    assert alacritty.read_slot(doc, "selection", "background") == "#475266"
-    assert alacritty.read_slot(doc, "selection", "text") == "#cccac2"
+    assert _read(backend, ala, ("selection", "background")) == "#475266"
+    assert _read(backend, ala, ("selection", "text")) == "#cccac2"
 
 
 def test_sync_user_theme_with_rich_components(tmp_path: Path) -> None:
@@ -168,22 +185,25 @@ def test_sync_user_theme_with_rich_components(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     ala = _make_alacritty(tmp_path)
-    theme_sync.sync_alacritty_with_zellij_theme(
+    backend = AlacrittyBackend()
+    theme_sync.sync_terminal_with_zellij_theme(
         zellij_theme_name="mio",
-        alacritty_path=ala,
+        backend=backend,
+        backend_path=ala,
         zellij_config_path=cfg,
     )
-    doc = toml_io.load_toml(ala)
-    assert alacritty.read_slot(doc, "selection", "background") == "#5566aa"
-    assert alacritty.read_slot(doc, "selection", "text") == "#ffffff"
+    assert _read(backend, ala, ("selection", "background")) == "#5566aa"
+    assert _read(backend, ala, ("selection", "text")) == "#ffffff"
 
 
 def test_sync_preserves_other_alacritty_sections(tmp_path: Path) -> None:
     ala = _make_alacritty(tmp_path)
     cfg = _empty_zellij_config(tmp_path)
-    theme_sync.sync_alacritty_with_zellij_theme(
+    backend = AlacrittyBackend()
+    theme_sync.sync_terminal_with_zellij_theme(
         zellij_theme_name="dracula",
-        alacritty_path=ala,
+        backend=backend,
+        backend_path=ala,
         zellij_config_path=cfg,
     )
     text = ala.read_text(encoding="utf-8")

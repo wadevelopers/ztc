@@ -1,7 +1,7 @@
-"""Sincronizacion del tema de Zellij con los colores de Alacritty.
+"""Sincronizacion del tema de Zellij con los colores de la terminal.
 
-Cuando se cambia el tema en el TUI, propagamos al menos `bg` y `fg` (y los
-8 ANSI normal si los tenemos) a `alacritty.toml` para que la terminal
+Cuando se cambia el tema en el TUI, propagamos al menos `bg` y `fg` (y
+los 8 ANSI normal si los tenemos) al backend de la terminal para que
 combine con la sesion de Zellij. Mantiene backups y solo escribe los
 slots que cambian.
 """
@@ -11,12 +11,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from term_config_tui.services import alacritty, toml_io, zellij_themes
+from term_config_tui.services import zellij_themes
 from term_config_tui.services import zellij_theme_assets as zta
+from term_config_tui.services.colors import (
+    CanonicalSlot,
+    is_valid_hex,
+    normalize_hex,
+)
+from term_config_tui.services.terminals import TerminalBackend
 
 # Mapping 1:1 entre los 10 slots de la Paleta ANSI y los slots
-# correspondientes de Alacritty. fg/bg -> primary, los 8 ANSI -> normal.
-_LEGACY_TO_ALACRITTY: dict[str, list[tuple[str, str]]] = {
+# canonicos. fg/bg -> primary, los 8 ANSI -> normal.
+_LEGACY_TO_CANONICAL: dict[str, list[CanonicalSlot]] = {
     "fg": [("primary", "foreground")],
     "bg": [("primary", "background")],
     "black": [("normal", "black")],
@@ -29,9 +35,8 @@ _LEGACY_TO_ALACRITTY: dict[str, list[tuple[str, str]]] = {
     "white": [("normal", "white")],
 }
 
-# Mapping de slots ricos (formato nuevo de Zellij) a destinos Alacritty.
-# (component, slot) -> [(alacritty_group, alacritty_name), ...]
-_RICH_TO_ALACRITTY: dict[tuple[str, str], list[tuple[str, str]]] = {
+# Mapping de slots ricos (formato nuevo de Zellij) a destinos canonicos.
+_RICH_TO_CANONICAL: dict[tuple[str, str], list[CanonicalSlot]] = {
     ("text_selected", "background"): [("selection", "background")],
     ("text_selected", "base"): [("selection", "text")],
 }
@@ -49,7 +54,7 @@ _RICH_COMPONENT_SLOTS = (
 @dataclass
 class SyncResult:
     backup: Path | None
-    updated: dict[tuple[str, str], str]
+    updated: dict[CanonicalSlot, str]
     skipped_reason: str | None = None
 
 
@@ -63,12 +68,12 @@ def _resolve_zellij_slots(
     """
     for ut in zellij_themes.list_user_themes(config_path):
         if ut.name == zellij_name:
-            return {c.name: c.value for c in ut.colors if alacritty.is_valid_hex(c.value)}
+            return {c.name: c.value for c in ut.colors if is_valid_hex(c.value)}
 
     derived = zta.derive_legacy_slots_from_bundled(zellij_name)
     if derived is None:
         return {}
-    return {k: v for k, v in derived.items() if alacritty.is_valid_hex(v)}
+    return {k: v for k, v in derived.items() if is_valid_hex(v)}
 
 
 def _resolve_zellij_rich_slots(
@@ -85,7 +90,7 @@ def _resolve_zellij_rich_slots(
                 comp = zta._parse_component(rc)
                 for slot in _RICH_COMPONENT_SLOTS:
                     value = getattr(comp, slot, None)
-                    if value and alacritty.is_valid_hex(value):
+                    if value and is_valid_hex(value):
                         out[(rc.name, slot)] = value
             return out
 
@@ -95,27 +100,28 @@ def _resolve_zellij_rich_slots(
     for comp_name, comp in bundled.components.items():
         for slot in _RICH_COMPONENT_SLOTS:
             value = getattr(comp, slot, None)
-            if value and alacritty.is_valid_hex(value):
+            if value and is_valid_hex(value):
                 out[(comp_name, slot)] = value
     return out
 
 
-def sync_alacritty_with_zellij_theme(
+def sync_terminal_with_zellij_theme(
     *,
     zellij_theme_name: str,
-    alacritty_path: Path,
+    backend: TerminalBackend,
+    backend_path: Path,
     zellij_config_path: Path,
 ) -> SyncResult:
-    """Aplica los colores del tema Zellij dado a alacritty.toml.
+    """Aplica los colores del tema Zellij dado al archivo de la terminal.
 
-    No toca otras secciones del TOML. Solo escribe slots cuyo valor cambia.
-    Crea backup si hay cambios efectivos.
+    No toca otras secciones del archivo. Solo escribe slots cuyo valor
+    cambia. Crea backup si hay cambios efectivos.
     """
-    if not alacritty_path.exists():
+    if not backend_path.exists():
         return SyncResult(
             backup=None,
             updated={},
-            skipped_reason=f"No existe {alacritty_path}",
+            skipped_reason=f"No existe {backend_path}",
         )
 
     slots = _resolve_zellij_slots(zellij_theme_name, config_path=zellij_config_path)
@@ -129,28 +135,28 @@ def sync_alacritty_with_zellij_theme(
             skipped_reason=f"Tema '{zellij_theme_name}' sin colores extraibles",
         )
 
-    doc = toml_io.load_toml(alacritty_path)
-    updated: dict[tuple[str, str], str] = {}
+    doc = backend.load(backend_path)
+    updated: dict[CanonicalSlot, str] = {}
 
-    def _apply(value: str, destinations: list[tuple[str, str]]) -> None:
-        normalized = alacritty.normalize_hex(value)
-        for group, alacritty_name in destinations:
-            current = alacritty.read_slot(doc, group, alacritty_name)
+    def _apply(value: str, destinations: list[CanonicalSlot]) -> None:
+        normalized = normalize_hex(value)
+        for slot in destinations:
+            current = backend.read_slot(doc, slot)
             if (
                 current
-                and alacritty.is_valid_hex(current)
-                and alacritty.normalize_hex(current) == normalized
+                and is_valid_hex(current)
+                and normalize_hex(current) == normalized
             ):
                 continue
-            alacritty.write_slot(doc, group, alacritty_name, normalized)
-            updated[(group, alacritty_name)] = normalized
+            backend.write_slot(doc, slot, normalized)
+            updated[slot] = normalized
 
-    for legacy_name, destinations in _LEGACY_TO_ALACRITTY.items():
+    for legacy_name, destinations in _LEGACY_TO_CANONICAL.items():
         value = slots.get(legacy_name)
         if value is not None:
             _apply(value, destinations)
 
-    for rich_key, destinations in _RICH_TO_ALACRITTY.items():
+    for rich_key, destinations in _RICH_TO_CANONICAL.items():
         value = rich_slots.get(rich_key)
         if value is not None:
             _apply(value, destinations)
@@ -158,5 +164,5 @@ def sync_alacritty_with_zellij_theme(
     if not updated:
         return SyncResult(backup=None, updated={}, skipped_reason="Sin cambios")
 
-    backup = toml_io.dump_toml(doc, alacritty_path)
+    backup = backend.save(doc, backend_path)
     return SyncResult(backup=backup, updated=updated)
