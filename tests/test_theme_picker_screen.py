@@ -8,6 +8,8 @@ from textual.widgets import OptionList
 from term_config_tui.app import TermConfigApp
 from term_config_tui.models.config import Paths
 from term_config_tui.screens.theme_editor import ThemePickerScreen
+from term_config_tui.services.runtime_detect import TerminalDetection
+from term_config_tui.services.terminals.alacritty import AlacrittyBackend
 
 FIX = Path(__file__).parent / "fixtures" / "zellij"
 
@@ -22,9 +24,18 @@ def _make_paths(tmp_path: Path, config_src: Path) -> Paths:
 
 
 def _make_app(tmp_path: Path, paths: Paths) -> TermConfigApp:
-    """Crea TermConfigApp con backend_path apuntando al tmp para no
-    tocar ~/.config/alacritty real."""
-    return TermConfigApp(paths=paths, backend_path=tmp_path / "alacritty.toml")
+    """Crea TermConfigApp con detection y backend deterministicos.
+    Los tests no dependen del entorno (zellij instalado, env vars de
+    terminal) y no tocan ~/.config/alacritty real."""
+    return TermConfigApp(
+        paths=paths,
+        backend=AlacrittyBackend(),
+        backend_path=tmp_path / "alacritty.toml",
+        detection=TerminalDetection(
+            kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
+        ),
+        zellij_installed=True,
+    )
 
 
 async def test_theme_picker_lists_themes_and_marks_active(tmp_path: Path) -> None:

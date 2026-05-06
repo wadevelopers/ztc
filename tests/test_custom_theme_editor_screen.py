@@ -9,6 +9,8 @@ from term_config_tui.models.config import Paths
 from term_config_tui.screens.custom_theme_editor import CustomThemeEditorScreen
 from term_config_tui.screens.theme_editor import ThemePickerScreen
 from term_config_tui.services import zellij_themes
+from term_config_tui.services.runtime_detect import TerminalDetection
+from term_config_tui.services.terminals.alacritty import AlacrittyBackend
 from term_config_tui.widgets.confirm import (
     ConfirmByNameModal,
     PromptModal,
@@ -35,7 +37,15 @@ def _paths_with_user_themes(tmp_path: Path) -> Paths:
 
 
 def _make_app(tmp_path: Path, paths: Paths) -> TermConfigApp:
-    return TermConfigApp(paths=paths, backend_path=tmp_path / "alacritty.toml")
+    return TermConfigApp(
+        paths=paths,
+        backend=AlacrittyBackend(),
+        backend_path=tmp_path / "alacritty.toml",
+        detection=TerminalDetection(
+            kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
+        ),
+        zellij_installed=True,
+    )
 
 
 async def test_picker_clone_action_creates_user_theme(tmp_path: Path) -> None:

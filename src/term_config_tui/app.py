@@ -15,8 +15,16 @@ from term_config_tui.screens.color_editor import ColorEditorScreen
 from term_config_tui.screens.layout_list import LayoutListScreen
 from term_config_tui.screens.theme_editor import ThemePickerScreen
 from term_config_tui.services import zellij_config, zellij_theme_assets, zellij_themes
+from term_config_tui.services.runtime_detect import (
+    TerminalDetection,
+    detect_terminal,
+    detect_zellij_installed,
+)
 from term_config_tui.services.terminals import TerminalBackend
-from term_config_tui.services.terminals.alacritty import AlacrittyBackend
+from term_config_tui.services.terminals.registry import (
+    get_backend,
+    is_backend_available,
+)
 
 
 class TermConfigApp(App[None]):
@@ -53,14 +61,45 @@ class TermConfigApp(App[None]):
         paths: Paths | None = None,
         backend: TerminalBackend | None = None,
         backend_path: Path | None = None,
+        detection: TerminalDetection | None = None,
+        zellij_installed: bool | None = None,
     ) -> None:
         super().__init__()
         self.paths = paths or Paths.default()
-        # En Fase A, sin deteccion: hardcodea Alacritty. Tests pueden
-        # inyectar un backend distinto (ej. FakeBackend) o un path tmp
-        # para no tocar ~/.config/alacritty.
-        self.backend = backend or AlacrittyBackend()
-        self.backend_path = backend_path or self.backend.default_config_path()
+        self.detected_terminal = (
+            detection if detection is not None else detect_terminal()
+        )
+        self.zellij_installed = (
+            zellij_installed
+            if zellij_installed is not None
+            else detect_zellij_installed()
+        )
+
+        # Resolucion de backend:
+        # - Si el caller pasa `backend` explicito (caso tests), se usa
+        #   tal cual. Detection sigue corriendo y manda el menu, pero
+        #   el backend lo controla el caller.
+        # - Si no, se resuelve via registry segun deteccion. Si la
+        #   terminal es no soportada o estamos por SSH, no hay backend.
+        if backend is not None:
+            self.backend: TerminalBackend | None = backend
+            self.backend_path: Path | None = (
+                backend_path or backend.default_config_path()
+            )
+        else:
+            kind = self.detected_terminal.kind
+            if is_backend_available(kind) and not self.detected_terminal.via_ssh:
+                resolved = get_backend(kind)
+                assert resolved is not None  # is_backend_available lo garantiza
+                self.backend = resolved
+                self.backend_path = (
+                    backend_path or resolved.default_config_path()
+                )
+            else:
+                self.backend = None
+                self.backend_path = backend_path
+
+    # ---------- compose / mount ----------
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -71,17 +110,91 @@ class TermConfigApp(App[None]):
                 classes="menu-hint",
             )
             yield OptionList(
-                Option("Tema Zellij", id="themes"),
-                Option("Layouts Zellij", id="layouts"),
-                Option("Colores de terminal", id="colors"),
+                *self._build_menu_options(),
                 id="main-menu",
             )
         yield Footer()
 
+    def _build_menu_options(self) -> list[Option]:
+        # Bloque "Tema/Layouts Zellij" depende solo de zellij_installed.
+        zellij_suffix = "" if self.zellij_installed else "  (zellij no instalado)"
+        zellij_disabled = not self.zellij_installed
+
+        # Bloque "Colores de terminal" depende del backend disponible y
+        # de no estar por SSH; los dos bloques son independientes.
+        colors_suffix, colors_disabled = self._colors_option_state()
+
+        return [
+            Option(
+                f"Tema Zellij{zellij_suffix}",
+                id="themes",
+                disabled=zellij_disabled,
+            ),
+            Option(
+                f"Layouts Zellij{zellij_suffix}",
+                id="layouts",
+                disabled=zellij_disabled,
+            ),
+            Option(
+                f"Colores de terminal{colors_suffix}",
+                id="colors",
+                disabled=colors_disabled,
+            ),
+        ]
+
+    def _colors_option_state(self) -> tuple[str, bool]:
+        d = self.detected_terminal
+        if d.via_ssh:
+            return "  (SSH)", True
+        if d.invalid_override_value is not None:
+            return "  (override invalido)", True
+        if not is_backend_available(d.kind):
+            return "  (no soportada)", True
+        return "", False
+
     def on_mount(self) -> None:
+        self._notify_detection()
         self.register_zellij_themes()
         self.sync_theme_with_zellij()
         self.query_one("#main-menu", OptionList).focus()
+
+    def _notify_detection(self) -> None:
+        d = self.detected_terminal
+
+        if d.invalid_override_value is not None:
+            self.notify(
+                (
+                    f"Valor invalido para TERM_CONFIG_TUI_BACKEND: "
+                    f"'{d.invalid_override_value}'. "
+                    "Valores validos: auto, alacritty, kitty."
+                ),
+                severity="warning",
+                timeout=10,
+            )
+        elif d.via_ssh:
+            self.notify(
+                "Estas por SSH; la edicion de colores no aplica al cliente.",
+                severity="warning",
+                timeout=8,
+            )
+        elif not is_backend_available(d.kind):
+            self.notify(
+                (
+                    "Terminal no soportada para edicion de colores. "
+                    "Soportadas: Alacritty, Kitty."
+                ),
+                severity="warning",
+                timeout=8,
+            )
+
+        if not self.zellij_installed:
+            self.notify(
+                "Zellij no instalado: opciones de Zellij deshabilitadas.",
+                severity="warning",
+                timeout=8,
+            )
+
+    # ---------- temas Textual sincronizados con Zellij ----------
 
     def register_zellij_themes(self) -> None:
         """Registra como temas de Textual los built-in vendorizados y los
@@ -136,13 +249,23 @@ class TermConfigApp(App[None]):
             # puede haber cambiado (ej. user theme editado).
             self._watch_theme(target)
 
+    # ---------- handlers ----------
+
     @on(OptionList.OptionSelected, "#main-menu")
     def _on_menu_selected(self, event: OptionList.OptionSelected) -> None:
+        # Guard defensivo: si la opcion esta disabled, OptionList no
+        # deberia disparar este evento, pero por las dudas chequeamos.
+        if event.option.disabled:
+            return
         if event.option.id == "themes":
             self.push_screen(ThemePickerScreen(config_path=self.paths.zellij_config))
         elif event.option.id == "layouts":
             self.push_screen(LayoutListScreen(layouts_dir=self.paths.zellij_layouts_dir))
         elif event.option.id == "colors":
+            if self.backend is None or self.backend_path is None:
+                # No deberia pasar (la opcion estaria disabled), pero
+                # defendemos contra inconsistencias.
+                return
             self.push_screen(
                 ColorEditorScreen(
                     backend=self.backend,

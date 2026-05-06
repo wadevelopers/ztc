@@ -19,11 +19,28 @@ def test_default_paths_point_to_home():
     assert p.zellij_layouts_dir.name == "layouts"
 
 
-def test_default_backend_is_alacritty():
+def test_alacritty_detection_resolves_to_alacritty_backend():
+    """Si la deteccion devuelve kind='alacritty', el registry resuelve
+    AlacrittyBackend automaticamente (sin necesidad de pasarlo)."""
     from term_config_tui.app import TermConfigApp
+    from term_config_tui.services.runtime_detect import TerminalDetection
     from term_config_tui.services.terminals.alacritty import AlacrittyBackend
 
-    app = TermConfigApp()
+    detection = TerminalDetection(
+        kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
+    )
+    app = TermConfigApp(detection=detection, zellij_installed=True)
     assert isinstance(app.backend, AlacrittyBackend)
     assert app.backend.kind == "alacritty"
     assert "alacritty.toml" in str(app.backend_path)
+
+
+def test_unsupported_detection_yields_no_backend():
+    """Sin terminal soportada, el backend es None y el menu se desactiva."""
+    from term_config_tui.app import TermConfigApp
+    from term_config_tui.services.runtime_detect import TerminalDetection
+
+    detection = TerminalDetection(kind="unsupported", via_ssh=False, raw_marker=None)
+    app = TermConfigApp(detection=detection, zellij_installed=True)
+    assert app.backend is None
+    assert app.backend_path is None
