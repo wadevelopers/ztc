@@ -85,20 +85,22 @@ async def test_unsupported_terminal_disables_colors(tmp_path: Path) -> None:
         assert themes_disabled is False
 
 
-async def test_kitty_detected_but_no_backend_in_phase_b(tmp_path: Path) -> None:
-    """Mientras Fase C no aterrice, kitty detectada -> '(no soportada)'."""
+async def test_kitty_detection_resolves_kitty_backend(tmp_path: Path) -> None:
+    """Con Fase C aterrizada, kitty detectada -> habilitada y backend KittyBackend."""
+    from term_config_tui.services.terminals.kitty import KittyBackend
+
     app = TermConfigApp(
         paths=_paths(tmp_path),
+        backend_path=tmp_path / "kitty.conf",
         detection=TerminalDetection(
             kind="kitty", via_ssh=False, raw_marker="env:KITTY_PID"
         ),
         zellij_installed=True,
     )
     async with app.run_test():
-        colors_label, colors_disabled = _option_state(app, "colors")
-        assert colors_disabled is True
-        assert "no soportada" in colors_label
-        assert app.backend is None
+        _, colors_disabled = _option_state(app, "colors")
+        assert colors_disabled is False
+        assert isinstance(app.backend, KittyBackend)
 
 
 # ---------- SSH ----------

@@ -1,16 +1,18 @@
 """Registry de backends de terminal.
 
-En Fase A solo hay Alacritty. En fases siguientes se agregan kitty
-(Fase C) y eventualmente ghostty (Fase D futura).
+En Fase A solo hay Alacritty. Fase C agrega kitty. Ghostty queda
+diferido (Fase D futura).
 """
 
 from __future__ import annotations
 
 from term_config_tui.services.terminals import TerminalBackend
 from term_config_tui.services.terminals.alacritty import AlacrittyBackend
+from term_config_tui.services.terminals.kitty import KittyBackend
 
 _BACKENDS: dict[str, type[TerminalBackend]] = {
     "alacritty": AlacrittyBackend,
+    "kitty": KittyBackend,
 }
 
 
