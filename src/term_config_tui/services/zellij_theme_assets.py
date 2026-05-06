@@ -44,8 +44,6 @@ ASSETS_PACKAGE = "term_config_tui.assets.zellij_themes"
 # tanto al render del tema built-in como a sus clones y a la
 # sincronizacion con Alacritty (los slots legacy se derivan del rico).
 RICH_THEME_OVERRIDES: dict[str, dict[tuple[str, str], str]] = {
-    # ayu-light bundle trae text_unselected.base = #fcfcfc (casi blanco
-    # sobre bg claro -> ilegible). Patcheamos al fg legible del tema.
     "ayu-light": {("text_unselected", "base"): "#5c6166"},
 }
 
@@ -56,14 +54,28 @@ RICH_THEME_OVERRIDES: dict[str, dict[tuple[str, str], str]] = {
 # derivado da un valor pobre para el terminal. Estructura:
 # {tema: {slot_legacy: hex}}.
 LEGACY_THEME_OVERRIDES: dict[str, dict[str, str]] = {
-    # gruber-darker: ribbon_unselected.background = #282828 (correcto
-    # como bg de tabs inactivas de Zellij), pero deriva a legacy fg que
-    # va a primary.foreground en Alacritty. #282828 sobre #181818
-    # (primary.background) deja el texto del terminal casi invisible.
-    "gruber-darker": {"fg": "#696969"},
-    # tokyo-night-light: el fg derivado da poco contraste contra el bg
-    # claro en el terminal.
+    "gruber-darker": {
+        "fg": "#696969",
+        "blue": "#424986",
+        "yellow": "#ffdd33",
+        "magenta": "#65517b",
+    },
     "tokyo-night-light": {"fg": "#64709f"},
+    "molokai-dark": {"blue": "#3465a4"},
+    "ayu-light": {"blue": "#b5daf5"},
+    "ayu-mirage": {"blue": "#409fff"},
+    "catppuccin-latte": {"blue": "#aac3fb"},
+    "dayfox": {"blue": "#93a3d4"},
+    "iceberg-dark": {"blue": "#637794", "green": "#b4be82"},
+    "vesper": {"blue": "#81789a"},
+    "tokyo-night-dark": {"blue": "#383e5a"},
+    "retro-wave": {"blue": "#5b78b9"},
+    "terafox": {"blue": "#487588"},
+    "everforest-dark": {"blue": "#2d3f48"},
+    "everforest-light": {"blue": "#b1cbc0"},
+    "ayu-dark": {"blue": "#2c6080"},
+    "blade-runner": {"blue": "#155e7a"},
+    "iceberg-light": {"blue": "#8197c5", "green": "#668e3d"},
 }
 
 # Componentes UI relevantes para el mapping a Textual.
