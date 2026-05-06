@@ -481,7 +481,7 @@ class EditColorModal(ModalScreen[str | None]):
         self.dismiss(None)
 
     def _refresh(self) -> None:
-        from term_config_tui.services.alacritty import is_valid_hex, normalize_hex
+        from term_config_tui.services.colors import is_valid_hex, normalize_hex
 
         value = self.query_one("#hex-input", Input).value.strip()
         valid = is_valid_hex(value)
@@ -497,7 +497,7 @@ class EditColorModal(ModalScreen[str | None]):
             status.update("Formato invalido")
 
     def _submit(self) -> None:
-        from term_config_tui.services.alacritty import is_valid_hex, normalize_hex
+        from term_config_tui.services.colors import is_valid_hex, normalize_hex
 
         value = self.query_one("#hex-input", Input).value.strip()
         if not is_valid_hex(value):

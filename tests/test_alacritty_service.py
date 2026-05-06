@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import tomlkit
 
-from term_config_tui.services import alacritty, toml_io
+from term_config_tui.services import alacritty, colors, toml_io
 
 FIX = Path(__file__).parent / "fixtures" / "alacritty"
 
@@ -116,22 +116,31 @@ def test_add_import_creates_array_and_dedupes() -> None:
     ]
 
 
+def _slots_from_doc(doc: tomlkit.TOMLDocument) -> dict[tuple[str, str], str]:
+    return {
+        (g, n): v
+        for g, n in alacritty.KNOWN_SLOTS
+        for v in [alacritty.read_slot(doc, g, n)]
+        if v is not None
+    }
+
+
 def test_contrast_ratio_known_values() -> None:
     # blanco vs negro = 21
-    assert round(alacritty.contrast_ratio("#ffffff", "#000000") or 0, 1) == 21.0
+    assert round(colors.contrast_ratio("#ffffff", "#000000") or 0, 1) == 21.0
     # mismo color = 1
-    assert round(alacritty.contrast_ratio("#abcdef", "#abcdef") or 0, 2) == 1.0
+    assert round(colors.contrast_ratio("#abcdef", "#abcdef") or 0, 2) == 1.0
 
 
 def test_contrast_ratio_invalid_returns_none() -> None:
-    assert alacritty.contrast_ratio("nope", "#000") is None
+    assert colors.contrast_ratio("nope", "#000") is None
 
 
 def test_compute_warnings_flags_low_fg_bg_contrast() -> None:
     doc = tomlkit.document()
     alacritty.write_slot(doc, "primary", "background", "#1e1e2e")
     alacritty.write_slot(doc, "primary", "foreground", "#222222")
-    warns = alacritty.compute_warnings(doc)
+    warns = colors.compute_warnings(_slots_from_doc(doc))
     assert any("foreground" in w.message for w in warns)
 
 
@@ -140,7 +149,7 @@ def test_compute_warnings_flags_bg_close_to_black() -> None:
     alacritty.write_slot(doc, "primary", "background", "#101010")
     alacritty.write_slot(doc, "primary", "foreground", "#ffffff")
     alacritty.write_slot(doc, "normal", "black", "#0e0e0e")
-    warns = alacritty.compute_warnings(doc)
+    warns = colors.compute_warnings(_slots_from_doc(doc))
     assert any("normal.black" in w.message for w in warns)
 
 
@@ -148,7 +157,7 @@ def test_compute_warnings_flags_zellij_bg_clash() -> None:
     doc = tomlkit.document()
     alacritty.write_slot(doc, "primary", "background", "#1e1e2e")
     alacritty.write_slot(doc, "primary", "foreground", "#ffffff")
-    warns = alacritty.compute_warnings(doc, zellij_bg="#1f1f30")
+    warns = colors.compute_warnings(_slots_from_doc(doc), zellij_bg="#1f1f30")
     assert any("zellij" in w.message.lower() for w in warns)
 
 
@@ -159,4 +168,4 @@ def test_compute_warnings_clean_when_high_contrast() -> None:
     alacritty.write_slot(doc, "normal", "black", "#aaaaaa")
     alacritty.write_slot(doc, "selection", "background", "#888888")
     alacritty.write_slot(doc, "cursor", "cursor", "#ffaa00")
-    assert alacritty.compute_warnings(doc) == []
+    assert colors.compute_warnings(_slots_from_doc(doc)) == []

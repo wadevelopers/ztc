@@ -10,7 +10,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
-from term_config_tui.services import alacritty, toml_io, zellij_config, zellij_themes
+from term_config_tui.services import alacritty, colors, toml_io, zellij_config, zellij_themes
 from term_config_tui.widgets.confirm import EditColorModal, PromptModal
 
 
@@ -127,7 +127,7 @@ class AlacrittyColorEditorScreen(Screen[None]):
 
     def _format_row(self, group: str, name: str, value: str) -> str:
         slot_label = f"{group}.{name}".ljust(22)
-        swatch = f"[on {value}]      [/]" if alacritty.is_valid_hex(value) else "      "
+        swatch = f"[on {value}]      [/]" if colors.is_valid_hex(value) else "      "
         return f"{slot_label} {value:<10} {swatch}"
 
     def _show_detail_at(self, index: int | None) -> None:
@@ -139,7 +139,7 @@ class AlacrittyColorEditorScreen(Screen[None]):
         swatch_widget = self.query_one("#big-swatch", Static)
         meta_widget = self.query_one("#detail-meta", Static)
         name_widget.update(f"{group}.{name}")
-        if value and alacritty.is_valid_hex(value):
+        if value and colors.is_valid_hex(value):
             big = "\n".join(
                 [f"[on {value}]                                                  [/]"] * 3
             )
@@ -159,11 +159,17 @@ class AlacrittyColorEditorScreen(Screen[None]):
             for theme in user_themes:
                 if theme.name == active:
                     for color in theme.colors:
-                        if color.name == "bg" and alacritty.is_valid_hex(color.value):
+                        if color.name == "bg" and colors.is_valid_hex(color.value):
                             zellij_bg = color.value
                             break
                     break
-        warnings = alacritty.compute_warnings(self.doc, zellij_bg=zellij_bg)
+        slots = {
+            (group, name): value
+            for group, name in alacritty.KNOWN_SLOTS
+            for value in [alacritty.read_slot(self.doc, group, name)]
+            if value is not None
+        }
+        warnings = colors.compute_warnings(slots, zellij_bg=zellij_bg)
         widget = self.query_one("#warnings", Static)
         if not warnings:
             widget.update("[green]Sin avisos.[/]")
