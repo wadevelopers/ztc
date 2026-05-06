@@ -245,3 +245,72 @@ async def test_colors_opens_editor_when_enabled(tmp_path: Path) -> None:
         await pilot.press("down", "down", "enter")
         await pilot.pause()
         assert isinstance(app.screen, ColorEditorScreen)
+
+
+# ---------- E2E con Kitty: deteccion -> editor -> edit -> save ----------
+
+
+async def test_e2e_kitty_detection_writes_to_real_kitty_conf(tmp_path: Path) -> None:
+    """Simula correr el TUI desde Kitty, abrir el editor, modificar un
+    slot y guardar. El archivo en disco debe reflejar el cambio en el
+    formato propio de kitty (`key value`, no TOML).
+
+    Cubre el camino completo: deteccion -> registry -> ColorEditorScreen
+    -> KittyBackend.read_slot -> write_slot -> save.
+    """
+    from term_config_tui.services.terminals.kitty import KittyBackend
+
+    # Setup: kitty.conf con un tema incluido + override propio del main.
+    theme = tmp_path / "tokyo.conf"
+    theme.write_text(
+        "background #1a1b26\nforeground #c0caf5\ncolor1 #f7768e\n",
+        encoding="utf-8",
+    )
+    main = tmp_path / "kitty.conf"
+    main.write_text(
+        "include tokyo.conf\nfont_size 12.0\n", encoding="utf-8"
+    )
+
+    app = TermConfigApp(
+        paths=_paths(tmp_path),
+        backend_path=main,
+        detection=TerminalDetection(
+            kind="kitty", via_ssh=False, raw_marker="env:KITTY_PID"
+        ),
+        zellij_installed=True,
+    )
+    async with app.run_test() as pilot:
+        # El registry resolvio KittyBackend.
+        assert isinstance(app.backend, KittyBackend)
+
+        # Abrir el editor: 3a opcion del menu.
+        await pilot.press("down", "down", "enter")
+        await pilot.pause()
+        assert isinstance(app.screen, ColorEditorScreen)
+
+        # El editor lee los slots desde el include de tokyo.
+        editor = app.screen
+        assert editor.backend.read_slot(
+            editor.doc, ("primary", "background")
+        ) == "#1a1b26"
+        assert editor.backend.read_slot(
+            editor.doc, ("normal", "red")
+        ) == "#f7768e"
+
+        # Modificar normal.red en el doc y guardar.
+        editor.backend.write_slot(editor.doc, ("normal", "red"), "#deadbe")
+        editor.action_save()
+        await pilot.pause()
+
+        # El archivo del main refleja el cambio (formato kitty,
+        # last-wins por append al final).
+        text = main.read_text(encoding="utf-8")
+        assert "color1 #deadbe" in text
+        # El include sigue intacto.
+        assert "color1 #f7768e" in theme.read_text(encoding="utf-8")
+        # No-colors del main preservados.
+        assert "include tokyo.conf" in text
+        assert "font_size 12.0" in text
+        # El backup se creo (porque el archivo existia).
+        backups = list(tmp_path.glob("kitty.conf.bak.*"))
+        assert backups

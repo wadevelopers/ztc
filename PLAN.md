@@ -2,17 +2,27 @@
 
 TUI en Python para configurar y administrar mi setup de terminal:
 
-- Alacritty
+- Alacritty / Kitty (colores)
 - Zellij layouts
 - Zellij themes
 - Zellij sessions
 
-La idea principal es no tener que recordar sintaxis KDL/TOML ni comandos de sesion de Zellij para tareas comunes.
+La idea principal es no tener que recordar sintaxis KDL/TOML/conf ni
+comandos de sesion de Zellij para tareas comunes.
 
 El plan prioriza dos necesidades:
 
 1. El TUI tambien debe servir para **ver, abrir, cerrar, borrar y recrear sesiones de Zellij**.
 2. La escritura de archivos debe ser conservadora: preservar lo posible y no destruir configuracion que el TUI todavia no edita.
+
+> **Nota arquitectura multi-terminal (2026-05):** la app paso de
+> "solo Alacritty" a una abstraccion `TerminalBackend` con deteccion
+> en runtime. Hoy soporta Alacritty y Kitty; Ghostty queda diferida.
+> La spec viva de esa arquitectura esta en
+> [`PLAN_MULTI_TERMINAL.md`](PLAN_MULTI_TERMINAL.md). Las secciones
+> de este documento que mencionan "Alacritty" como unico target son
+> historicas — el codigo actual usa el backend resuelto por el
+> registry segun la deteccion.
 
 ---
 
