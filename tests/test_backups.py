@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from term_config_tui.services import backups
+from ztc.services import backups
 
 
 def test_backup_path_uses_timestamp(tmp_path: Path) -> None:

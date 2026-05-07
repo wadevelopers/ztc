@@ -11,14 +11,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from term_config_tui.services import zellij_themes
+from ztc.services import zellij_themes
 from zellij_themes import theme_assets as zta
 from zellij_themes.colors import (
     CanonicalSlot,
     is_valid_hex,
     normalize_hex,
 )
-from term_config_tui.services.terminals import TerminalBackend
+from ztc.services.terminals import TerminalBackend
 
 # Mapping 1:1 entre los 10 slots de la Paleta ANSI y los slots
 # canonicos. fg/bg -> primary, los 8 ANSI -> normal.

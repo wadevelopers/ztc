@@ -7,7 +7,7 @@ import pytest
 import tomlkit
 
 from zellij_themes import colors
-from term_config_tui.services.terminals.alacritty import (
+from ztc.services.terminals.alacritty import (
     KNOWN_SLOTS,
     AlacrittyBackend,
 )

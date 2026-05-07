@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING
 import kdl
 
 from zellij_themes.models import ZellijColor, ZellijTheme
-from term_config_tui.services.atomic import write_atomic
-from term_config_tui.services.backups import make_backup
+from ztc.services.atomic import write_atomic
+from ztc.services.backups import make_backup
 
 if TYPE_CHECKING:
-    from term_config_tui.services.terminals import TerminalBackend
+    from ztc.services.terminals import TerminalBackend
 
 # Slots de la "Paleta ANSI": fg/bg + 8 colores normales. Mapean 1:1 con
 # Alacritty (primary.{foreground,background} + normal.{8 ANSI}). No
@@ -45,7 +45,7 @@ _EXCLUDED_BUILTINS = frozenset({"ansi"})
 
 def builtin_theme_names() -> tuple[str, ...]:
     """Nombres de los temas built-in de Zellij, derivados de los .kdl
-    vendorizados en src/term_config_tui/assets/zellij_themes/.
+    vendorizados en src/ztc/assets/zellij_themes/.
 
     Excluye 'ansi' (formato palette-index, sin RGB).
     """
@@ -470,7 +470,7 @@ def _read_terminal_legacy_slots(
     de la terminal, invirtiendo el mapping de theme_sync."""
     from zellij_themes.colors import is_valid_hex, normalize_hex
 
-    from term_config_tui.services.theme_sync import _LEGACY_TO_CANONICAL
+    from ztc.services.theme_sync import _LEGACY_TO_CANONICAL
 
     doc = backend.load(backend_path)
     out: dict[str, str] = {}
@@ -595,7 +595,7 @@ def unset_rich_slot(theme: ZellijTheme, component: str, slot: str) -> None:
 
 def read_active_theme(config_path: Path) -> str | None:
     """Atajo a zellij_config.read_active_theme para evitar import cruzado."""
-    from term_config_tui.services import zellij_config
+    from ztc.services import zellij_config
 
     return zellij_config.read_active_theme(config_path)
 

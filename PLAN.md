@@ -1,4 +1,4 @@
-# term-config-tui — Plan
+# ztc — Plan
 
 TUI en Python para configurar y administrar mi setup de terminal:
 
@@ -456,8 +456,8 @@ Antes de guardar:
 ### Fase 0 — Setup del proyecto
 
 - `pyproject.toml`.
-- Paquete `src/term_config_tui`.
-- Comando `term-config-tui`.
+- Paquete `src/ztc`.
+- Comando `ztc`.
 - App Textual minima.
 - Tests base.
 - Servicios vacios para config, layouts y sesiones.
@@ -529,12 +529,12 @@ Esta fase resuelve el problema practico de no saber que sesiones estan abiertas 
 ## Estructura del proyecto
 
 ```text
-~/Documents/term-config-tui/
+~/Documents/ztc/
 |-- PLAN.md
 |-- pyproject.toml
 |-- README.md
 |-- src/
-|   `-- term_config_tui/
+|   `-- ztc/
 |       |-- __init__.py
 |       |-- __main__.py
 |       |-- app.py

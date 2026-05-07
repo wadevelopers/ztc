@@ -11,9 +11,9 @@ from textual.widgets import Footer, Header, OptionList, Static, Tree
 from textual.widgets.option_list import Option
 from textual.widgets.tree import TreeNode
 
-from term_config_tui.models.layout import Layout, Pane, Tab
-from term_config_tui.services import kdl_io, layout_ops
-from term_config_tui.widgets.confirm import (
+from ztc.models.layout import Layout, Pane, Tab
+from ztc.services import kdl_io, layout_ops
+from ztc.widgets.confirm import (
     ConfirmByNameModal,
     PaneEditModal,
     PromptModal,

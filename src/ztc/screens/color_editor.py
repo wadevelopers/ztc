@@ -12,10 +12,10 @@ from textual.widgets.option_list import Option
 
 from zellij_themes import colors
 
-from term_config_tui.services import zellij_config, zellij_themes
-from term_config_tui.services.terminals import TerminalBackend
-from term_config_tui.services.terminals.alacritty import AlacrittyBackend
-from term_config_tui.widgets.confirm import EditColorModal, PromptModal
+from ztc.services import zellij_config, zellij_themes
+from ztc.services.terminals import TerminalBackend
+from ztc.services.terminals.alacritty import AlacrittyBackend
+from ztc.widgets.confirm import EditColorModal, PromptModal
 
 
 class ColorEditorScreen(Screen[None]):
@@ -321,7 +321,7 @@ class ColorEditorScreen(Screen[None]):
         if not self.dirty:
             self.app.pop_screen()
             return
-        from term_config_tui.widgets.confirm import ConfirmByNameModal
+        from ztc.widgets.confirm import ConfirmByNameModal
 
         def after(ok: bool) -> None:
             if ok:

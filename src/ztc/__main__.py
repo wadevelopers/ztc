@@ -1,4 +1,4 @@
-from term_config_tui.app import TermConfigApp
+from ztc.app import TermConfigApp
 
 
 def main() -> None:

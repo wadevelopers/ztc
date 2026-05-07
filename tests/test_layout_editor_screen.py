@@ -5,14 +5,14 @@ from pathlib import Path
 
 from textual.widgets import OptionList, Tree
 
-from term_config_tui.app import TermConfigApp
-from term_config_tui.models.config import Paths
-from term_config_tui.screens.layout_editor import LayoutEditorScreen
-from term_config_tui.screens.layout_list import LayoutListScreen
-from term_config_tui.services import kdl_io
-from term_config_tui.services.runtime_detect import TerminalDetection
-from term_config_tui.services.terminals.alacritty import AlacrittyBackend
-from term_config_tui.widgets.confirm import (
+from ztc.app import TermConfigApp
+from ztc.models.config import Paths
+from ztc.screens.layout_editor import LayoutEditorScreen
+from ztc.screens.layout_list import LayoutListScreen
+from ztc.services import kdl_io
+from ztc.services.runtime_detect import TerminalDetection
+from ztc.services.terminals.alacritty import AlacrittyBackend
+from ztc.widgets.confirm import (
     ConfirmByNameModal,
     PaneEditModal,
 )

@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from term_config_tui.services import toml_io
+from ztc.services import toml_io
 
 FIX = Path(__file__).parent / "fixtures" / "alacritty"
 

@@ -6,9 +6,9 @@ diferido (Fase D futura).
 
 from __future__ import annotations
 
-from term_config_tui.services.terminals import TerminalBackend
-from term_config_tui.services.terminals.alacritty import AlacrittyBackend
-from term_config_tui.services.terminals.kitty import KittyBackend
+from ztc.services.terminals import TerminalBackend
+from ztc.services.terminals.alacritty import AlacrittyBackend
+from ztc.services.terminals.kitty import KittyBackend
 
 _BACKENDS: dict[str, type[TerminalBackend]] = {
     "alacritty": AlacrittyBackend,

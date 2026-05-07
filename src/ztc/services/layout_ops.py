@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from term_config_tui.models.layout import Layout, Pane, SplitDirection, Tab
+from ztc.models.layout import Layout, Pane, SplitDirection, Tab
 
 _VALID_NAME = re.compile(r"^[A-Za-z0-9_\-]+$")
 

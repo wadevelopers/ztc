@@ -36,8 +36,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from term_config_tui.services.atomic import write_atomic
-from term_config_tui.services.backups import make_backup
+from ztc.services.atomic import write_atomic
+from ztc.services.backups import make_backup
 from zellij_themes.colors import CanonicalSlot
 
 # Profundidad maxima para expandir `include`. Evita loops por

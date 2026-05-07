@@ -810,38 +810,6 @@ wheels = [
 ]
 
 [[package]]
-name = "term-config-tui"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "kdl-py" },
-    { name = "textual" },
-    { name = "tomlkit" },
-    { name = "zellij-themes" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-    { name = "textual-dev" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "kdl-py", specifier = ">=1.2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
-    { name = "textual", specifier = ">=0.80" },
-    { name = "textual-dev", marker = "extra == 'dev'", specifier = ">=1.6" },
-    { name = "tomlkit", specifier = ">=0.13" },
-    { name = "zellij-themes", editable = "../zellij-themes" },
-]
-provides-extras = ["dev"]
-
-[[package]]
 name = "textual"
 version = "8.2.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1055,5 +1023,37 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "textual", specifier = ">=0.80" },
+]
+provides-extras = ["dev"]
+
+[[package]]
+name = "ztc"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "kdl-py" },
+    { name = "textual" },
+    { name = "tomlkit" },
+    { name = "zellij-themes" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+    { name = "textual-dev" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "kdl-py", specifier = ">=1.2" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
+    { name = "textual", specifier = ">=0.80" },
+    { name = "textual-dev", marker = "extra == 'dev'", specifier = ">=1.6" },
+    { name = "tomlkit", specifier = ">=0.13" },
+    { name = "zellij-themes", editable = "../zellij-themes" },
 ]
 provides-extras = ["dev"]

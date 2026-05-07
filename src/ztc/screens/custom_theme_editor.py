@@ -11,8 +11,8 @@ from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from zellij_themes.models import ZellijColor, ZellijTheme
-from term_config_tui.services import theme_sync, zellij_config, zellij_themes
-from term_config_tui.widgets.confirm import (
+from ztc.services import theme_sync, zellij_config, zellij_themes
+from ztc.widgets.confirm import (
     ConfirmByNameModal,
     EditColorModal,
 )

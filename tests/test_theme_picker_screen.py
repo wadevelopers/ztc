@@ -5,11 +5,11 @@ from pathlib import Path
 
 from textual.widgets import OptionList
 
-from term_config_tui.app import TermConfigApp
-from term_config_tui.models.config import Paths
-from term_config_tui.screens.theme_editor import ThemePickerScreen
-from term_config_tui.services.runtime_detect import TerminalDetection
-from term_config_tui.services.terminals.alacritty import AlacrittyBackend
+from ztc.app import TermConfigApp
+from ztc.models.config import Paths
+from ztc.screens.theme_editor import ThemePickerScreen
+from ztc.services.runtime_detect import TerminalDetection
+from ztc.services.terminals.alacritty import AlacrittyBackend
 
 FIX = Path(__file__).parent / "fixtures" / "zellij"
 

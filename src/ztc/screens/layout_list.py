@@ -10,9 +10,9 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
-from term_config_tui.models.layout import Layout
-from term_config_tui.services import kdl_io, layout_ops, zellij_config
-from term_config_tui.widgets.confirm import ConfirmByNameModal, PromptModal
+from ztc.models.layout import Layout
+from ztc.services import kdl_io, layout_ops, zellij_config
+from ztc.widgets.confirm import ConfirmByNameModal, PromptModal
 
 
 class LayoutListScreen(Screen[None]):
@@ -136,7 +136,7 @@ class LayoutListScreen(Screen[None]):
         layout = self._highlighted()
         if layout is None:
             return
-        from term_config_tui.screens.layout_editor import LayoutEditorScreen
+        from ztc.screens.layout_editor import LayoutEditorScreen
 
         self.app.push_screen(LayoutEditorScreen(layout=layout, layouts_dir=self.layouts_dir))
 
@@ -160,7 +160,7 @@ class LayoutListScreen(Screen[None]):
             layout = layout_ops.new_blank_layout(self.layouts_dir, name)
             kdl_io.write_layout(layout, backup=False)
             self.action_refresh()
-            from term_config_tui.screens.layout_editor import LayoutEditorScreen
+            from ztc.screens.layout_editor import LayoutEditorScreen
 
             self.app.push_screen(
                 LayoutEditorScreen(layout=layout, layouts_dir=self.layouts_dir)

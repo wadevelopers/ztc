@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from term_config_tui.services.runtime_detect import detect_terminal
+from ztc.services.runtime_detect import detect_terminal
 
 
 def test_detect_alacritty_via_window_id() -> None:

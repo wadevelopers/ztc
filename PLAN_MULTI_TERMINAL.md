@@ -80,7 +80,7 @@ Acoplamiento a Alacritty (todo lo que toca el nombre):
 | `screens/color_editor.py` | Usa `alacritty.KNOWN_SLOTS`, `read_slot`, `write_slot`, `compute_warnings`, etc. | Importa el módulo crudo |
 | `screens/theme_editor.py:248-256, 380-388` | `theme_sync.sync_alacritty_with_zellij_theme(alacritty_path=...)` | 2 call sites |
 | `screens/custom_theme_editor.py:316-323` | Idem | 1 call site |
-| `widgets/confirm.py:484, 500` | `from term_config_tui.services.alacritty import is_valid_hex, normalize_hex` | 2 imports |
+| `widgets/confirm.py:484, 500` | `from ztc.services.alacritty import is_valid_hex, normalize_hex` | 2 imports |
 | Tests | `test_alacritty_service.py`, `test_alacritty_toml.py`, `test_theme_sync.py`, `test_smoke.py`, `test_theme_picker_screen.py`, `test_custom_theme_editor_screen.py` (estos 3 últimos usan `Paths.alacritty_config` en fixtures) | Cobertura buena |
 
 Insight clave: Alacritty y Kitty comparten el mismo **vocabulario de
@@ -223,8 +223,8 @@ Cambios:
   `alacritty_path`. La lógica de overlay sigue igual pero lee vía la
   interfaz.
 - Refactor `widgets/confirm.py:484, 500`: imports cambian de
-  `from term_config_tui.services.alacritty import ...` a
-  `from term_config_tui.services.colors import ...`.
+  `from ztc.services.alacritty import ...` a
+  `from ztc.services.colors import ...`.
 - Refactor `screens/color_editor.py`: recibe `backend` + `path`.
   Renombrar a `ColorEditorScreen`. Toda llamada
   `alacritty.read_slot(...)` → `self.backend.read_slot(...)`.

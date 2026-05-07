@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from term_config_tui.services import zellij_config
+from ztc.services import zellij_config
 
 FIX = Path(__file__).parent / "fixtures" / "zellij"
 

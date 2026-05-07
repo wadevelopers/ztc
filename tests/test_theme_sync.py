@@ -3,8 +3,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from term_config_tui.services import theme_sync
-from term_config_tui.services.terminals.alacritty import AlacrittyBackend
+from ztc.services import theme_sync
+from ztc.services.terminals.alacritty import AlacrittyBackend
 
 ALA_FIX = Path(__file__).parent / "fixtures" / "alacritty"
 

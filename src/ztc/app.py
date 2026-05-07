@@ -9,21 +9,21 @@ from textual.containers import Vertical
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
-from term_config_tui import __version__
-from term_config_tui.models.config import Paths
-from term_config_tui.screens.color_editor import ColorEditorScreen
-from term_config_tui.screens.layout_list import LayoutListScreen
-from term_config_tui.screens.theme_editor import ThemePickerScreen
+from ztc import __version__
+from ztc.models.config import Paths
+from ztc.screens.color_editor import ColorEditorScreen
+from ztc.screens.layout_list import LayoutListScreen
+from ztc.screens.theme_editor import ThemePickerScreen
 from zellij_themes import theme_assets as zellij_theme_assets
 
-from term_config_tui.services import zellij_config, zellij_themes
-from term_config_tui.services.runtime_detect import (
+from ztc.services import zellij_config, zellij_themes
+from ztc.services.runtime_detect import (
     TerminalDetection,
     detect_terminal,
     detect_zellij_installed,
 )
-from term_config_tui.services.terminals import TerminalBackend
-from term_config_tui.services.terminals.registry import (
+from ztc.services.terminals import TerminalBackend
+from ztc.services.terminals.registry import (
     get_backend,
     is_backend_available,
 )

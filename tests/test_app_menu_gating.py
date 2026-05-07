@@ -15,10 +15,10 @@ from pathlib import Path
 
 from textual.widgets import OptionList
 
-from term_config_tui.app import TermConfigApp
-from term_config_tui.models.config import Paths
-from term_config_tui.screens.color_editor import ColorEditorScreen
-from term_config_tui.services.runtime_detect import TerminalDetection
+from ztc.app import TermConfigApp
+from ztc.models.config import Paths
+from ztc.screens.color_editor import ColorEditorScreen
+from ztc.services.runtime_detect import TerminalDetection
 
 
 def _paths(tmp_path: Path) -> Paths:
@@ -87,7 +87,7 @@ async def test_unsupported_terminal_disables_colors(tmp_path: Path) -> None:
 
 async def test_kitty_detection_resolves_kitty_backend(tmp_path: Path) -> None:
     """Con Fase C aterrizada, kitty detectada -> habilitada y backend KittyBackend."""
-    from term_config_tui.services.terminals.kitty import KittyBackend
+    from ztc.services.terminals.kitty import KittyBackend
 
     app = TermConfigApp(
         paths=_paths(tmp_path),
@@ -173,7 +173,7 @@ async def test_override_invalid_value_disables_colors(tmp_path: Path) -> None:
 
 async def test_override_valid_alacritty_resolves_backend(tmp_path: Path) -> None:
     """Override valido habilita la opcion y resuelve el backend."""
-    from term_config_tui.services.terminals.alacritty import AlacrittyBackend
+    from ztc.services.terminals.alacritty import AlacrittyBackend
 
     app = TermConfigApp(
         paths=_paths(tmp_path),
@@ -229,7 +229,7 @@ async def test_selecting_disabled_colors_does_nothing(tmp_path: Path) -> None:
 
 
 async def test_colors_opens_editor_when_enabled(tmp_path: Path) -> None:
-    from term_config_tui.services.terminals.alacritty import AlacrittyBackend
+    from ztc.services.terminals.alacritty import AlacrittyBackend
 
     app = TermConfigApp(
         paths=_paths(tmp_path),
@@ -258,7 +258,7 @@ async def test_e2e_kitty_detection_writes_to_real_kitty_conf(tmp_path: Path) -> 
     Cubre el camino completo: deteccion -> registry -> ColorEditorScreen
     -> KittyBackend.read_slot -> write_slot -> save.
     """
-    from term_config_tui.services.terminals.kitty import KittyBackend
+    from ztc.services.terminals.kitty import KittyBackend
 
     # Setup: kitty.conf con un tema incluido + override propio del main.
     theme = tmp_path / "tokyo.conf"

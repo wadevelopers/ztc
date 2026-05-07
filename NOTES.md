@@ -1,4 +1,4 @@
-# NOTES — cosas a saber al usar term-config-tui
+# NOTES — cosas a saber al usar ztc
 
 Notas operativas que no son obvias mirando solo el codigo. Conviene leerlas
 antes de la primera vez para no llevarte sorpresas.
@@ -145,7 +145,7 @@ Es el dato crudo del .kdl tal cual. No hay heuristica oculta.
 ### Lista de built-in en el picker
 
 `BUILTIN_THEMES` no es una lista hardcodeada: se deriva en runtime de
-los archivos `.kdl` vendorizados en `src/term_config_tui/assets/zellij_themes/`.
+los archivos `.kdl` vendorizados en `src/ztc/assets/zellij_themes/`.
 Hoy son **40 temas** (los 41 del repo de Zellij menos `ansi`, que usa
 indices de paleta del terminal en vez de RGB y no podemos construir un
 Textual Theme desde el).
@@ -197,7 +197,7 @@ habitual `alacritty.toml.bak.YYYYMMDD-HHMMSS`.
 Al arrancar, el TUI:
 
 1. Carga los 41 temas built-in de Zellij vendorizados en
-   `src/term_config_tui/assets/zellij_themes/` (descargados del repo
+   `src/ztc/assets/zellij_themes/` (descargados del repo
    oficial, MIT).
 2. Construye un Textual `Theme` desde cada uno, mapeando los slots
    del formato nuevo (`text_unselected.background`, `ribbon_selected.
@@ -397,7 +397,7 @@ medio escrito. O queda el original intacto, o queda el nuevo completo.
 
 ```bash
 # Lanzar el TUI
-uv run term-config-tui
+uv run ztc
 
 # Tests
 uv run pytest
@@ -405,7 +405,7 @@ uv run pytest
 # Lint
 uv run ruff check .
 
-# Instalar como CLI global (binario en ~/.local/bin/term-config-tui)
+# Instalar como CLI global (binario en ~/.local/bin/ztc)
 uv tool install .
 # o sin uv:
 pipx install .

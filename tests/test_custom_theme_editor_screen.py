@@ -4,14 +4,14 @@ from pathlib import Path
 
 from textual.widgets import OptionList
 
-from term_config_tui.app import TermConfigApp
-from term_config_tui.models.config import Paths
-from term_config_tui.screens.custom_theme_editor import CustomThemeEditorScreen
-from term_config_tui.screens.theme_editor import ThemePickerScreen
-from term_config_tui.services import zellij_themes
-from term_config_tui.services.runtime_detect import TerminalDetection
-from term_config_tui.services.terminals.alacritty import AlacrittyBackend
-from term_config_tui.widgets.confirm import (
+from ztc.app import TermConfigApp
+from ztc.models.config import Paths
+from ztc.screens.custom_theme_editor import CustomThemeEditorScreen
+from ztc.screens.theme_editor import ThemePickerScreen
+from ztc.services import zellij_themes
+from ztc.services.runtime_detect import TerminalDetection
+from ztc.services.terminals.alacritty import AlacrittyBackend
+from ztc.widgets.confirm import (
     ConfirmByNameModal,
     PromptModal,
 )

@@ -13,7 +13,7 @@ import tomlkit
 from tomlkit.items import Array
 from tomlkit.toml_document import TOMLDocument
 
-from term_config_tui.services import toml_io
+from ztc.services import toml_io
 from zellij_themes.colors import (
     CanonicalSlot,
     is_valid_hex,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from term_config_tui.services import zellij_themes
+from ztc.services import zellij_themes
 
 FIX = Path(__file__).parent / "fixtures" / "zellij"
 

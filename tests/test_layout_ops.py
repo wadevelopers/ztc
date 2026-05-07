@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from term_config_tui.models.layout import Layout, Pane, Tab
-from term_config_tui.services import layout_ops
+from ztc.models.layout import Layout, Pane, Tab
+from ztc.services import layout_ops
 
 
 def _layout_with_two_panes() -> Layout:

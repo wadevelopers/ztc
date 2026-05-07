@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from term_config_tui.services.terminals.kitty import (
+from ztc.services.terminals.kitty import (
     KNOWN_SLOTS,
     KittyBackend,
 )
@@ -517,14 +517,14 @@ def test_default_config_path_fallback_home(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_registry_resolves_kitty_backend() -> None:
-    from term_config_tui.services.terminals.registry import (
+    from ztc.services.terminals.registry import (
         get_backend,
         is_backend_available,
     )
 
     assert is_backend_available("kitty") is True
     assert "kitty" in __import__(
-        "term_config_tui.services.terminals.registry", fromlist=["available_kinds"]
+        "ztc.services.terminals.registry", fromlist=["available_kinds"]
     ).available_kinds()
     backend = get_backend("kitty")
     assert isinstance(backend, KittyBackend)

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from term_config_tui.models.layout import Layout, Pane, Tab
-from term_config_tui.services import kdl_io
+from ztc.models.layout import Layout, Pane, Tab
+from ztc.services import kdl_io
 
 FIX = Path(__file__).parent / "fixtures" / "zellij"
 

@@ -13,8 +13,8 @@ from textual.widgets.option_list import Option
 from zellij_themes import theme_assets as zellij_theme_assets
 from zellij_themes.models import ZellijTheme
 
-from term_config_tui.services import theme_sync, zellij_config, zellij_themes
-from term_config_tui.widgets.confirm import ConfirmByNameModal, PromptModal
+from ztc.services import theme_sync, zellij_config, zellij_themes
+from ztc.widgets.confirm import ConfirmByNameModal, PromptModal
 
 _HEADER_PREFIX = "header:"
 
@@ -322,7 +322,7 @@ class ThemePickerScreen(Screen[None]):
                 )
                 return
             from zellij_themes.models import ZellijTheme as _ZT
-            from term_config_tui.screens.custom_theme_editor import CustomThemeEditorScreen
+            from ztc.screens.custom_theme_editor import CustomThemeEditorScreen
 
             new_theme = _ZT(
                 name=name,
@@ -355,7 +355,7 @@ class ThemePickerScreen(Screen[None]):
                 timeout=8,
             )
             return
-        from term_config_tui.screens.custom_theme_editor import CustomThemeEditorScreen
+        from ztc.screens.custom_theme_editor import CustomThemeEditorScreen
 
         self.app.push_screen(
             CustomThemeEditorScreen(config_path=self.config_path, theme=theme)

@@ -14,10 +14,10 @@ from pathlib import Path
 
 from zellij_themes.config import read_active_theme  # re-export
 
-from term_config_tui.models.layout import Layout
-from term_config_tui.services import kdl_io
-from term_config_tui.services.atomic import write_atomic
-from term_config_tui.services.backups import make_backup
+from ztc.models.layout import Layout
+from ztc.services import kdl_io
+from ztc.services.atomic import write_atomic
+from ztc.services.backups import make_backup
 
 # Linea no comentada que empieza por `theme "..."`. Acepta indentacion vacia.
 # Se requiere ausencia de `//` antes de `theme` en la misma linea.

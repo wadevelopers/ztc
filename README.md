@@ -1,4 +1,4 @@
-# term-config-tui
+# ztc
 
 TUI en Python para administrar el setup de terminal: colores de la
 terminal soportada y temas/layouts/sesiones de Zellij.
@@ -39,9 +39,9 @@ Las funciones de Zellij siguen disponibles si Zellij esta instalado.
 ### Override por env var
 
 ```bash
-TERM_CONFIG_TUI_BACKEND=alacritty term-config-tui
-TERM_CONFIG_TUI_BACKEND=kitty term-config-tui
-TERM_CONFIG_TUI_BACKEND=auto term-config-tui    # default
+TERM_CONFIG_TUI_BACKEND=alacritty ztc
+TERM_CONFIG_TUI_BACKEND=kitty ztc
+TERM_CONFIG_TUI_BACKEND=auto ztc    # default
 ```
 
 Util para tests, multiplexores raros o casos donde la deteccion
@@ -79,7 +79,7 @@ Limitacion: `globinclude` y `envinclude` no se expanden, solo
 ```bash
 uv venv
 uv pip install -e ".[dev]"
-uv run term-config-tui
+uv run ztc
 uv run pytest
 ```
 

@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from zellij_themes.models import ZellijColor, ZellijTheme
-from term_config_tui.services import zellij_themes
-from term_config_tui.services.terminals.alacritty import AlacrittyBackend
+from ztc.services import zellij_themes
+from ztc.services.terminals.alacritty import AlacrittyBackend
 
 
 def test_parser_captures_raw_components(tmp_path: Path) -> None:

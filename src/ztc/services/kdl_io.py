@@ -6,9 +6,9 @@ from typing import Any
 
 import kdl
 
-from term_config_tui.models.layout import Layout, Pane, SplitDirection, Tab
-from term_config_tui.services.atomic import write_atomic
-from term_config_tui.services.backups import make_backup
+from ztc.models.layout import Layout, Pane, SplitDirection, Tab
+from ztc.services.atomic import write_atomic
+from ztc.services.backups import make_backup
 
 # kdl-py serializa enteros como floats ("1.0"). Para no introducir ruido al
 # guardar layouts existentes, los normalizamos en la salida de raw nodes.

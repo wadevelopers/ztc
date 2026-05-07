@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "term-config-tui"
+name = "ztc"
 version = "0.1.0"
-description = "TUI para administrar Alacritty y Zellij (sesiones, layouts, temas, colores)."
+description = "ztc — Zellij & Terminal Config: TUI para administrar colores de Alacritty/Kitty y temas/layouts de Zellij."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -21,7 +21,7 @@ dependencies = [
 zellij-themes = { path = "../zellij-themes", editable = true }
 
 [project.scripts]
-term-config-tui = "term_config_tui.__main__:main"
+ztc = "ztc.__main__:main"
 
 [project.optional-dependencies]
 dev = [
@@ -32,7 +32,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/term_config_tui"]
+packages = ["src/ztc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

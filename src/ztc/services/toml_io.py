@@ -5,8 +5,8 @@ from pathlib import Path
 import tomlkit
 from tomlkit.toml_document import TOMLDocument
 
-from term_config_tui.services.atomic import write_atomic
-from term_config_tui.services.backups import make_backup
+from ztc.services.atomic import write_atomic
+from ztc.services.backups import make_backup
 
 
 def load_toml(path: Path) -> TOMLDocument:

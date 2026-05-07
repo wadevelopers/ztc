@@ -9,7 +9,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, RadioButton, RadioSet, Static, Switch
 
-from term_config_tui.models.layout import Pane, SplitDirection
+from ztc.models.layout import Pane, SplitDirection
 
 
 class ConfirmByNameModal(ModalScreen[bool]):
