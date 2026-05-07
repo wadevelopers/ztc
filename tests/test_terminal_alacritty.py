@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import tomlkit
 
-from term_config_tui.services import colors
+from zellij_themes import colors
 from term_config_tui.services.terminals.alacritty import (
     KNOWN_SLOTS,
     AlacrittyBackend,

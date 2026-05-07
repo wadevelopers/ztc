@@ -38,7 +38,7 @@ from pathlib import Path
 
 from term_config_tui.services.atomic import write_atomic
 from term_config_tui.services.backups import make_backup
-from term_config_tui.services.colors import CanonicalSlot
+from zellij_themes.colors import CanonicalSlot
 
 # Profundidad maxima para expandir `include`. Evita loops por
 # circular includes y tambien acota el costo de parsing.

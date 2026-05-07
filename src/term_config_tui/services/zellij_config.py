@@ -1,9 +1,18 @@
+"""Wrappers de escritura sobre el config.kdl de Zellij + helpers de
+layouts y setup.
+
+`read_active_theme` se importo a `zellij_themes.config` (shared) y se
+re-exporta acá para mantener los call sites existentes.
+"""
+
 from __future__ import annotations
 
 import re
 import shutil
 import subprocess
 from pathlib import Path
+
+from zellij_themes.config import read_active_theme  # re-export
 
 from term_config_tui.models.layout import Layout
 from term_config_tui.services import kdl_io
@@ -23,25 +32,6 @@ _VALID_THEME_NAME = re.compile(r"^[A-Za-z0-9_\-]+$")
 def _is_commented(line: str) -> bool:
     stripped = line.lstrip()
     return stripped.startswith("//")
-
-
-def read_active_theme(config_path: Path) -> str | None:
-    """Devuelve el nombre del tema activo (`theme "..."`), ignorando lineas comentadas.
-
-    Si hay varias lineas no comentadas se devuelve la primera.
-    Si no hay ninguna devuelve None.
-    """
-    if not config_path.exists():
-        return None
-    text = config_path.read_text(encoding="utf-8")
-    for match in _THEME_LINE.finditer(text):
-        line_start = text.rfind("\n", 0, match.start()) + 1
-        line_end = text.find("\n", match.end())
-        line = text[line_start : line_end if line_end != -1 else len(text)]
-        if _is_commented(line):
-            continue
-        return match.group("name")
-    return None
 
 
 def set_active_theme(
@@ -129,3 +119,11 @@ def zellij_setup_check(timeout: float = 10.0) -> tuple[bool, str]:
         return False, "zellij setup --check excedio el timeout"
     output = (proc.stdout or "") + (proc.stderr or "")
     return proc.returncode == 0, output
+
+
+__all__ = [
+    "list_layouts",
+    "read_active_theme",
+    "set_active_theme",
+    "zellij_setup_check",
+]

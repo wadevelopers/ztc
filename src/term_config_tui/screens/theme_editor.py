@@ -10,13 +10,10 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
-from term_config_tui.models.theme import ZellijTheme
-from term_config_tui.services import (
-    theme_sync,
-    zellij_config,
-    zellij_theme_assets,
-    zellij_themes,
-)
+from zellij_themes import theme_assets as zellij_theme_assets
+from zellij_themes.models import ZellijTheme
+
+from term_config_tui.services import theme_sync, zellij_config, zellij_themes
 from term_config_tui.widgets.confirm import ConfirmByNameModal, PromptModal
 
 _HEADER_PREFIX = "header:"
@@ -324,7 +321,7 @@ class ThemePickerScreen(Screen[None]):
                     severity="error",
                 )
                 return
-            from term_config_tui.models.theme import ZellijTheme as _ZT
+            from zellij_themes.models import ZellijTheme as _ZT
             from term_config_tui.screens.custom_theme_editor import CustomThemeEditorScreen
 
             new_theme = _ZT(

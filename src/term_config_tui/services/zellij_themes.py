@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import kdl
 
-from term_config_tui.models.theme import ZellijColor, ZellijTheme
+from zellij_themes.models import ZellijColor, ZellijTheme
 from term_config_tui.services.atomic import write_atomic
 from term_config_tui.services.backups import make_backup
 
@@ -49,7 +49,7 @@ def builtin_theme_names() -> tuple[str, ...]:
 
     Excluye 'ansi' (formato palette-index, sin RGB).
     """
-    from term_config_tui.services import zellij_theme_assets as zta
+    from zellij_themes import theme_assets as zta
 
     names = [n for n in zta.list_bundled_theme_names() if n not in _EXCLUDED_BUILTINS]
     return tuple(sorted(names))
@@ -433,7 +433,7 @@ def clone_theme(
     if dst_name in by_name:
         raise ValueError(f"Ya existe un user theme '{dst_name}'")
 
-    from term_config_tui.services import zellij_theme_assets as zta
+    from zellij_themes import theme_assets as zta
 
     src_user = by_name.get(src_name)
     if src_user is not None:
@@ -468,7 +468,8 @@ def _read_terminal_legacy_slots(
 ) -> dict[str, str]:
     """Devuelve {legacy_slot: hex} con los valores actuales del archivo
     de la terminal, invirtiendo el mapping de theme_sync."""
-    from term_config_tui.services.colors import is_valid_hex, normalize_hex
+    from zellij_themes.colors import is_valid_hex, normalize_hex
+
     from term_config_tui.services.theme_sync import _LEGACY_TO_CANONICAL
 
     doc = backend.load(backend_path)

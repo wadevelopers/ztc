@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from term_config_tui.models.theme import ZellijColor, ZellijTheme
+from zellij_themes.models import ZellijColor, ZellijTheme
 from term_config_tui.services import zellij_themes
 from term_config_tui.services.terminals.alacritty import AlacrittyBackend
 

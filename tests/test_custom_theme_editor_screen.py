@@ -123,7 +123,7 @@ async def test_custom_theme_editor_save_writes_block(tmp_path: Path) -> None:
         editor = app.screen
         assert isinstance(editor, CustomThemeEditorScreen)
         # Modificar el modelo en memoria y guardar.
-        from term_config_tui.models.theme import ZellijColor
+        from zellij_themes.models import ZellijColor
 
         editor.theme.colors[0] = ZellijColor("fg", "#deadbe")
         editor.dirty = True

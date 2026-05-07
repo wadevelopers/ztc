@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from term_config_tui.services import zellij_themes
-from term_config_tui.services import zellij_theme_assets as zta
-from term_config_tui.services.colors import (
+from zellij_themes import theme_assets as zta
+from zellij_themes.colors import (
     CanonicalSlot,
     is_valid_hex,
     normalize_hex,

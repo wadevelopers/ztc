@@ -14,7 +14,9 @@ from term_config_tui.models.config import Paths
 from term_config_tui.screens.color_editor import ColorEditorScreen
 from term_config_tui.screens.layout_list import LayoutListScreen
 from term_config_tui.screens.theme_editor import ThemePickerScreen
-from term_config_tui.services import zellij_config, zellij_theme_assets, zellij_themes
+from zellij_themes import theme_assets as zellij_theme_assets
+
+from term_config_tui.services import zellij_config, zellij_themes
 from term_config_tui.services.runtime_detect import (
     TerminalDetection,
     detect_terminal,

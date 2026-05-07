@@ -14,7 +14,11 @@ dependencies = [
     "textual>=0.80",
     "tomlkit>=0.13",
     "kdl-py>=1.2",
+    "zellij-themes",
 ]
+
+[tool.uv.sources]
+zellij-themes = { path = "../zellij-themes", editable = true }
 
 [project.scripts]
 term-config-tui = "term_config_tui.__main__:main"
@@ -29,9 +33,6 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/term_config_tui"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/term_config_tui/assets" = "term_config_tui/assets"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

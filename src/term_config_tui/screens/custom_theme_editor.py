@@ -10,7 +10,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
-from term_config_tui.models.theme import ZellijColor, ZellijTheme
+from zellij_themes.models import ZellijColor, ZellijTheme
 from term_config_tui.services import theme_sync, zellij_config, zellij_themes
 from term_config_tui.widgets.confirm import (
     ConfirmByNameModal,

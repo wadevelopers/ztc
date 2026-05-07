@@ -10,7 +10,9 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
-from term_config_tui.services import colors, zellij_config, zellij_themes
+from zellij_themes import colors
+
+from term_config_tui.services import zellij_config, zellij_themes
 from term_config_tui.services.terminals import TerminalBackend
 from term_config_tui.services.terminals.alacritty import AlacrittyBackend
 from term_config_tui.widgets.confirm import EditColorModal, PromptModal
