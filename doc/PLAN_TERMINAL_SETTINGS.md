@@ -22,8 +22,8 @@ El enfoque es deliberadamente **conservador**: solo settings con mapeo 1:1 limpi
 
 | Setting | Tipo | Alacritty | Kitty |
 |---|---|---|---|
-| **padding x** | int (>= 0) | `[window.padding] x = N` | `window_padding_width` (1er valor) |
-| **padding y** | int (>= 0) | `[window.padding] y = N` | `window_padding_width` (2do valor) |
+| **padding x** | int (>= 0) | `[window.padding] x = N` | `window_padding_width` (2do valor — Kitty con 2 vals es `vertical horizontal`) |
+| **padding y** | int (>= 0) | `[window.padding] y = N` | `window_padding_width` (1er valor — `vertical`) |
 | **opacity** | float (0.0..1.0) | `[window] opacity = F` | `background_opacity F` |
 | **font size** | float (>= 1.0) | `[font] size = F` | `font_size F` |
 | **font family** | str | `[font.normal] family = "S"` | `font_family S` |
@@ -54,7 +54,7 @@ Fuera de scope para este plan. Si se agrega Ghostty u otra terminal de archivo p
 A diferencia de `CanonicalSlot` (siempre string hex), las settings son heterogeneas. Modelarlas como dataclass:
 
 ```python
-# zellij_themes/settings.py (o ztc/services/terminals/settings.py)
+# ztc/services/terminals/settings.py
 
 from enum import Enum
 from dataclasses import dataclass
@@ -125,7 +125,14 @@ class TerminalBackend(Protocol):
     def write_setting(
         self, doc: BackendDoc, setting: CanonicalSetting, value: object
     ) -> None:
-        """Escribe value en el archivo con el formato propio del backend."""
+        """Escribe value en el archivo con el formato propio del backend.
+
+        Antes de escribir, llama a `validate_setting_value(setting, value)`
+        y levanta `ValueError` si el valor no es valido (rango, kind,
+        enum). Asi la validacion vive en un solo lugar (el catalogo) y
+        no depende solo de la UI — un caller programatico tampoco puede
+        meter basura en el archivo.
+        """
 
     def delete_setting(
         self, doc: BackendDoc, setting: CanonicalSetting
@@ -257,7 +264,7 @@ Nuevo screen `ztc/screens/terminal_settings.py` con la misma estructura que `Col
 
 ### Casos especiales del backend Kitty
 
-- **`window_padding_width` con 1-4 valores**: lectura no-trivial. Si solo tenemos `padding.x` y `padding.y`, no podemos representar fielmente `top != bottom` o `left != right`. Decision tentativa: leer con asuncion de simetria, escribir como 2 valores (vertical horizontal). Si el archivo tiene 4 valores asimetricos, leer el primero y avisar al usuario via toast (no romper).
+- **`window_padding_width` con 1-4 valores**: ver Decision detallada en seccion "Caso especial" mas arriba. Resumen: read devuelve `(x, y)` cuando se puede representar simetricamente con 2 valores; devuelve `None` (= "unset" en UI) cuando hay asimetria o valores no-int. Write emite siempre 2 valores `Y X` (sobreescribe configuraciones de 3/4 valores con perdida controlada).
 
 - **`font_family` con valores que tienen espacios**: en Kitty no se usan comillas (`font_family JetBrains Mono`). En Alacritty si (`family = "JetBrains Mono"`). El backend Kitty preserva la linea entera despues del key; el backend Alacritty maneja TOML.
 
@@ -281,8 +288,8 @@ El catalogo declara `default` por setting (`SETTINGS["window.opacity"].default =
 
 ## Que dejamos sin tocar
 
-- `zellij_themes/theme_assets`, `config`, `user_themes`, `models`: intactos. Lo unico que se mueve es `colors.py` (Fase 0), que en realidad nunca pertenecio a Zellij.
-- `ColorEditorScreen` y la API de slots: comportamiento intacto. Cambia el path de import (Fase 0), no la API ni el comportamiento.
+- `ztc.zellij.theme_assets`, `config`, `user_themes`, `models`: intactos despues del prerequisito. Este plan no los modifica.
+- `ColorEditorScreen` y la API de slots: comportamiento intacto. Settings es paralelo a slots, no overlaps.
 - Reordenamiento del menu principal: solo se agrega el item nuevo "Terminal settings".
 
 ## Resumen ejecutivo
