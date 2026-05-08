@@ -121,7 +121,7 @@ def sync_terminal_with_zellij_theme(
         return SyncResult(
             backup=None,
             updated={},
-            skipped_reason=f"No existe {backend_path}",
+            skipped_reason=f"{backend_path} does not exist",
         )
 
     slots = _resolve_zellij_slots(zellij_theme_name, config_path=zellij_config_path)
@@ -132,7 +132,7 @@ def sync_terminal_with_zellij_theme(
         return SyncResult(
             backup=None,
             updated={},
-            skipped_reason=f"Tema '{zellij_theme_name}' sin colores extraibles",
+            skipped_reason=f"Theme '{zellij_theme_name}' has no extractable colors",
         )
 
     doc = backend.load(backend_path)
@@ -162,7 +162,7 @@ def sync_terminal_with_zellij_theme(
             _apply(value, destinations)
 
     if not updated:
-        return SyncResult(backup=None, updated={}, skipped_reason="Sin cambios")
+        return SyncResult(backup=None, updated={}, skipped_reason="No changes")
 
     backup = backend.save(doc, backend_path)
     return SyncResult(backup=backup, updated=updated)

@@ -109,7 +109,7 @@ def test_sync_no_alacritty_file(tmp_path: Path) -> None:
         backend_path=ala,
         zellij_config_path=cfg,
     )
-    assert result.skipped_reason and "No existe" in result.skipped_reason
+    assert result.skipped_reason and "does not exist" in result.skipped_reason
     assert not result.updated
 
 
@@ -123,7 +123,7 @@ def test_sync_unknown_theme(tmp_path: Path) -> None:
         backend_path=ala,
         zellij_config_path=cfg,
     )
-    assert result.skipped_reason and "sin colores" in result.skipped_reason
+    assert result.skipped_reason and "no extractable colors" in result.skipped_reason
     assert not result.updated
 
 
@@ -147,7 +147,7 @@ def test_sync_no_changes_returns_no_backup(tmp_path: Path) -> None:
     )
     assert result.backup is None
     assert result.updated == {}
-    assert result.skipped_reason == "Sin cambios"
+    assert result.skipped_reason == "No changes"
 
 
 def test_sync_propagates_text_selected_to_alacritty_selection(tmp_path: Path) -> None:
