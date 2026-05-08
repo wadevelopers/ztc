@@ -505,6 +505,110 @@ class EditColorModal(ModalScreen[str | None]):
         self.dismiss(normalize_hex(value))
 
 
+class FontPickerModal(ModalScreen[str | None]):
+    """Modal para elegir una fuente de una lista (e.g. monoespaciadas
+    detectadas en el sistema). Devuelve el nombre elegido o None si
+    cancela. Escalable: usa OptionList con scroll para listas largas.
+    Si la fuente actual esta en `choices`, la pre-selecciona.
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss_none", "Cancel"),
+        Binding("enter", "confirm", "OK", show=False),
+    ]
+
+    DEFAULT_CSS = """
+    FontPickerModal {
+        align: center middle;
+    }
+    #dialog {
+        width: 60;
+        height: 24;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #title {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+        height: 1;
+    }
+    OptionList {
+        height: 1fr;
+        margin-bottom: 1;
+    }
+    #buttons {
+        align-horizontal: right;
+        height: 3;
+    }
+    Button {
+        margin-left: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        *,
+        title: str,
+        choices: list[str],
+        initial: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._title = title
+        self._choices = choices
+        self._initial = initial
+
+    def compose(self) -> ComposeResult:
+        from textual.widgets import OptionList
+        from textual.widgets.option_list import Option
+
+        with Vertical(id="dialog"):
+            yield Static(self._title, id="title")
+            ol = OptionList(
+                *[Option(name, id=name) for name in self._choices],
+                id="font-list",
+            )
+            yield ol
+            with Horizontal(id="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("OK", id="confirm", variant="primary")
+
+    def on_mount(self) -> None:
+        from textual.widgets import OptionList
+
+        ol = self.query_one("#font-list", OptionList)
+        ol.focus()
+        if self._initial is not None:
+            for i in range(ol.option_count):
+                opt = ol.get_option_at_index(i)
+                if opt.id == self._initial:
+                    ol.highlighted = i
+                    break
+
+    def _selected(self) -> str | None:
+        from textual.widgets import OptionList
+
+        ol = self.query_one("#font-list", OptionList)
+        if ol.highlighted is None:
+            return None
+        return ol.get_option_at_index(ol.highlighted).id
+
+    @on(Button.Pressed, "#cancel")
+    def _on_cancel(self) -> None:
+        self.dismiss(None)
+
+    @on(Button.Pressed, "#confirm")
+    def _on_confirm(self) -> None:
+        self.dismiss(self._selected())
+
+    def action_confirm(self) -> None:
+        self.dismiss(self._selected())
+
+    def action_dismiss_none(self) -> None:
+        self.dismiss(None)
+
+
 class EnumPickerModal(ModalScreen[str | None]):
     """Modal para elegir un valor de un enum cerrado (RadioSet).
     Devuelve el string elegido o None si cancela.

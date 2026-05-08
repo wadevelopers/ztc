@@ -15,6 +15,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
+from ztc.services.fonts import list_monospace_fonts
 from ztc.services.terminals import TerminalBackend
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.services.terminals.settings import (
@@ -22,7 +23,7 @@ from ztc.services.terminals.settings import (
     SettingKind,
     coerce_setting_value,
 )
-from ztc.widgets.confirm import EnumPickerModal, PromptModal
+from ztc.widgets.confirm import EnumPickerModal, FontPickerModal, PromptModal
 
 
 class TerminalSettingsScreen(Screen[None]):
@@ -200,6 +201,30 @@ class TerminalSettingsScreen(Screen[None]):
                 ),
                 after,
             )
+        elif setting.name == "font.family":
+            # Picker con fuentes monoespaciadas detectadas en el sistema
+            # via fontconfig. Si no hay fontconfig (lista vacia), fallback
+            # a input de texto libre.
+            fonts = list_monospace_fonts()
+            if fonts:
+                self.app.push_screen(
+                    FontPickerModal(
+                        title=f"Edit {setting.name}",
+                        choices=fonts,
+                        initial=str(current) if current is not None else None,
+                    ),
+                    after,
+                )
+            else:
+                self.app.push_screen(
+                    PromptModal(
+                        title=f"Edit {setting.name}",
+                        placeholder="font family name (fc-list not available)",
+                        initial=str(current) if current is not None else "",
+                        confirm_label="Save",
+                    ),
+                    after,
+                )
         else:
             initial_str = str(current) if current is not None else ""
             placeholder = (
