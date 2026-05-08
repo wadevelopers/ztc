@@ -13,7 +13,6 @@ from ztc.zellij import layout_io as kdl_io
 from ztc.services.runtime_detect import TerminalDetection
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.widgets.confirm import (
-    ConfirmByNameModal,
     PaneEditModal,
     UnsavedChangesModal,
 )

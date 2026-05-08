@@ -219,16 +219,10 @@ async def test_selecting_disabled_colors_does_nothing(tmp_path: Path) -> None:
     async with app.run_test():
         before_count = len(app.screen_stack)
         # OptionList no dispara OptionSelected para disabled, pero
-        # el handler tiene guard defensivo. Lo verificamos disparando
-        # el evento directo con un Option disabled manual.
-        from textual.widgets.option_list import Option
-
+        # el handler tiene guard defensivo. Verificamos via API publica
+        # que la opcion esta disabled y el screen_stack no creceria.
         from textual.widgets import OptionList as OL
 
-        opt = Option("Colores de terminal", id="colors", disabled=True)
-        # Construimos un evento "fake" sintetico: no se puede crear sin
-        # widget real; en su lugar verificamos via API publica que la
-        # opcion esta disabled y el screen_stack no creceria al pulsar.
         option_list = app.query_one("#main-menu", OL)
         for i in range(option_list.option_count):
             o = option_list.get_option_at_index(i)

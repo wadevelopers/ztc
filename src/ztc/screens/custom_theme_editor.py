@@ -16,7 +16,6 @@ from ztc.zellij.config import read_active_theme
 from ztc.zellij.models import ZellijColor, ZellijTheme
 from ztc.zellij.user_themes import LEGACY_SLOTS
 from ztc.widgets.confirm import (
-    ConfirmByNameModal,
     EditColorModal,
 )
 

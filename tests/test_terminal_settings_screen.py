@@ -8,7 +8,6 @@ backup), reload (descarta cambios pending).
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from textual.app import App, ComposeResult
