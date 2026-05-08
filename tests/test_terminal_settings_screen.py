@@ -193,3 +193,140 @@ def _ensure_subdir(tmp_path: Path) -> None:
     test_lists_6_settings_for_both_backends."""
     (tmp_path / "a").mkdir(exist_ok=True)
     (tmp_path / "k").mkdir(exist_ok=True)
+
+
+# ---------- UnsavedChangesModal flow ----------
+
+
+async def test_back_without_dirty_pops_directly(tmp_path: Path) -> None:
+    """Sin cambios, escape sale directo sin modal."""
+    backend = AlacrittyBackend()
+    path = _alacritty_doc(tmp_path, "")
+    screen = TerminalSettingsScreen(backend=backend, backend_path=path)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert isinstance(app.screen, TerminalSettingsScreen)
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, TerminalSettingsScreen)
+
+
+async def test_back_with_dirty_opens_unsaved_changes_modal(tmp_path: Path) -> None:
+    from ztc.widgets.confirm import UnsavedChangesModal
+
+    backend = AlacrittyBackend()
+    path = _alacritty_doc(tmp_path, "")
+    screen = TerminalSettingsScreen(backend=backend, backend_path=path)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.dirty = True
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, UnsavedChangesModal)
+
+
+async def test_unsaved_modal_cancel_keeps_screen(tmp_path: Path) -> None:
+    """Cancel del modal vuelve al editor; dirty se preserva."""
+    from ztc.widgets.confirm import UnsavedChangesModal
+
+    backend = AlacrittyBackend()
+    path = _alacritty_doc(tmp_path, "")
+    screen = TerminalSettingsScreen(backend=backend, backend_path=path)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.dirty = True
+        await pilot.press("escape")
+        await pilot.pause()
+        modal = app.screen
+        assert isinstance(modal, UnsavedChangesModal)
+        modal.dismiss("cancel")
+        await pilot.pause()
+        assert isinstance(app.screen, TerminalSettingsScreen)
+        assert screen.dirty is True
+
+
+async def test_unsaved_modal_discard_pops_without_save(tmp_path: Path) -> None:
+    """Discard sale sin guardar; archivo en disco no cambia."""
+    from ztc.widgets.confirm import UnsavedChangesModal
+
+    backend = AlacrittyBackend()
+    path = _alacritty_doc(tmp_path, '[window]\nopacity = 0.8\n')
+    screen = TerminalSettingsScreen(backend=backend, backend_path=path)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        # Modificar in-memory.
+        backend.write_setting(screen.doc, SETTINGS["window.opacity"], 0.3)
+        screen.dirty = True
+        await pilot.press("escape")
+        await pilot.pause()
+        modal = app.screen
+        assert isinstance(modal, UnsavedChangesModal)
+        modal.dismiss("discard")
+        await pilot.pause()
+        assert not isinstance(app.screen, TerminalSettingsScreen)
+        # Archivo en disco preserva el valor original (0.8).
+        on_disk = backend.load(path)
+        assert backend.read_setting(on_disk, SETTINGS["window.opacity"]) == 0.8
+
+
+async def test_unsaved_modal_save_writes_and_pops(tmp_path: Path) -> None:
+    """Save guarda al disco y sale del editor."""
+    from ztc.widgets.confirm import UnsavedChangesModal
+
+    backend = AlacrittyBackend()
+    path = _alacritty_doc(tmp_path, '[window]\nopacity = 0.8\n')
+    screen = TerminalSettingsScreen(backend=backend, backend_path=path)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        backend.write_setting(screen.doc, SETTINGS["window.opacity"], 0.3)
+        screen.dirty = True
+        await pilot.press("escape")
+        await pilot.pause()
+        modal = app.screen
+        assert isinstance(modal, UnsavedChangesModal)
+        modal.dismiss("save")
+        await pilot.pause()
+        # Salio del editor.
+        assert not isinstance(app.screen, TerminalSettingsScreen)
+        # Archivo en disco persiste el cambio.
+        on_disk = backend.load(path)
+        assert backend.read_setting(on_disk, SETTINGS["window.opacity"]) == 0.3
+
+
+async def test_unsaved_modal_save_failure_keeps_screen(tmp_path: Path) -> None:
+    """Si save falla (path read-only o exception), no sale del editor —
+    dirty queda True y el usuario puede ver el toast de error."""
+    from ztc.widgets.confirm import UnsavedChangesModal
+
+    backend = AlacrittyBackend()
+    path = _alacritty_doc(tmp_path, '[window]\nopacity = 0.8\n')
+    screen = TerminalSettingsScreen(backend=backend, backend_path=path)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        backend.write_setting(screen.doc, SETTINGS["window.opacity"], 0.3)
+        screen.dirty = True
+        # Forzar fallo de save: monkey patch backend.save para que tire.
+        original_save = backend.save
+
+        def failing_save(*a, **kw):
+            raise RuntimeError("disk full")
+
+        backend.save = failing_save  # type: ignore[method-assign]
+        try:
+            await pilot.press("escape")
+            await pilot.pause()
+            modal = app.screen
+            assert isinstance(modal, UnsavedChangesModal)
+            modal.dismiss("save")
+            await pilot.pause()
+            # Save fallo → quedo en el editor con dirty=True.
+            assert isinstance(app.screen, TerminalSettingsScreen)
+            assert screen.dirty is True
+        finally:
+            backend.save = original_save  # type: ignore[method-assign]

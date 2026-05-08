@@ -8,8 +8,11 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, RadioButton, RadioSet, Static, Switch
+from typing import Literal
 
 from ztc.models.layout import Pane, SplitDirection
+
+UnsavedChangesChoice = Literal["cancel", "discard", "save"]
 
 
 class ConfirmByNameModal(ModalScreen[bool]):
@@ -340,7 +343,7 @@ class PaneEditModal(ModalScreen[Pane | None]):
 
             with Horizontal(id="buttons"):
                 yield Button("Cancel", id="cancel")
-                yield Button("Save", id="save", variant="primary")
+                yield Button("Apply", id="save", variant="primary")
 
     def on_mount(self) -> None:
         self.query_one("#name", Input).focus()
@@ -453,7 +456,7 @@ class EditColorModal(ModalScreen[str | None]):
             yield Static("", id="status")
             with Horizontal(id="buttons"):
                 yield Button("Cancel", id="cancel")
-                yield Button("Save", id="save", variant="primary", disabled=True)
+                yield Button("Apply", id="save", variant="primary", disabled=True)
 
     def on_mount(self) -> None:
         inp = self.query_one("#hex-input", Input)
@@ -503,6 +506,88 @@ class EditColorModal(ModalScreen[str | None]):
         if not is_valid_hex(value):
             return
         self.dismiss(normalize_hex(value))
+
+
+class UnsavedChangesModal(ModalScreen["UnsavedChangesChoice"]):
+    """Modal de salida con cambios pending. 3 botones, sin escribir nada:
+    - **Cancel** (Esc): vuelve al editor.
+    - **Discard**: descarta cambios y sale.
+    - **Save** (success): guarda y sale (el caller invoca `action_save`).
+
+    Devuelve `"cancel"` / `"discard"` / `"save"`. El caller maneja los 3
+    casos — si el save falla, el caller deberia mostrar un toast y no
+    salir (queda en el editor con el dirty intacto).
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    DEFAULT_CSS = """
+    UnsavedChangesModal {
+        align: center middle;
+    }
+    #dialog {
+        width: 60;
+        height: auto;
+        border: round $warning;
+        padding: 1 2;
+        background: $surface;
+    }
+    #title {
+        text-style: bold;
+        color: $warning;
+        margin-bottom: 1;
+    }
+    #message {
+        margin-bottom: 1;
+    }
+    #buttons {
+        align-horizontal: right;
+        height: 3;
+    }
+    Button {
+        margin-left: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        *,
+        title: str = "Unsaved changes",
+        message: str = (
+            "You have unsaved changes. What do you want to do?"
+        ),
+    ) -> None:
+        super().__init__()
+        self._title = title
+        self._message = message
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Static(self._title, id="title")
+            yield Static(self._message, id="message")
+            with Horizontal(id="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Discard", id="discard", variant="error")
+                yield Button("Save", id="save", variant="success")
+
+    def on_mount(self) -> None:
+        # Foco en Cancel por seguridad: enter accidental no descarta.
+        self.query_one("#cancel", Button).focus()
+
+    @on(Button.Pressed, "#cancel")
+    def _on_cancel(self) -> None:
+        self.dismiss("cancel")
+
+    @on(Button.Pressed, "#discard")
+    def _on_discard(self) -> None:
+        self.dismiss("discard")
+
+    @on(Button.Pressed, "#save")
+    def _on_save(self) -> None:
+        self.dismiss("save")
+
+    def action_cancel(self) -> None:
+        self.dismiss("cancel")
 
 
 class FontPickerModal(ModalScreen[str | None]):

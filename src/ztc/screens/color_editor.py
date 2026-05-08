@@ -321,21 +321,16 @@ class ColorEditorScreen(Screen[None]):
         if not self.dirty:
             self.app.pop_screen()
             return
-        from ztc.widgets.confirm import ConfirmByNameModal
+        from ztc.widgets.confirm import UnsavedChangesModal
 
-        def after(ok: bool) -> None:
-            if ok:
+        def after(choice: str | None) -> None:
+            if choice == "discard":
                 self.app.pop_screen()
+                return
+            if choice == "save":
+                self.action_save()
+                if not self.dirty:
+                    self.app.pop_screen()
+                return
 
-        self.app.push_screen(
-            ConfirmByNameModal(
-                title="Unsaved changes",
-                message=(
-                    "If you go back now, you'll lose your changes. "
-                    "Cancel and press Ctrl+S to save."
-                ),
-                expected="discard",
-                confirm_label="Discard changes",
-            ),
-            after,
-        )
+        self.app.push_screen(UnsavedChangesModal(), after)

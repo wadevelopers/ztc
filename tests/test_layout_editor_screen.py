@@ -15,6 +15,7 @@ from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.widgets.confirm import (
     ConfirmByNameModal,
     PaneEditModal,
+    UnsavedChangesModal,
 )
 
 FIX = Path(__file__).parent / "fixtures" / "zellij"
@@ -114,7 +115,7 @@ async def test_layout_editor_back_with_unsaved_prompts(tmp_path: Path) -> None:
         screen.dirty = True
         await pilot.press("escape")
         await pilot.pause()
-        assert isinstance(app.screen, ConfirmByNameModal)
+        assert isinstance(app.screen, UnsavedChangesModal)
 
 
 async def test_pane_edit_modal_returns_changes(tmp_path: Path) -> None:

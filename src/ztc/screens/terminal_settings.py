@@ -221,7 +221,7 @@ class TerminalSettingsScreen(Screen[None]):
                         title=f"Edit {setting.name}",
                         placeholder="font family name (fc-list not available)",
                         initial=str(current) if current is not None else "",
-                        confirm_label="Save",
+                        confirm_label="Apply",
                     ),
                     after,
                 )
@@ -235,7 +235,7 @@ class TerminalSettingsScreen(Screen[None]):
                     title=f"Edit {setting.name}",
                     placeholder=placeholder,
                     initial=initial_str,
-                    confirm_label="Save",
+                    confirm_label="Apply",
                 ),
                 after,
             )
@@ -345,21 +345,19 @@ class TerminalSettingsScreen(Screen[None]):
         if not self.dirty:
             self.app.pop_screen()
             return
-        from ztc.widgets.confirm import ConfirmByNameModal
+        from ztc.widgets.confirm import UnsavedChangesModal
 
-        def after(ok: bool) -> None:
-            if ok:
+        def after(choice: str | None) -> None:
+            if choice == "discard":
                 self.app.pop_screen()
+                return
+            if choice == "save":
+                # action_save hace notify de error y deja dirty=True si falla;
+                # solo salimos si quedo limpio.
+                self.action_save()
+                if not self.dirty:
+                    self.app.pop_screen()
+                return
+            # "cancel" o None: queda en el editor.
 
-        self.app.push_screen(
-            ConfirmByNameModal(
-                title="Unsaved changes",
-                message=(
-                    "If you go back now, you'll lose your changes. "
-                    "Cancel and press Ctrl+S to save."
-                ),
-                expected="discard",
-                confirm_label="Discard changes",
-            ),
-            after,
-        )
+        self.app.push_screen(UnsavedChangesModal(), after)
