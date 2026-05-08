@@ -29,7 +29,12 @@ El enfoque es deliberadamente **conservador**: solo settings con mapeo 1:1 limpi
 | **font family** | str | `[font.normal] family = "S"` | `font_family S` |
 | **cursor shape** | enum {Block, Beam, Underline} | `[cursor.style] shape = "S"` | `cursor_shape S` |
 
-**Operaciones soportadas**: read, write, delete (resetear al default), reload (re-leer del disco), save (con backup como ya hace ColorEditor), import (desde otro `.toml`/`.conf`).
+**Operaciones soportadas**:
+- **read** / **write** del setting actual.
+- **reset** (`x`): hace `delete_setting()` — elimina la entrada del archivo. No escribe el default explicito; deja que el terminal use su propio default. Mismo patron que `ColorEditorScreen` con slots: borrar la entrada y dejar al terminal/sistema decidir. El `default` del catalogo queda solo como **hint visual** en la UI ("este setting estaria en X si lo unset").
+- **reload** (re-leer del disco).
+- **save** (`backend.save(doc, path)` que internamente hace backup, mismo patron que `ColorEditorScreen`).
+- **import** (`i`): lee otro archivo del **mismo backend activo** (Alacritty `.toml` desde Alacritty, Kitty `.conf` desde Kitty), extrae las settings que `supported_settings()` reconoce, y las escribe en el doc actual. **No es cross-backend** — esta iteracion no intenta importar Kitty desde Alacritty ni viceversa (Fase ulterior si se necesita).
 
 ### Afuera (iteracion 1)
 
@@ -84,6 +89,23 @@ SETTINGS = {
 El **valor canonico** (lo que viaja por la API) usa el tipo Python natural: `int` para padding, `float` para opacity, `str` para family, str enum (con valores normalizados) para shape.
 
 **Normalizacion de enum**: usamos los valores capitalizados de Alacritty (`"Block"`, `"Beam"`, `"Underline"`) como canonicos. Kitty acepta minusculas (`block`, `beam`, `underline`); el backend Kitty hace la conversion al leer/escribir.
+
+**Validacion centralizada en `settings.py`**: la coercion y validacion viven en el catalogo, no replicada en cada backend ni en la UI. Dos helpers publicos:
+
+```python
+def coerce_setting_value(setting: CanonicalSetting, raw: object) -> object | None:
+    """Toma un valor crudo (lo que devuelve el parser TOML/conf) y lo
+    convierte al tipo canonico de la setting. Devuelve None si no se
+    puede coercionar limpio (ej. font_size = "abc"). Sin excepciones —
+    los backends propagan None y la UI muestra "unset"."""
+
+def validate_setting_value(setting: CanonicalSetting, value: object) -> bool:
+    """True si value es valido segun setting.kind y restricciones
+    (rango para INT/FLOAT, enum_values para ENUM, no-vacio para STR).
+    Lo usa la UI antes de habilitar el boton "Guardar"."""
+```
+
+Asi UI, import y backends consultan la misma fuente de verdad. Si despues se cambia un rango (ej. opacity 0..1 → 0..2), se cambia en un solo lugar.
 
 ### 2. Extension de `TerminalBackend`
 
@@ -144,12 +166,21 @@ _CANONICAL_TO_KITTY_SETTING = {
 
 #### Caso especial: `window_padding_width` en Kitty
 
-Kitty acepta el padding como `window_padding_width N` (1 valor: aplica a los 4 lados) o `window_padding_width N1 N2 N3 N4` (top, right, bottom, left). Para mapear `padding.x`/`padding.y` (estilo Alacritty con 2 valores horizontal/vertical):
+Kitty acepta el padding **en pts** con 1, 2, 3 o 4 valores (verificado en `man kitty.conf`):
 
-- **Read**: si Kitty tiene 1 valor, devolverlo para ambos x y y. Si tiene 4, agrupar (top+bottom = y, left+right = x — asumiendo simetria). Si los 4 son distintos, devolver el primero y avisar.
-- **Write**: emitir `window_padding_width Y X` (Kitty acepta 2 valores como vertical horizontal segun la doc). Verificar empiricamente al implementar.
+- 1 valor: los 4 lados.
+- 2 valores: vertical horizontal.
+- 3 valores: top horizontal bottom.
+- 4 valores: top right bottom left.
 
-Si la complejidad de mapeo crece, considerar exponer en el UI de Kitty un solo campo "padding" (uniforme) y dejar 2 valores solo en Alacritty. Decidir al implementar.
+Para mapear `padding.x` / `padding.y` (estilo Alacritty con 2 valores horizontal/vertical):
+
+- **Read**:
+  - 1 valor: devolverlo para ambos `x` y `y`.
+  - 2 valores: el primero es `y` (vertical), el segundo es `x` (horizontal).
+  - 3 o 4 valores: si la simetria se respeta (`top == bottom` para `y`; `left == right` para `x`), devolver `(x, y)` correspondientes. Si NO se respeta (asimetrico, no representable en el modelo de 2 valores Alacritty), devolver **`None`** (= "unset" en la UI) — es la opcion conservadora: no perdemos datos del archivo (el `delete_setting` solo se ejecuta con `x`), pero el UI no muestra un valor enganoso.
+- **Write**: emitir `window_padding_width Y X` (2 valores: vertical horizontal). Sobrescribe cualquier configuracion de 3 o 4 valores que hubiera, con perdida controlada (decision del usuario al editar desde el UI).
+- **Tipos**: el canon es `int` (por consistencia con Alacritty que requiere int). Kitty acepta floats (pts), pero si el archivo tiene `window_padding_width 2.5` el `coerce_setting_value` devuelve `None` (= "unset" en UI). Igual que con asimetria: no se pierde el archivo, simplemente no se representa en el UI hasta que el usuario sobrescriba.
 
 ### 4. UI: `TerminalSettingsScreen`
 
@@ -186,8 +217,9 @@ Nuevo screen `ztc/screens/terminal_settings.py` con la misma estructura que `Col
 
 5. **Tests**:
    - `tests/test_terminal_alacritty_settings.py`: leer/escribir cada uno de los 6 settings, roundtrip read→write→read, delete, valores invalidos.
-   - `tests/test_terminal_kitty_settings.py`: idem.
-   - Tests del caso especial padding: archivo Kitty con 1 valor, con 2 valores, con 4 valores; comportamiento de lectura.
+   - **TOML inline tables**: el TOML de Alacritty puede expresar las tablas como `[window.padding]` con keys debajo, o inline `padding = { x = 8, y = 8 }`. Tests deben cubrir las dos formas — tanto al leer (parser ve ambas equivalentes) como al escribir (preservar la forma existente si el usuario ya tiene inline). Aplica especialmente a `padding`, `cursor.style`, `font.normal`.
+   - `tests/test_terminal_kitty_settings.py`: idem para Kitty.
+   - Tests del caso especial `window_padding_width`: archivo Kitty con 1, 2, 3 y 4 valores; verificar lectura simetrica (devuelve `(x, y)`) vs asimetrica (devuelve `None`); con valores `int` vs `float` (coercionar limpio o `None`).
 
 6. **Commit**: `feat: extender TerminalBackend con read_setting/write_setting (catalogo de 6 settings)`.
 
@@ -197,7 +229,7 @@ Nuevo screen `ztc/screens/terminal_settings.py` con la misma estructura que `Col
    - `compose`: header + OptionList con los settings.
    - Handlers: edicion, reset, save, import, reload.
    - Modales: `IntInputModal`, `FloatInputModal`, `StrInputModal` (algunos pueden reusarse o crearse nuevos), `EnumPickerModal`.
-   - Reusar `BackupHelper` y patrones de save existentes.
+   - Para guardar reusar el patron real del repo: `backup = self.backend.save(self.doc, self.backend_path)` (mismo patron que `color_editor.py:309`). Cada backend (Alacritty/Kitty) maneja internamente el backup atomico antes de escribir.
 
 2. **Tests**:
    - `tests/test_terminal_settings_screen.py`: smoke test con Pilot, edicion de cada tipo, save crea backup.
@@ -243,9 +275,9 @@ El catalogo `SETTINGS` se expande agregando entradas. La API no cambia. La compl
 
 Iteracion 2 reusa toda la infraestructura de iteracion 1; solo agrega 4 entradas al catalogo + handle de settings backend-specific.
 
-### Default values
+### Default values: `x` hace `delete_setting()` (no escribe el default explicito)
 
-El catalogo declara `default` por setting. El UI muestra el default como hint cuando el archivo no tiene la entrada. Resetear (`x`) escribe el default explicitamente al archivo. Alternativa: resetear = `delete_setting` (eliminar la entrada, dejar que el terminal use su propio default). Decidir al implementar — `delete_setting` es mas limpio; default explicito es mas predecible.
+El catalogo declara `default` por setting (`SETTINGS["window.opacity"].default = 1.0`, etc.). El UI muestra el default como **hint visual** cuando el archivo no tiene la entrada. Resetear (`x`) **borra la entrada del archivo** via `delete_setting()` — deja al terminal usar su propio default. Mismo patron que `ColorEditorScreen` con slots: borrar la entrada y no escribir un valor "default" explicito. Es mas limpio (no contamina el archivo con valores que el terminal sabe por si solo) y previene drift (si Alacritty cambia su default en una version, no quedamos pegados al valor que tuvimos en el catalogo).
 
 ## Que dejamos sin tocar
 

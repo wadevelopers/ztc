@@ -124,11 +124,11 @@ Lectura, escritura, models, assets, parsing, builders Textual. **Sin re-exports 
 
 ```python
 # Antes
-from ztc.services.zellij_themes import save_user_theme   # escritura, wrapper que tambien re-exporta lectura
+from ztc.services.zellij_themes import save_user_themes  # escritura, wrapper que tambien re-exporta lectura
 from zellij_themes.user_themes import list_user_themes   # lectura desde shared
 
 # Despues
-from ztc.zellij.theme_writer import save_user_theme       # escritura
+from ztc.zellij.theme_writer import save_user_themes      # escritura
 from ztc.zellij.user_themes import list_user_themes       # lectura
 ```
 
@@ -299,7 +299,7 @@ Reemplazos mecanicos directos (sustitucion 1:1 por modulo de origen):
 | `ZellijTheme`, `ZellijColor` | `ztc.zellij.models` |
 | `TEXTUAL_FALLBACK` | `ztc.zellij` (re-export top-level) |
 | `LEGACY_SLOTS`, `is_valid_theme_name`, `list_user_themes`, `list_all_themes`, `list_builtin_themes`, `builtin_theme_names` | `ztc.zellij.user_themes` |
-| `find_themes_block`, `derive_rich_block`, `render_themes_block`, `save_user_themes`, `upsert_user_theme`, `delete_user_theme`, `clone_theme`, `display_slot`, `get_rich_slot`, `set_rich_slot`, `unset_rich_slot`, `default_legacy_slots` | `ztc.zellij.theme_writer` (escritura genuina; el `git mv` de Fase 2 lo deja ahi) |
+| `find_themes_block`, `derive_rich_block`, `render_themes_block`, `save_user_themes`, `upsert_user_theme`, `delete_user_theme`, `clone_theme`, `display_slot`, `get_rich_slot`, `set_rich_slot`, `unset_rich_slot`, `default_legacy_slots`, `RICH_SLOTS_TO_EXPOSE` | `ztc.zellij.theme_writer` (escritura genuina + constantes propias; el `git mv` de Fase 2 lo deja ahi) |
 
 Idem para `ztc.services.zellij_config`:
 
@@ -356,7 +356,11 @@ rg -n "\bzellij_themes\b|ztc\.services\.(zellij_themes|zellij_config|kdl_io|layo
    [tool.uv.sources]
    zellij-themes = { path = "../zellij-themes", editable = true }   # ← QUITAR
    ```
-2. Verificar: `uv sync` corre limpio sin la dep path.
+2. Verificar: `uv sync` corre limpio sin la dep path. **Importante**: `uv sync` va a reescribir `uv.lock` quitando la entrada de `zellij-themes`. Revisar el diff del lockfile:
+   ```bash
+   git -C /home/martin/Documents/ztc diff uv.lock
+   ```
+   Confirmar que el unico cambio es la remocion de `zellij-themes` (y eventualmente de subdeps que solo entraban por esa via). Si hay otros cambios inesperados (bumps de version, otros paquetes), investigar antes de proceder. **Stagear `uv.lock` en el commit de Fase 5**.
 3. Verificar: `uv run pytest` pasa todos los tests (incluidos los movidos de zellij-themes).
 
 ### Fase 6: Verificacion final
