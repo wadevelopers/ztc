@@ -39,6 +39,12 @@ from pathlib import Path
 from ztc.services.atomic import write_atomic
 from ztc.services.backups import make_backup
 from ztc.services.colors import CanonicalSlot
+from ztc.services.terminals.settings import (
+    SETTINGS,
+    CanonicalSetting,
+    coerce_setting_value,
+    validate_setting_value,
+)
 
 # Profundidad maxima para expandir `include`. Evita loops por
 # circular includes y tambien acota el costo de parsing.
@@ -291,3 +297,181 @@ class KittyBackend:
             return False
         del doc.lines[idx]
         return True
+
+    # ---------- settings (window, font, cursor) ----------
+
+    def supported_settings(self) -> list[CanonicalSetting]:
+        return [SETTINGS[name] for name in _SUPPORTED_SETTINGS_KITTY]
+
+    def read_setting(
+        self, doc: KittyDoc, setting: CanonicalSetting
+    ) -> object | None:
+        # Padding x/y comparten el key `window_padding_width` con
+        # logica de 1-4 valores; manejado aparte.
+        if setting.name in ("window.padding.x", "window.padding.y"):
+            return _read_kitty_padding(self._effective_entries(doc), setting.name)
+
+        key = _CANONICAL_TO_KITTY_SETTING.get(setting.name)
+        if key is None:
+            return None
+        last = _last_entry_for_key(self._effective_entries(doc), key)
+        if last is None:
+            return None
+        return coerce_setting_value(setting, last.value)
+
+    def write_setting(
+        self, doc: KittyDoc, setting: CanonicalSetting, value: object
+    ) -> None:
+        if not validate_setting_value(setting, value):
+            raise ValueError(
+                f"Invalid value for {setting.name!r} ({setting.kind.value}): {value!r}"
+            )
+
+        if setting.name in ("window.padding.x", "window.padding.y"):
+            _write_kitty_padding(doc, setting.name, value)  # type: ignore[arg-type]
+            return
+
+        key = _CANONICAL_TO_KITTY_SETTING.get(setting.name)
+        if key is None:
+            raise KeyError(f"Setting {setting.name!r} not supported by Kitty")
+        new_line = f"{key} {value}"
+        last = _last_entry_for_key(self._effective_entries(doc), key)
+        if last is not None and last.main_line_idx is not None:
+            doc.lines[last.main_line_idx] = new_line
+        else:
+            doc.lines.append(new_line)
+
+    def delete_setting(
+        self, doc: KittyDoc, setting: CanonicalSetting
+    ) -> bool:
+        # Padding x/y borran ambos el key compartido (no podemos borrar
+        # solo una direccion en Kitty: `window_padding_width` es un solo
+        # key con 1-4 valores). Si solo se quiere resetear una direccion,
+        # el caller deberia setear la otra explicitamente y dejar al
+        # terminal usar su default. Aca, delete = borrar la linea entera.
+        if setting.name in ("window.padding.x", "window.padding.y"):
+            idx = _last_index_of_key_in_main(doc.lines, "window_padding_width")
+            if idx is None:
+                return False
+            del doc.lines[idx]
+            return True
+
+        key = _CANONICAL_TO_KITTY_SETTING.get(setting.name)
+        if key is None:
+            return False
+        idx = _last_index_of_key_in_main(doc.lines, key)
+        if idx is None:
+            return False
+        del doc.lines[idx]
+        return True
+
+
+# ---------- mapeos y helpers de settings ----------
+
+# Settings con mapeo directo 1:1 (key Kitty -> string del archivo).
+# `window.padding.x` y `padding.y` no estan acá: comparten
+# `window_padding_width` con logica especial (ver _read_kitty_padding /
+# _write_kitty_padding).
+_CANONICAL_TO_KITTY_SETTING: dict[str, str] = {
+    "window.opacity": "background_opacity",
+    "font.size": "font_size",
+    "font.family": "font_family",
+    "cursor.shape": "cursor_shape",
+}
+
+# Lista completa de settings soportadas (incluye padding x/y manejadas aparte).
+_SUPPORTED_SETTINGS_KITTY: tuple[str, ...] = (
+    "window.padding.x",
+    "window.padding.y",
+    "window.opacity",
+    "font.size",
+    "font.family",
+    "cursor.shape",
+)
+
+
+def _parse_padding_values(raw: str) -> list[int] | None:
+    """Parsea los valores numericos de `window_padding_width <values...>`.
+    Devuelve None si algun valor no es int limpio (rechaza floats segun
+    decision del plan: si Kitty tiene `2.5` el coerce devuelve None y la
+    UI muestra unset).
+    """
+    parts = raw.strip().split()
+    out: list[int] = []
+    for p in parts:
+        try:
+            f = float(p)
+        except ValueError:
+            return None
+        if f != int(f):
+            return None
+        out.append(int(f))
+    return out if out else None
+
+
+def _read_kitty_padding(entries: list[_Entry], setting_name: str) -> int | None:
+    """Implementa la decision del plan para `window_padding_width`:
+    - 1 valor: aplica a x e y.
+    - 2 valores: vertical(y) horizontal(x).
+    - 3 valores (top horizontal bottom): si top==bottom, asimetrico
+      sobre y → no representable → None.
+    - 4 valores (top right bottom left): simetrico si top==bottom y
+      left==right → devolver y/x; asimetrico → None.
+    - Floats no enteros → None (via _parse_padding_values).
+    """
+    last = _last_entry_for_key(entries, "window_padding_width")
+    if last is None:
+        return None
+    values = _parse_padding_values(last.value)
+    if values is None or not values:
+        return None
+
+    is_x = setting_name == "window.padding.x"
+
+    if len(values) == 1:
+        return values[0]
+    if len(values) == 2:
+        # vertical horizontal → y x
+        y, x = values
+        return x if is_x else y
+    if len(values) == 3:
+        # top horizontal bottom: x = horizontal (limpio), y solo si top==bottom.
+        top, h, bottom = values
+        if is_x:
+            return h
+        return top if top == bottom else None
+    if len(values) == 4:
+        # top right bottom left: y simetrico si top==bottom; x simetrico si left==right.
+        top, right, bottom, left = values
+        if is_x:
+            return right if right == left else None
+        return top if top == bottom else None
+    return None
+
+
+def _write_kitty_padding(doc: KittyDoc, setting_name: str, value: int) -> None:
+    """Escribe `window_padding_width Y X` (siempre 2 valores, vertical horizontal).
+    Si solo se cambia una direccion, lee la otra del archivo (o usa 0 si no
+    estaba) y compone la linea final.
+    """
+    entries = _linearize(doc.path, doc.lines, in_main=True)
+    last = _last_entry_for_key(entries, "window_padding_width")
+    current_x = current_y = 0
+    if last is not None:
+        values = _parse_padding_values(last.value)
+        if values:
+            if len(values) == 1:
+                current_x = current_y = values[0]
+            elif len(values) >= 2:
+                current_y, current_x = values[0], values[1]
+
+    if setting_name == "window.padding.x":
+        new_x, new_y = value, current_y
+    else:  # window.padding.y
+        new_x, new_y = current_x, value
+
+    new_line = f"window_padding_width {new_y} {new_x}"
+    if last is not None and last.main_line_idx is not None:
+        doc.lines[last.main_line_idx] = new_line
+    else:
+        doc.lines.append(new_line)

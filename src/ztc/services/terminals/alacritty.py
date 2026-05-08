@@ -19,6 +19,12 @@ from ztc.services.colors import (
     is_valid_hex,
     normalize_hex,
 )
+from ztc.services.terminals.settings import (
+    SETTINGS,
+    CanonicalSetting,
+    coerce_setting_value,
+    validate_setting_value,
+)
 
 # Estructura conocida de Alacritty (define el vocabulario canonico).
 SLOT_GROUPS: dict[str, tuple[str, ...]] = {
@@ -32,6 +38,17 @@ SLOT_GROUPS: dict[str, tuple[str, ...]] = {
 KNOWN_SLOTS: list[CanonicalSlot] = [
     (group, name) for group, names in SLOT_GROUPS.items() for name in names
 ]
+
+# Mapeo de cada setting canonico al path TOML donde Alacritty lo guarda.
+# Ej. `window.padding.x` -> doc["window"]["padding"]["x"].
+_CANONICAL_TO_ALACRITTY_SETTING: dict[str, tuple[str, ...]] = {
+    "window.padding.x": ("window", "padding", "x"),
+    "window.padding.y": ("window", "padding", "y"),
+    "window.opacity": ("window", "opacity"),
+    "font.size": ("font", "size"),
+    "font.family": ("font", "normal", "family"),
+    "cursor.shape": ("cursor", "style", "shape"),
+}
 
 
 class AlacrittyBackend:
@@ -148,3 +165,95 @@ class AlacrittyBackend:
         arr.append(path)
         doc["import"] = arr
         return True
+
+    # ---------- settings (window, font, cursor) ----------
+
+    def supported_settings(self) -> list[CanonicalSetting]:
+        return [SETTINGS[name] for name in _CANONICAL_TO_ALACRITTY_SETTING]
+
+    def read_setting(
+        self, doc: TOMLDocument, setting: CanonicalSetting
+    ) -> object | None:
+        path = _CANONICAL_TO_ALACRITTY_SETTING.get(setting.name)
+        if path is None:
+            return None
+        raw = _read_path(doc, path)
+        if raw is None:
+            return None
+        return coerce_setting_value(setting, raw)
+
+    def write_setting(
+        self, doc: TOMLDocument, setting: CanonicalSetting, value: object
+    ) -> None:
+        if not validate_setting_value(setting, value):
+            raise ValueError(
+                f"Invalid value for {setting.name!r} ({setting.kind.value}): {value!r}"
+            )
+        path = _CANONICAL_TO_ALACRITTY_SETTING.get(setting.name)
+        if path is None:
+            raise KeyError(f"Setting {setting.name!r} not supported by Alacritty")
+        _write_path(doc, path, value)
+
+    def delete_setting(
+        self, doc: TOMLDocument, setting: CanonicalSetting
+    ) -> bool:
+        path = _CANONICAL_TO_ALACRITTY_SETTING.get(setting.name)
+        if path is None:
+            return False
+        return _delete_path(doc, path)
+
+
+# ---------- helpers TOML por path ----------
+
+
+def _read_path(doc: TOMLDocument, path: tuple[str, ...]) -> object | None:
+    """Navega `doc[path[0]][path[1]]...` y devuelve el leaf, o None si
+    falta cualquier nivel. Funciona indistinto con tablas inline
+    (`padding = { x = 8 }`) y dotted (`[window.padding] x = 8`) — tomlkit
+    expone ambas igual al leer."""
+    current: object = doc
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        if key not in current:
+            return None
+        current = current[key]
+    return current
+
+
+def _write_path(doc: TOMLDocument, path: tuple[str, ...], value: object) -> None:
+    """Escribe value en `doc[path[0]][path[1]]...`, creando tablas
+    intermedias si hacen falta. Preserva forma existente (inline vs
+    dotted) si ya esta declarada."""
+    *parents, leaf = path
+    current: dict = doc
+    for key in parents:
+        if key not in current:
+            current[key] = tomlkit.table()
+        current = current[key]  # type: ignore[assignment]
+    current[leaf] = value
+
+
+def _delete_path(doc: TOMLDocument, path: tuple[str, ...]) -> bool:
+    """Borra `doc[path[0]][path[1]]...[leaf]` y, si quedan tablas
+    intermedias vacias, las borra tambien. Devuelve True si el leaf
+    existia."""
+    *parents, leaf = path
+    chain: list[tuple[dict, str]] = []
+    current: object = doc
+    for key in parents:
+        if not isinstance(current, dict) or key not in current:
+            return False
+        chain.append((current, key))  # type: ignore[arg-type]
+        current = current[key]
+    if not isinstance(current, dict) or leaf not in current:
+        return False
+    del current[leaf]
+    # Limpiar tablas vacias hacia arriba.
+    while chain:
+        parent, key = chain.pop()
+        if isinstance(parent[key], dict) and len(parent[key]) == 0:
+            del parent[key]
+        else:
+            break
+    return True
