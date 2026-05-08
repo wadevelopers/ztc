@@ -48,7 +48,7 @@ def set_active_theme(
     Devuelve la ruta del backup creado o None.
     """
     if not _VALID_THEME_NAME.match(theme):
-        raise ValueError(f"Nombre de tema invalido: {theme!r}")
+        raise ValueError(f"Invalid theme name: {theme!r}")
 
     text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
 

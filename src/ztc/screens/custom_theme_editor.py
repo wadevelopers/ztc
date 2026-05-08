@@ -120,10 +120,10 @@ class CustomThemeEditorScreen(Screen[None]):
 
         # Header de seccion legacy
         option_list.add_option(
-            Option("── Paleta ANSI ──", id=_HEADER_PREFIX + "ansi", disabled=True)
+            Option("── ANSI palette ──", id=_HEADER_PREFIX + "ansi", disabled=True)
         )
         for slot in self._legacy_slot_names():
-            value = self._legacy_value(slot) or "(sin definir)"
+            value = self._legacy_value(slot) or "(unset)"
             option_list.add_option(
                 Option(self._format_row(slot, value), id=_LEGACY_PREFIX + slot)
             )
@@ -133,7 +133,7 @@ class CustomThemeEditorScreen(Screen[None]):
             Option("── UI (Zellij) ──", id=_HEADER_PREFIX + "ui", disabled=True)
         )
         for component, slot in zellij_themes.RICH_SLOTS_TO_EXPOSE:
-            value = self._rich_value(component, slot) or "(sin definir)"
+            value = self._rich_value(component, slot) or "(unset)"
             label = self._format_row(zellij_themes.display_slot(component, slot), value)
             option_list.add_option(
                 Option(label, id=f"{_RICH_PREFIX}{component}.{slot}")
@@ -175,9 +175,9 @@ class CustomThemeEditorScreen(Screen[None]):
         meta_widget = self.query_one("#detail-meta", Static)
 
         if slot_info is None:
-            name_widget.update("(seleccion)")
+            name_widget.update("(selection)")
             swatch_widget.update("")
-            meta_widget.update("Mueve para elegir un slot.")
+            meta_widget.update("Move to pick a slot.")
             return
 
         kind, slot_id = slot_info
@@ -196,12 +196,12 @@ class CustomThemeEditorScreen(Screen[None]):
             )
             swatch_widget.update(big)
             meta_widget.update(
-                f"Valor actual: {value}\nEnter para editar / x para resetear."
+                f"Current value: {value}\nEnter to edit / x to reset."
             )
         else:
             swatch_widget.update("")
             meta_widget.update(
-                f"Valor actual: {value or '(sin definir)'}\nEnter para definir."
+                f"Current value: {value or '(unset)'}\nEnter to set."
             )
 
     @on(OptionList.OptionHighlighted, "#slot-list")
@@ -274,7 +274,7 @@ class CustomThemeEditorScreen(Screen[None]):
             self.theme.colors = [c for c in self.theme.colors if c.name != slot]
             if len(self.theme.colors) == before:
                 self.app.notify(
-                    f"{slot} ya estaba sin definir", severity="information"
+                    f"{slot} was already unset", severity="information"
                 )
                 return
             self.dirty = True
@@ -282,7 +282,7 @@ class CustomThemeEditorScreen(Screen[None]):
             component, slot = slot_id.split(".", 1)
             if self._rich_value(component, slot) is None:
                 self.app.notify(
-                    f"{component}.{slot} ya estaba sin definir",
+                    f"{component}.{slot} was already unset",
                     severity="information",
                 )
                 return
@@ -292,7 +292,7 @@ class CustomThemeEditorScreen(Screen[None]):
         self._refresh_header()
         self._rebuild_list()
         self.app.notify(
-            "Slot reseteado (pulsa 's' para guardar al disco)",
+            "Slot reset (press 's' to save to disk)",
             severity="information",
             timeout=5,
         )
@@ -301,11 +301,11 @@ class CustomThemeEditorScreen(Screen[None]):
         try:
             backup = zellij_themes.upsert_user_theme(self.config_path, self.theme)
         except Exception as exc:  # noqa: BLE001
-            self.app.notify(f"Error al guardar: {exc}", severity="error", timeout=10)
+            self.app.notify(f"Save error: {exc}", severity="error", timeout=10)
             return
         self.dirty = False
         self._refresh_header()
-        msg = f"Tema '{self.theme.name}' guardado en config.kdl"
+        msg = f"Theme '{self.theme.name}' saved to config.kdl"
         if backup is not None:
             msg += f"  (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
@@ -325,7 +325,7 @@ class CustomThemeEditorScreen(Screen[None]):
                     )
                 except Exception as exc:  # noqa: BLE001
                     self.app.notify(
-                        f"Error sincronizando terminal: {exc}",
+                        f"Error syncing terminal: {exc}",
                         severity="error",
                         timeout=8,
                     )
@@ -349,13 +349,13 @@ class CustomThemeEditorScreen(Screen[None]):
 
         self.app.push_screen(
             ConfirmByNameModal(
-                title="Hay cambios sin guardar",
+                title="Unsaved changes",
                 message=(
-                    "Si vuelves ahora, perderas los cambios del tema. "
-                    "Cancela y pulsa s para guardar."
+                    "If you go back now, you'll lose theme changes. "
+                    "Cancel and press s to save."
                 ),
-                expected="descartar",
-                confirm_label="Descartar cambios",
+                expected="discard",
+                confirm_label="Discard changes",
             ),
             after,
         )

@@ -349,11 +349,11 @@ def clone_theme(
     de colores desde el ultimo apply.
     """
     if not is_valid_theme_name(dst_name):
-        raise ValueError(f"Nombre invalido: {dst_name!r}")
+        raise ValueError(f"Invalid name: {dst_name!r}")
     current = list_user_themes(config_path)
     by_name = {t.name: t for t in current}
     if dst_name in by_name:
-        raise ValueError(f"Ya existe un user theme '{dst_name}'")
+        raise ValueError(f"User theme '{dst_name}' already exists")
 
     from zellij_themes import theme_assets as zta
 

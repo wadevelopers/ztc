@@ -19,7 +19,7 @@ class LayoutListScreen(Screen[None]):
     """Lista de layouts. Permite abrir, crear o borrar layouts."""
 
     BINDINGS = [
-        Binding("enter", "open", "Abrir"),
+        Binding("enter", "open", "Open"),
         Binding("n", "new", "New"),
         Binding("d", "delete", "Delete"),
         Binding("r", "refresh", "Refresh"),
@@ -64,7 +64,7 @@ class LayoutListScreen(Screen[None]):
         with Horizontal(id="body"):
             yield OptionList(id="layout-list")
             with Vertical(id="detail"):
-                yield Static("Selecciona un layout.", id="detail-name")
+                yield Static("Select a layout.", id="detail-name")
                 yield Static("", id="detail-meta")
         yield Footer()
 
@@ -82,7 +82,7 @@ class LayoutListScreen(Screen[None]):
         for layout in self._layouts:
             option_list.add_option(Option(self._format(layout), id=layout.name))
         self.query_one("#status", Static).update(
-            f"{len(self._layouts)} layout(s) en {self.layouts_dir}"
+            f"{len(self._layouts)} layout(s) in {self.layouts_dir}"
         )
         if self._layouts:
             option_list.highlighted = 0
@@ -99,17 +99,17 @@ class LayoutListScreen(Screen[None]):
         name = self.query_one("#detail-name", Static)
         meta = self.query_one("#detail-meta", Static)
         if layout is None:
-            name.update("Sin layouts.")
-            meta.update("Pulsa [b]n[/b] para crear el primero.")
+            name.update("No layouts.")
+            meta.update("Press [b]n[/b] to create the first one.")
             return
         name.update(layout.name)
-        tab_names = ", ".join((t.name or "(sin nombre)") for t in layout.tabs)
+        tab_names = ", ".join((t.name or "(unnamed)") for t in layout.tabs)
         warn = ""
         if layout.raw_unknown_nodes:
             warn = (
-                "\n\nEste layout contiene nodos que el editor no entiende "
-                "(p. ej. default_tab_template). Se preservan al guardar pero "
-                "podrian perder formato exacto. Comentarios `/-` se descartan."
+                "\n\nThis layout contains nodes the editor does not understand "
+                "(e.g. default_tab_template). They are preserved on save but "
+                "may lose exact formatting. `/-` comments are discarded."
             )
         meta.update(f"Path: {layout.path}\nTabs: {tab_names}{warn}")
 
@@ -146,14 +146,14 @@ class LayoutListScreen(Screen[None]):
                 return
             if not layout_ops.is_valid_layout_name(name):
                 self.app.notify(
-                    f"Nombre invalido: {name!r}. Usa letras, numeros, '-' y '_'.",
+                    f"Invalid name: {name!r}. Use letters, numbers, '-' and '_'.",
                     severity="error",
                 )
                 return
             target = self.layouts_dir / f"{name}.kdl"
             if target.exists():
                 self.app.notify(
-                    f"Ya existe {target.name}. Usa otro nombre o borra el existente.",
+                    f"{target.name} already exists. Use a different name or delete the existing one.",
                     severity="error",
                 )
                 return
@@ -168,8 +168,8 @@ class LayoutListScreen(Screen[None]):
 
         self.app.push_screen(
             PromptModal(
-                title="Nuevo layout",
-                placeholder="ej. trabajo",
+                title="New layout",
+                placeholder="e.g. work",
                 confirm_label="Create",
             ),
             after,
@@ -182,14 +182,14 @@ class LayoutListScreen(Screen[None]):
 
         def after(ok: bool) -> None:
             if not ok:
-                self.app.notify("Cancelado.", severity="information")
+                self.app.notify("Cancelled.", severity="information")
                 return
             try:
                 backup = kdl_io.delete_layout(layout.path)
             except Exception as exc:  # noqa: BLE001
-                self.app.notify(f"Error al borrar: {exc}", severity="error")
+                self.app.notify(f"Delete error: {exc}", severity="error")
                 return
-            msg = f"Layout '{layout.name}' borrado"
+            msg = f"Layout '{layout.name}' deleted"
             if backup is not None:
                 msg += f" (backup: {backup.name})"
             self.app.notify(msg, severity="information")
@@ -198,7 +198,7 @@ class LayoutListScreen(Screen[None]):
         self.app.push_screen(
             ConfirmByNameModal(
                 title="Delete layout",
-                message=f"Esto borrara el archivo {layout.path}.",
+                message=f"This will delete the file {layout.path}.",
                 expected=layout.name,
                 confirm_label="Delete",
             ),

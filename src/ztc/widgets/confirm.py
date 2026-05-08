@@ -69,7 +69,7 @@ class ConfirmByNameModal(ModalScreen[bool]):
             yield Static(self._title, id="title")
             yield Static(self._message, id="message")
             yield Static(
-                f"Escribe '[b]{self._expected}[/b]' para confirmar:",
+                f"Type '[b]{self._expected}[/b]' to confirm:",
                 id="hint",
             )
             yield Input(placeholder=self._expected, id="confirm-input")
@@ -147,7 +147,7 @@ class PromptModal(ModalScreen[str | None]):
         title: str,
         placeholder: str = "",
         initial: str = "",
-        confirm_label: str = "Aceptar",
+        confirm_label: str = "OK",
         allow_empty: bool = False,
     ) -> None:
         super().__init__()
@@ -271,20 +271,20 @@ class PaneEditModal(ModalScreen[Pane | None]):
         self._is_container = pane.is_container
 
     def compose(self) -> ComposeResult:
-        kind = "contenedor" if self._is_container else "hoja"
+        kind = "container" if self._is_container else "leaf"
         with Vertical(id="dialog"):
-            yield Static(f"Editar pane ({kind})", id="title")
+            yield Static(f"Edit pane ({kind})", id="title")
 
             with Horizontal(classes="row"):
-                yield Static("Nombre", classes="label")
-                yield Input(value=self._pane.name or "", id="name", placeholder="opcional")
+                yield Static("Name", classes="label")
+                yield Input(value=self._pane.name or "", id="name", placeholder="optional")
 
             with Horizontal(classes="row"):
                 yield Static("Size", classes="label")
                 yield Input(
                     value=self._pane.size or "",
                     id="size",
-                    placeholder="ej. 60% o 1",
+                    placeholder="e.g. 60% or 1",
                 )
 
             with Horizontal(classes="row"):
@@ -309,25 +309,25 @@ class PaneEditModal(ModalScreen[Pane | None]):
                         )
             else:
                 with Horizontal(classes="row"):
-                    yield Static("Comando", classes="label")
+                    yield Static("Command", classes="label")
                     yield Input(
                         value=self._pane.command or "",
                         id="command",
-                        placeholder="ej. nvim",
+                        placeholder="e.g. nvim",
                     )
                 with Horizontal(classes="row"):
                     yield Static("Args", classes="label")
                     yield Input(
                         value=shlex.join(self._pane.args) if self._pane.args else "",
                         id="args",
-                        placeholder="ej. --verbose --file foo.txt",
+                        placeholder="e.g. --verbose --file foo.txt",
                     )
                 with Horizontal(classes="row"):
                     yield Static("CWD", classes="label")
                     yield Input(
                         value=self._pane.cwd or "",
                         id="cwd",
-                        placeholder="opcional, ej. /home/martin/proj",
+                        placeholder="optional, e.g. /home/martin/proj",
                     )
                 with Horizontal(classes="row"):
                     yield Static("Start suspended", classes="label")
@@ -442,8 +442,8 @@ class EditColorModal(ModalScreen[str | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static(f"Editar {self._slot_label}", id="title")
-            yield Static("Hex: #rgb, #rrggbb o #rrggbbaa", classes="label")
+            yield Static(f"Edit {self._slot_label}", id="title")
+            yield Static("Hex: #rgb, #rrggbb or #rrggbbaa", classes="label")
             yield Input(
                 value=self._initial,
                 placeholder="#1e1e2e",
@@ -494,7 +494,7 @@ class EditColorModal(ModalScreen[str | None]):
             status.update(f"OK  ->  {normalized}")
         else:
             swatch.update("")
-            status.update("Formato invalido")
+            status.update("Invalid format")
 
     def _submit(self) -> None:
         from zellij_themes.colors import is_valid_hex, normalize_hex

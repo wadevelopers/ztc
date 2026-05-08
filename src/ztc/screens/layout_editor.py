@@ -25,18 +25,18 @@ class LayoutEditorScreen(Screen[None]):
 
     BINDINGS = [
         # Pane operations
-        Binding("a", "add_pane", "Anadir pane"),
-        Binding("s", "split_pane", "Partir"),
+        Binding("a", "add_pane", "Add pane"),
+        Binding("s", "split_pane", "Split"),
         Binding("d", "delete_pane", "Delete pane"),
         Binding("e", "edit_pane", "Edit"),
-        Binding("J", "move_down", "Bajar"),
-        Binding("K", "move_up", "Subir"),
+        Binding("J", "move_down", "Move down"),
+        Binding("K", "move_up", "Move up"),
         Binding("greater_than_sign", "size_up", "+5%"),
         Binding("less_than_sign", "size_down", "-5%"),
         # Tab operations
-        Binding("n", "new_tab", "Nueva tab"),
-        Binding("D", "delete_tab", "Borrar tab"),
-        Binding("r", "rename_tab", "Renombrar tab"),
+        Binding("n", "new_tab", "New tab"),
+        Binding("D", "delete_tab", "Delete tab"),
+        Binding("r", "rename_tab", "Rename tab"),
         # Save / back
         Binding("ctrl+s", "save", "Save"),
         Binding("escape", "back", "Back"),
@@ -146,9 +146,9 @@ class LayoutEditorScreen(Screen[None]):
         tree.clear()
         tab = self._current_tab()
         if tab is None:
-            tree.root.label = "(sin tabs)"
+            tree.root.label = "(no tabs)"
             return
-        tree.root.label = f"tab: {tab.name or '(sin nombre)'}"
+        tree.root.label = f"tab: {tab.name or '(unnamed)'}"
         tree.root.expand()
         for pane in tab.children:
             self._add_pane_node(tree.root, pane)
@@ -313,8 +313,8 @@ class LayoutEditorScreen(Screen[None]):
 
         self.app.push_screen(
             PromptModal(
-                title="Nueva tab",
-                placeholder="ej. dev",
+                title="New tab",
+                placeholder="e.g. dev",
                 confirm_label="Create",
             ),
             after,
@@ -338,10 +338,10 @@ class LayoutEditorScreen(Screen[None]):
         if tab.name:
             self.app.push_screen(
                 ConfirmByNameModal(
-                    title="Borrar tab",
+                    title="Delete tab",
                     message=(
-                        f"Esto borrara la tab '{tab.name}' del layout "
-                        "(no del disco hasta guardar)."
+                        f"This will remove tab '{tab.name}' from the layout "
+                        "(not from disk until save)."
                     ),
                     expected=tab.name,
                     confirm_label="Delete",
@@ -351,11 +351,11 @@ class LayoutEditorScreen(Screen[None]):
         else:
             self.app.push_screen(
                 PromptModal(
-                    title=f"Borrar tab #{self._selected_tab_index + 1}",
-                    placeholder="escribe SI para confirmar",
+                    title=f"Delete tab #{self._selected_tab_index + 1}",
+                    placeholder="type YES to confirm",
                     confirm_label="Delete",
                 ),
-                lambda result: do_delete() if result == "SI" else None,
+                lambda result: do_delete() if result == "YES" else None,
             )
 
     def action_rename_tab(self) -> None:
@@ -373,9 +373,9 @@ class LayoutEditorScreen(Screen[None]):
 
         self.app.push_screen(
             PromptModal(
-                title="Renombrar tab",
+                title="Rename tab",
                 initial=tab.name or "",
-                placeholder="nombre de la tab",
+                placeholder="tab name",
                 confirm_label="Rename",
                 allow_empty=True,
             ),
@@ -388,14 +388,14 @@ class LayoutEditorScreen(Screen[None]):
         try:
             backup = kdl_io.write_layout(self.layout_model)
         except Exception as exc:  # noqa: BLE001
-            self.app.notify(f"Error al guardar: {exc}", severity="error", timeout=10)
+            self.app.notify(f"Save error: {exc}", severity="error", timeout=10)
             return
         self.dirty = False
         self._refresh_header()
-        msg = f"Layout '{self.layout_model.name}' guardado."
+        msg = f"Layout '{self.layout_model.name}' saved."
         if backup is not None:
             msg += f"  (backup: {backup.name})"
-        msg += "  Para lanzarlo: usa zsm."
+        msg += "  To launch it: use zsm."
         self.app.notify(msg, severity="information", timeout=8)
 
     def action_back(self) -> None:
@@ -409,13 +409,13 @@ class LayoutEditorScreen(Screen[None]):
 
         self.app.push_screen(
             ConfirmByNameModal(
-                title="Hay cambios sin guardar",
+                title="Unsaved changes",
                 message=(
-                    "Si vuelves ahora, perderas los cambios. "
-                    "Cancela y pulsa Ctrl+S para guardar."
+                    "If you go back now, you'll lose your changes. "
+                    "Cancel and press Ctrl+S to save."
                 ),
-                expected="descartar",
-                confirm_label="Descartar cambios",
+                expected="discard",
+                confirm_label="Discard changes",
             ),
             after,
         )

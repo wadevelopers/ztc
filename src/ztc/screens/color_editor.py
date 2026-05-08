@@ -98,11 +98,11 @@ class ColorEditorScreen(Screen[None]):
         with Horizontal(id="body"):
             yield OptionList(id="slot-list")
             with Vertical(id="detail"):
-                yield Static("Selecciona un slot", id="detail-name")
+                yield Static("Select a slot", id="detail-name")
                 yield Static("", id="big-swatch")
                 yield Static("", id="detail-meta")
         with Vertical(id="warnings-wrap"):
-            yield Static("Avisos de contraste", id="warnings-title")
+            yield Static("Contrast warnings", id="warnings-title")
             with VerticalScroll():
                 yield Static("", id="warnings")
         yield Footer()
@@ -125,7 +125,7 @@ class ColorEditorScreen(Screen[None]):
         previous_index = option_list.highlighted
         option_list.clear_options()
         for slot in self.slots:
-            value = self.backend.read_slot(self.doc, slot) or "(sin definir)"
+            value = self.backend.read_slot(self.doc, slot) or "(unset)"
             label = self._format_row(slot[0], slot[1], value)
             option_list.add_option(Option(label, id=f"{slot[0]}.{slot[1]}"))
         if option_list.option_count:
@@ -157,11 +157,11 @@ class ColorEditorScreen(Screen[None]):
                 [f"[on {value}]                                                  [/]"] * 3
             )
             swatch_widget.update(big)
-            meta_widget.update(f"Valor actual: {value}\nEnter para editar.")
+            meta_widget.update(f"Current value: {value}\nEnter to edit.")
         else:
             swatch_widget.update("")
             meta_widget.update(
-                f"Valor actual: {value or '(sin definir)'}\nEnter para definir."
+                f"Current value: {value or '(unset)'}\nEnter to set."
             )
 
     def _refresh_warnings(self) -> None:
@@ -185,7 +185,7 @@ class ColorEditorScreen(Screen[None]):
         warnings = colors.compute_warnings(slot_values, zellij_bg=zellij_bg)
         widget = self.query_one("#warnings", Static)
         if not warnings:
-            widget.update("[green]Sin avisos.[/]")
+            widget.update("[green]No warnings.[/]")
             return
         lines = [f"- {w.message}" for w in warnings]
         widget.update("\n".join(lines))
@@ -215,13 +215,13 @@ class ColorEditorScreen(Screen[None]):
             self._rebuild_list()
             self._refresh_warnings()
             self.app.notify(
-                f"{slot[0]}.{slot[1]} reseteado (pulsa 's' para guardar al disco)",
+                f"{slot[0]}.{slot[1]} reset (press 's' to save to disk)",
                 severity="information",
                 timeout=6,
             )
         else:
             self.app.notify(
-                f"{slot[0]}.{slot[1]} ya estaba sin definir",
+                f"{slot[0]}.{slot[1]} was already unset",
                 severity="information",
             )
 
@@ -250,7 +250,7 @@ class ColorEditorScreen(Screen[None]):
         # Capability solo de Alacritty: import desde otro alacritty.toml.
         if not isinstance(self.backend, AlacrittyBackend):
             self.app.notify(
-                f"Importar tema no soportado en {self.backend.display_name}.",
+                f"Theme import not supported on {self.backend.display_name}.",
                 severity="warning",
                 timeout=6,
             )
@@ -265,14 +265,14 @@ class ColorEditorScreen(Screen[None]):
             try:
                 count = backend.import_theme_file(self.doc, path)
             except FileNotFoundError:
-                self.app.notify(f"No existe: {path}", severity="error", timeout=8)
+                self.app.notify(f"Does not exist: {path}", severity="error", timeout=8)
                 return
             except Exception as exc:  # noqa: BLE001
-                self.app.notify(f"Error al importar: {exc}", severity="error", timeout=10)
+                self.app.notify(f"Import error: {exc}", severity="error", timeout=10)
                 return
             if count == 0:
                 self.app.notify(
-                    "El archivo no contiene slots de color reconocidos.",
+                    "The file contains no recognized color slots.",
                     severity="warning",
                     timeout=8,
                 )
@@ -282,15 +282,15 @@ class ColorEditorScreen(Screen[None]):
             self._rebuild_list()
             self._refresh_warnings()
             self.app.notify(
-                f"Importados {count} slot(s) desde {path.name}",
+                f"Imported {count} slot(s) from {path.name}",
                 severity="information",
                 timeout=6,
             )
 
         self.app.push_screen(
             PromptModal(
-                title=f"Import theme from file",
-                placeholder=f"nombre de archivo (junto a {self.backend_path.name}) o ruta absoluta",
+                title="Import theme from file",
+                placeholder=f"filename (next to {self.backend_path.name}) or absolute path",
                 confirm_label="Import",
             ),
             after,
@@ -302,17 +302,17 @@ class ColorEditorScreen(Screen[None]):
         self._refresh_header()
         self._rebuild_list()
         self._refresh_warnings()
-        self.app.notify("Recargado desde disco.", severity="information")
+        self.app.notify("Reloaded from disk.", severity="information")
 
     def action_save(self) -> None:
         try:
             backup = self.backend.save(self.doc, self.backend_path)
         except Exception as exc:  # noqa: BLE001
-            self.app.notify(f"Error al guardar: {exc}", severity="error", timeout=10)
+            self.app.notify(f"Save error: {exc}", severity="error", timeout=10)
             return
         self.dirty = False
         self._refresh_header()
-        msg = f"Guardado: {self.backend_path.name}"
+        msg = f"Saved: {self.backend_path.name}"
         if backup is not None:
             msg += f"  (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
@@ -329,13 +329,13 @@ class ColorEditorScreen(Screen[None]):
 
         self.app.push_screen(
             ConfirmByNameModal(
-                title="Hay cambios sin guardar",
+                title="Unsaved changes",
                 message=(
-                    "Si vuelves ahora, perderas los cambios. "
-                    "Cancela y pulsa Ctrl+S para guardar."
+                    "If you go back now, you'll lose your changes. "
+                    "Cancel and press Ctrl+S to save."
                 ),
-                expected="descartar",
-                confirm_label="Descartar cambios",
+                expected="discard",
+                confirm_label="Discard changes",
             ),
             after,
         )

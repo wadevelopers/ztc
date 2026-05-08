@@ -17,7 +17,7 @@ def is_valid_layout_name(name: str) -> bool:
 def new_blank_layout(layouts_dir: Path, name: str) -> Layout:
     """Crea un layout vacio con una tab y un pane."""
     if not is_valid_layout_name(name):
-        raise ValueError(f"Nombre invalido: {name!r}")
+        raise ValueError(f"Invalid name: {name!r}")
     return Layout(
         name=name,
         path=layouts_dir / f"{name}.kdl",

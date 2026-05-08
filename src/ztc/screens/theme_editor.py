@@ -73,7 +73,7 @@ class ThemePickerScreen(Screen[None]):
         with Horizontal(id="body"):
             yield OptionList(id="theme-list")
             with Vertical(id="info"):
-                yield Static("Selecciona un tema para ver detalles.", id="info-name")
+                yield Static("Select a theme to see details.", id="info-name")
                 yield Static("", id="info-meta")
                 yield Static("", id="info-colors")
         yield Footer()
@@ -128,9 +128,9 @@ class ThemePickerScreen(Screen[None]):
 
     def _refresh_status(self) -> None:
         status = self.query_one("#status", Static)
-        active = self._active or "(ninguno)"
+        active = self._active or "(none)"
         status.update(
-            f"Tema activo: [b]{active}[/b]    config: {self.config_path}"
+            f"Active theme: [b]{active}[/b]    config: {self.config_path}"
         )
 
     def _show_info(self, theme: ZellijTheme) -> None:
@@ -140,18 +140,18 @@ class ThemePickerScreen(Screen[None]):
 
         name_widget.update(theme.name)
         kind = "user-defined" if theme.is_user else "built-in"
-        active_marker = "  (activo)" if theme.name == self._active else ""
-        meta_widget.update(f"Tipo: {kind}{active_marker}")
+        active_marker = "  (active)" if theme.name == self._active else ""
+        meta_widget.update(f"Type: {kind}{active_marker}")
 
         legacy_pairs = self._legacy_pairs_for_preview(theme)
         rich_pairs = self._rich_pairs_for_preview(theme)
         if not legacy_pairs and not rich_pairs:
-            colors_widget.update("Sin preview de colores. Pulsa Enter para aplicar.")
+            colors_widget.update("No color preview. Press Enter to apply.")
             return
 
         lines: list[str] = []
         if legacy_pairs:
-            lines.append("[dim]── Paleta ANSI ──[/dim]")
+            lines.append("[dim]── ANSI palette ──[/dim]")
             for slot_name, value in legacy_pairs:
                 lines.append(self._render_slot_row(slot_name, value))
         if rich_pairs:
@@ -225,14 +225,14 @@ class ThemePickerScreen(Screen[None]):
 
     def _apply(self, name: str) -> None:
         if name == self._active:
-            self.app.notify(f"'{name}' ya es el tema activo", severity="information")
+            self.app.notify(f"'{name}' is already the active theme", severity="information")
             return
         try:
             backup = zellij_config.set_active_theme(self.config_path, name)
         except Exception as exc:  # noqa: BLE001
-            self.app.notify(f"Error al aplicar tema: {exc}", severity="error", timeout=8)
+            self.app.notify(f"Error applying theme: {exc}", severity="error", timeout=8)
             return
-        msg = f"Tema Zellij '{name}' aplicado"
+        msg = f"Zellij theme '{name}' applied"
         if backup is not None:
             msg += f" (backup: {backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
@@ -257,20 +257,20 @@ class ThemePickerScreen(Screen[None]):
             )
         except Exception as exc:  # noqa: BLE001
             self.app.notify(
-                f"Error al sincronizar terminal: {exc}",
+                f"Error syncing terminal: {exc}",
                 severity="error",
                 timeout=8,
             )
             return
         if result.skipped_reason:
             self.app.notify(
-                f"{backend.display_name} no actualizado: {result.skipped_reason}",
+                f"{backend.display_name} not updated: {result.skipped_reason}",
                 severity="warning",
                 timeout=6,
             )
             return
         n = len(result.updated)
-        msg = f"{backend.display_name} actualizado: {n} slot(s)"
+        msg = f"{backend.display_name} updated: {n} slot(s)"
         if result.backup is not None:
             msg += f" (backup: {result.backup.name})"
         self.app.notify(msg, severity="information", timeout=6)
@@ -308,8 +308,8 @@ class ThemePickerScreen(Screen[None]):
                 return
             if not zellij_themes.is_valid_theme_name(name):
                 self.app.notify(
-                    f"Nombre invalido: {name!r}. "
-                    "Empieza por letra; usa letras, numeros, '_' o '-'.",
+                    f"Invalid name: {name!r}. "
+                    "Start with a letter; use letters, numbers, '_' or '-'.",
                     severity="error",
                     timeout=8,
                 )
@@ -317,7 +317,7 @@ class ThemePickerScreen(Screen[None]):
             current_names = {t.name for t in zellij_themes.list_user_themes(self.config_path)}
             if name in current_names:
                 self.app.notify(
-                    f"Ya existe un user theme '{name}'. Usa otro nombre.",
+                    f"User theme '{name}' already exists. Use a different name.",
                     severity="error",
                 )
                 return
@@ -337,8 +337,8 @@ class ThemePickerScreen(Screen[None]):
 
         self.app.push_screen(
             PromptModal(
-                title="Nuevo user theme",
-                placeholder="ej. mi-tema",
+                title="New user theme",
+                placeholder="e.g. my-theme",
                 confirm_label="Create",
             ),
             after,
@@ -350,7 +350,7 @@ class ThemePickerScreen(Screen[None]):
             return
         if not theme.is_user:
             self.app.notify(
-                f"'{theme.name}' es un built-in. Usa Clonar (c) para crear una copia editable.",
+                f"'{theme.name}' is a built-in. Use Clone (c) to create an editable copy.",
                 severity="warning",
                 timeout=8,
             )
@@ -372,7 +372,7 @@ class ThemePickerScreen(Screen[None]):
                 return
             if not zellij_themes.is_valid_theme_name(dst):
                 self.app.notify(
-                    f"Nombre invalido: {dst!r}.",
+                    f"Invalid name: {dst!r}.",
                     severity="error",
                 )
                 return
@@ -389,7 +389,7 @@ class ThemePickerScreen(Screen[None]):
             except ValueError as exc:
                 self.app.notify(str(exc), severity="error")
                 return
-            msg = f"Clonado '{src}' como '{dst}'"
+            msg = f"Cloned '{src}' as '{dst}'"
             if backup is not None:
                 msg += f"  (backup: {backup.name})"
             self.app.notify(msg, severity="information", timeout=6)
@@ -398,10 +398,10 @@ class ThemePickerScreen(Screen[None]):
                 register()
             self._reload()
 
-        kind = "user" if theme.is_user else "built-in (colores por defecto)"
+        kind = "user" if theme.is_user else "built-in (default colors)"
         self.app.push_screen(
             PromptModal(
-                title=f"Clonar '{src}' [{kind}]",
+                title=f"Clone '{src}' \\[{kind}]",
                 placeholder=f"{src}-copy",
                 confirm_label="Clone",
             ),
@@ -414,7 +414,7 @@ class ThemePickerScreen(Screen[None]):
             return
         if not theme.is_user:
             self.app.notify(
-                f"'{theme.name}' es un built-in; no se puede borrar.",
+                f"'{theme.name}' is a built-in; cannot be deleted.",
                 severity="warning",
             )
             return
@@ -425,9 +425,9 @@ class ThemePickerScreen(Screen[None]):
             try:
                 backup = zellij_themes.delete_user_theme(self.config_path, theme.name)
             except Exception as exc:  # noqa: BLE001
-                self.app.notify(f"Error al borrar: {exc}", severity="error")
+                self.app.notify(f"Delete error: {exc}", severity="error")
                 return
-            msg = f"Tema '{theme.name}' eliminado"
+            msg = f"Theme '{theme.name}' deleted"
             if backup is not None:
                 msg += f"  (backup: {backup.name})"
             self.app.notify(msg, severity="information", timeout=6)
@@ -437,8 +437,8 @@ class ThemePickerScreen(Screen[None]):
             ConfirmByNameModal(
                 title="Delete user theme",
                 message=(
-                    f"Esto eliminara '{theme.name}' del bloque themes en config.kdl. "
-                    "Si es el tema activo, Zellij caera al tema 'default' al recargar."
+                    f"This will remove '{theme.name}' from the themes block in config.kdl. "
+                    "If it's the active theme, Zellij will fall back to 'default' on reload."
                 ),
                 expected=theme.name,
                 confirm_label="Delete",
