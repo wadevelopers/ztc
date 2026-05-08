@@ -1,6 +1,6 @@
 """Tests del gating del menu principal segun deteccion de terminal y Zellij.
 
-Cubren los escenarios de UX definidos en PLAN_MULTI_TERMINAL.md (Fase B):
+Cubren los escenarios de UX definidos en doc/PLAN_MULTI_TERMINAL.md (Fase B):
 - Terminal soportada + zellij + no SSH -> happy path.
 - Terminal no soportada -> "Colores de terminal" disabled "(no soportada)".
 - SSH detectado -> "Colores de terminal" disabled "(SSH)".

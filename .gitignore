@@ -18,3 +18,7 @@ scripts/
 .config/
 codex-transcript-current.md
 rollout-*.jsonl
+
+# Planes/notas viven en doc/, nunca en raiz.
+/PLAN*.md
+/NOTES.md

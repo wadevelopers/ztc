@@ -4,10 +4,10 @@ TUI en Python para administrar el setup de terminal: colores de la
 terminal soportada y temas/layouts/sesiones de Zellij. Expone dos
 comandos: `ztc` (app completa) y `zsm` (launcher de sesiones).
 
-- [`PLAN.md`](PLAN.md) — diseno y roadmap del proyecto.
-- [`PLAN_MULTI_TERMINAL.md`](PLAN_MULTI_TERMINAL.md) — spec de la
+- [`doc/PLAN.md`](doc/PLAN.md) — diseno y roadmap del proyecto.
+- [`doc/PLAN_MULTI_TERMINAL.md`](doc/PLAN_MULTI_TERMINAL.md) — spec de la
   arquitectura multi-terminal (vigente).
-- [`NOTES.md`](NOTES.md) — gotchas operativos y notas de uso.
+- [`doc/NOTES.md`](doc/NOTES.md) — gotchas operativos y notas de uso.
 
 ## Installation
 
@@ -63,7 +63,7 @@ con deteccion automatica de la terminal en uso.
 | **Alacritty** | TOML | Soporte completo + `import_theme_file` desde otro `alacritty.toml`. |
 | **Kitty** | flat key/value | Soporte completo, incluyendo expansion de `include` para reflejar el estado efectivo. |
 
-Ghostty queda diferida (ver Fase D futura en `PLAN_MULTI_TERMINAL.md`).
+Ghostty queda diferida (ver Fase D futura en `doc/PLAN_MULTI_TERMINAL.md`).
 
 ## Como elige el backend la app
 
