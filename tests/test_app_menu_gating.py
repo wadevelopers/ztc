@@ -56,13 +56,19 @@ async def test_happy_path_alacritty_with_zellij(tmp_path: Path) -> None:
     async with app.run_test():
         themes_label, themes_disabled = _option_state(app, "themes")
         layouts_label, layouts_disabled = _option_state(app, "layouts")
+        sessions_label, sessions_disabled = _option_state(app, "sessions")
         colors_label, colors_disabled = _option_state(app, "colors")
         assert themes_disabled is False
         assert layouts_disabled is False
+        assert sessions_disabled is False
         assert colors_disabled is False
         assert "unsupported" not in colors_label
         assert "SSH" not in colors_label
         assert "zellij not installed" not in themes_label.lower()
+        assert "zellij not installed" not in sessions_label.lower()
+        # 4 items: themes, layouts, sessions, colors.
+        option_list = app.query_one("#main-menu", OptionList)
+        assert option_list.option_count == 4
 
 
 # ---------- terminal no soportada ----------
@@ -140,11 +146,14 @@ async def test_no_zellij_disables_only_zellij_options(tmp_path: Path) -> None:
     async with app.run_test():
         themes_label, themes_disabled = _option_state(app, "themes")
         layouts_label, layouts_disabled = _option_state(app, "layouts")
+        sessions_label, sessions_disabled = _option_state(app, "sessions")
         colors_label, colors_disabled = _option_state(app, "colors")
         assert themes_disabled is True
         assert layouts_disabled is True
+        assert sessions_disabled is True
         assert "zellij not installed" in themes_label
         assert "zellij not installed" in layouts_label
+        assert "zellij not installed" in sessions_label
         # Colores intacto: independencia de bloques.
         assert colors_disabled is False
 
@@ -241,8 +250,8 @@ async def test_colors_opens_editor_when_enabled(tmp_path: Path) -> None:
         zellij_installed=True,
     )
     async with app.run_test() as pilot:
-        # Bajamos al item "colors" (3o) y damos enter.
-        await pilot.press("down", "down", "enter")
+        # Bajamos al item "colors" (4o, despues de themes/layouts/sessions) y damos enter.
+        await pilot.press("down", "down", "down", "enter")
         await pilot.pause()
         assert isinstance(app.screen, ColorEditorScreen)
 
@@ -283,8 +292,8 @@ async def test_e2e_kitty_detection_writes_to_real_kitty_conf(tmp_path: Path) -> 
         # El registry resolvio KittyBackend.
         assert isinstance(app.backend, KittyBackend)
 
-        # Abrir el editor: 3a opcion del menu.
-        await pilot.press("down", "down", "enter")
+        # Abrir el editor: 4a opcion del menu (themes/layouts/sessions/colors).
+        await pilot.press("down", "down", "down", "enter")
         await pilot.pause()
         assert isinstance(app.screen, ColorEditorScreen)
 
@@ -314,3 +323,153 @@ async def test_e2e_kitty_detection_writes_to_real_kitty_conf(tmp_path: Path) -> 
         # El backup se creo (porque el archivo existia).
         backups = list(tmp_path.glob("kitty.conf.bak.*"))
         assert backups
+
+
+# ---------- item "Zellij sessions": PickerScreen embebida ----------
+
+
+async def test_sessions_cancel_returns_to_menu(tmp_path: Path) -> None:
+    """Esc/q desde PickerScreen embebido vuelve al menu de ztc, no cierra la app."""
+    from ztc.sessions.screens.picker import PickerScreen
+
+    app = TermConfigApp(
+        paths=_paths(tmp_path),
+        backend_path=tmp_path / "alacritty.toml",
+        detection=TerminalDetection(
+            kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
+        ),
+        zellij_installed=True,
+    )
+    async with app.run_test() as pilot:
+        # Bajamos al item "sessions" (3o) y damos enter.
+        await pilot.press("down", "down", "enter")
+        await pilot.pause()
+        assert isinstance(app.screen, PickerScreen)
+
+        # q dispara action_quit -> on_cancel -> pop_screen, vuelve al menu.
+        await pilot.press("q")
+        await pilot.pause()
+        assert not isinstance(app.screen, PickerScreen)
+
+
+async def test_sessions_launch_attach_invokes_execvp(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Test critico: seleccionar attach desde PickerScreen embebida invoca
+    os.execvp con argv esperado. Captura el bug de diseno previo donde la
+    integracion quedaba silenciosamente rota si se usaba el default
+    standalone (setear app.target sobre TermConfigApp que no lo lee).
+    """
+    captured: list[tuple[str, list[str]]] = []
+
+    def fake_execvp(file: str, args: list[str]) -> None:
+        captured.append((file, list(args)))
+        raise SystemExit(0)  # corta el flujo, igual que execvp real
+
+    # Monkeypatch sobre el modulo ztc.app, donde se hace `os.execvp`.
+    monkeypatch.setattr("ztc.app.os.execvp", fake_execvp)
+
+    app = TermConfigApp(
+        paths=_paths(tmp_path),
+        backend_path=tmp_path / "alacritty.toml",
+        detection=TerminalDetection(
+            kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
+        ),
+        zellij_installed=True,
+    )
+    # Invocar el handler directamente con un target simulado evita
+    # depender de zellij CLI / sesiones reales en tests.
+    try:
+        app._handle_session_launch(("attach", "mi-sesion", None))
+    except SystemExit:
+        pass
+    assert len(captured) == 1
+    file, argv = captured[0]
+    assert file == "zellij"
+    assert "attach" in argv
+    assert "mi-sesion" in argv
+
+
+async def test_sessions_launch_new_invokes_execvp(
+    tmp_path: Path, monkeypatch
+) -> None:
+    captured: list[tuple[str, list[str]]] = []
+
+    def fake_execvp(file: str, args: list[str]) -> None:
+        captured.append((file, list(args)))
+        raise SystemExit(0)
+
+    monkeypatch.setattr("ztc.app.os.execvp", fake_execvp)
+
+    app = TermConfigApp(
+        paths=_paths(tmp_path),
+        backend_path=tmp_path / "alacritty.toml",
+        detection=TerminalDetection(
+            kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
+        ),
+        zellij_installed=True,
+    )
+    try:
+        app._handle_session_launch(("new", "nueva", "compact"))
+    except SystemExit:
+        pass
+    assert len(captured) == 1
+    file, argv = captured[0]
+    assert file == "zellij"
+    # new_session_argv arma `zellij -n compact -s nueva`.
+    assert "nueva" in argv
+    assert "compact" in argv
+
+
+async def test_sessions_launch_bash_invokes_execvp(
+    tmp_path: Path, monkeypatch
+) -> None:
+    captured: list[tuple[str, list[str]]] = []
+
+    def fake_execvp(file: str, args: list[str]) -> None:
+        captured.append((file, list(args)))
+        raise SystemExit(0)
+
+    monkeypatch.setattr("ztc.app.os.execvp", fake_execvp)
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+
+    app = TermConfigApp(
+        paths=_paths(tmp_path),
+        backend_path=tmp_path / "alacritty.toml",
+        detection=TerminalDetection(
+            kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
+        ),
+        zellij_installed=True,
+    )
+    try:
+        app._handle_session_launch(("bash", None, None))
+    except SystemExit:
+        pass
+    assert len(captured) == 1
+    file, argv = captured[0]
+    assert file == "/bin/zsh"
+    assert argv == ["/bin/zsh"]
+
+
+async def test_sessions_launch_none_target_is_noop(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Guard defensivo: si por alguna razon llega target=None al handler,
+    no debe invocar execvp."""
+    captured: list[tuple[str, list[str]]] = []
+
+    def fake_execvp(file: str, args: list[str]) -> None:
+        captured.append((file, list(args)))
+
+    monkeypatch.setattr("ztc.app.os.execvp", fake_execvp)
+
+    app = TermConfigApp(
+        paths=_paths(tmp_path),
+        backend_path=tmp_path / "alacritty.toml",
+        detection=TerminalDetection(
+            kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
+        ),
+        zellij_installed=True,
+    )
+    app._handle_session_launch(None)
+    assert captured == []

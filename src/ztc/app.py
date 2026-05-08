@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from textual import on
@@ -14,6 +15,9 @@ from ztc.models.config import Paths
 from ztc.screens.color_editor import ColorEditorScreen
 from ztc.screens.layout_list import LayoutListScreen
 from ztc.screens.theme_editor import ThemePickerScreen
+from ztc.sessions.screens.picker import PickerScreen
+from ztc.sessions.services.zellij_session import attach_argv, new_session_argv
+from ztc.sessions.types import LaunchTarget
 from zellij_themes import theme_assets as zellij_theme_assets
 
 from ztc.services import zellij_config, zellij_themes
@@ -169,6 +173,11 @@ class TermConfigApp(App[None]):
                 disabled=zellij_disabled,
             ),
             Option(
+                f"Zellij sessions{zellij_suffix}",
+                id="sessions",
+                disabled=zellij_disabled,
+            ),
+            Option(
                 f"Terminal colors{colors_suffix}",
                 id="colors",
                 disabled=colors_disabled,
@@ -294,6 +303,13 @@ class TermConfigApp(App[None]):
             self.push_screen(ThemePickerScreen(config_path=self.paths.zellij_config))
         elif event.option.id == "layouts":
             self.push_screen(LayoutListScreen(layouts_dir=self.paths.zellij_layouts_dir))
+        elif event.option.id == "sessions":
+            self.push_screen(
+                PickerScreen(
+                    on_launch=self._handle_session_launch,
+                    on_cancel=self.pop_screen,
+                )
+            )
         elif event.option.id == "colors":
             if self.backend is None or self.backend_path is None:
                 # No deberia pasar (la opcion estaria disabled), pero
@@ -306,3 +322,18 @@ class TermConfigApp(App[None]):
                     zellij_config_path=self.paths.zellij_config,
                 )
             )
+
+    def _handle_session_launch(self, target: LaunchTarget) -> None:
+        if target is None:
+            return  # guard defensivo: cancel va por on_cancel, no deberia llegar acá.
+        action, payload, extra = target
+        if action == "attach":
+            argv = attach_argv(payload or "")
+        elif action == "new":
+            argv = new_session_argv(payload or "", layout=extra)
+        elif action == "bash":
+            shell = os.environ.get("SHELL") or "/bin/bash"
+            argv = [shell]
+        else:
+            return
+        os.execvp(argv[0], argv)
