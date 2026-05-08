@@ -505,3 +505,88 @@ class EditColorModal(ModalScreen[str | None]):
         self.dismiss(normalize_hex(value))
 
 
+class EnumPickerModal(ModalScreen[str | None]):
+    """Modal para elegir un valor de un enum cerrado (RadioSet).
+    Devuelve el string elegido o None si cancela.
+    """
+
+    BINDINGS = [Binding("escape", "dismiss_none", "Cancel")]
+
+    DEFAULT_CSS = """
+    EnumPickerModal {
+        align: center middle;
+    }
+    #dialog {
+        width: 50;
+        height: auto;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #title {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+    RadioSet {
+        margin-bottom: 1;
+    }
+    #buttons {
+        align-horizontal: right;
+        height: 3;
+    }
+    Button {
+        margin-left: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        *,
+        title: str,
+        choices: tuple[str, ...],
+        initial: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._title = title
+        self._choices = choices
+        self._initial = initial
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Static(self._title, id="title")
+            with RadioSet(id="enum-choices"):
+                for choice in self._choices:
+                    yield RadioButton(
+                        choice,
+                        value=(choice == self._initial),
+                        id=f"choice-{choice}",
+                    )
+            with Horizontal(id="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("OK", id="confirm", variant="primary")
+
+    def on_mount(self) -> None:
+        rs = self.query_one("#enum-choices", RadioSet)
+        rs.focus()
+
+    @on(Button.Pressed, "#cancel")
+    def _on_cancel(self) -> None:
+        self.dismiss(None)
+
+    @on(Button.Pressed, "#confirm")
+    def _on_confirm(self) -> None:
+        rs = self.query_one("#enum-choices", RadioSet)
+        if rs.pressed_button is None:
+            return
+        # El id del RadioButton es "choice-<value>"; extraemos value.
+        prefix = "choice-"
+        button_id = rs.pressed_button.id or ""
+        if button_id.startswith(prefix):
+            self.dismiss(button_id[len(prefix):])
+        else:
+            self.dismiss(None)
+
+    def action_dismiss_none(self) -> None:
+        self.dismiss(None)
+
