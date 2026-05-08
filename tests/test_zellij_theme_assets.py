@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from zellij_themes import theme_assets as zta
+from ztc.zellij import theme_assets as zta
 
 
 def test_list_bundled_theme_names_returns_dozens() -> None:

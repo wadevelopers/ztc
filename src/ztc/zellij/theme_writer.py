@@ -1,8 +1,7 @@
 """Operaciones de escritura sobre el bloque `themes { ... }` en
 config.kdl: save, upsert, delete, clone. Las funciones de **lectura**
-(LEGACY_SLOTS, list_user_themes, etc.) viven en `zellij_themes.user_themes`
-del shared package; las re-exportamos al final para los call sites
-existentes.
+viven en `ztc.zellij.user_themes` y `ztc.zellij.config`; los call sites
+las importan directamente de alli en lugar de via re-export aca.
 """
 
 from __future__ import annotations
@@ -13,18 +12,11 @@ from typing import TYPE_CHECKING
 
 import kdl
 
-# Re-exports desde shared (read-only API). Los call sites usan estos
-# nombres a traves de `ztc.services.zellij_themes.X` y los recibimos
-# inalterados desde shared.
-from zellij_themes import TEXTUAL_FALLBACK
-from zellij_themes.config import read_active_theme
-from zellij_themes.models import ZellijColor, ZellijTheme
-from zellij_themes.user_themes import (
+from ztc.zellij.config import read_active_theme
+from ztc.zellij.models import ZellijColor, ZellijTheme
+from ztc.zellij.user_themes import (
     LEGACY_SLOTS,
-    builtin_theme_names,
     is_valid_theme_name,
-    list_all_themes,
-    list_builtin_themes,
     list_user_themes,
 )
 
@@ -355,7 +347,7 @@ def clone_theme(
     if dst_name in by_name:
         raise ValueError(f"User theme '{dst_name}' already exists")
 
-    from zellij_themes import theme_assets as zta
+    from ztc.zellij import theme_assets as zta
 
     src_user = by_name.get(src_name)
     if src_user is not None:
@@ -390,7 +382,7 @@ def _read_terminal_legacy_slots(
 ) -> dict[str, str]:
     """Devuelve {legacy_slot: hex} con los valores actuales del archivo
     de la terminal, invirtiendo el mapping de theme_sync."""
-    from zellij_themes.colors import is_valid_hex, normalize_hex
+    from ztc.services.colors import is_valid_hex, normalize_hex
 
     from ztc.services.theme_sync import _LEGACY_TO_CANONICAL
 

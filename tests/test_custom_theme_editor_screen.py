@@ -8,8 +8,8 @@ from ztc.app import TermConfigApp
 from ztc.models.config import Paths
 from ztc.screens.custom_theme_editor import CustomThemeEditorScreen
 from ztc.screens.theme_editor import ThemePickerScreen
-from ztc.services import zellij_themes
 from ztc.services.runtime_detect import TerminalDetection
+from ztc.zellij.user_themes import list_user_themes
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.widgets.confirm import (
     ConfirmByNameModal,
@@ -64,7 +64,7 @@ async def test_picker_clone_action_creates_user_theme(tmp_path: Path) -> None:
             await pilot.press(ch)
         await pilot.press("enter")
         await pilot.pause()
-        names = {t.name for t in zellij_themes.list_user_themes(paths.zellij_config)}
+        names = {t.name for t in list_user_themes(paths.zellij_config)}
         assert "custom_copy" in names
         assert "custom_dark" in names  # original preservado
 
@@ -84,7 +84,7 @@ async def test_picker_delete_user_theme(tmp_path: Path) -> None:
             await pilot.press(ch)
         await pilot.press("enter")
         await pilot.pause()
-        names = {t.name for t in zellij_themes.list_user_themes(paths.zellij_config)}
+        names = {t.name for t in list_user_themes(paths.zellij_config)}
         assert "custom_dark" not in names
 
 
@@ -123,11 +123,11 @@ async def test_custom_theme_editor_save_writes_block(tmp_path: Path) -> None:
         editor = app.screen
         assert isinstance(editor, CustomThemeEditorScreen)
         # Modificar el modelo en memoria y guardar.
-        from zellij_themes.models import ZellijColor
+        from ztc.zellij.models import ZellijColor
 
         editor.theme.colors[0] = ZellijColor("fg", "#deadbe")
         editor.dirty = True
         editor.action_save()
         await pilot.pause()
-        themes = {t.name: t for t in zellij_themes.list_user_themes(paths.zellij_config)}
+        themes = {t.name: t for t in list_user_themes(paths.zellij_config)}
         assert themes["custom_dark"].colors[0].value == "#deadbe"

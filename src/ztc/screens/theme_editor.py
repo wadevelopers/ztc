@@ -10,10 +10,16 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
-from zellij_themes import theme_assets as zellij_theme_assets
-from zellij_themes.models import ZellijTheme
-
-from ztc.services import theme_sync, zellij_config, zellij_themes
+from ztc.services import theme_sync
+from ztc.zellij import config_ops, theme_writer
+from ztc.zellij import theme_assets as zellij_theme_assets
+from ztc.zellij.config import read_active_theme
+from ztc.zellij.models import ZellijTheme
+from ztc.zellij.user_themes import (
+    is_valid_theme_name,
+    list_all_themes,
+    list_user_themes,
+)
 from ztc.widgets.confirm import ConfirmByNameModal, PromptModal
 
 _HEADER_PREFIX = "header:"
@@ -82,8 +88,8 @@ class ThemePickerScreen(Screen[None]):
         self._reload()
 
     def _reload(self) -> None:
-        self._themes = zellij_themes.list_all_themes(self.config_path)
-        self._active = zellij_config.read_active_theme(self.config_path)
+        self._themes = list_all_themes(self.config_path)
+        self._active = read_active_theme(self.config_path)
         self._refresh_status()
 
         option_list = self.query_one("#theme-list", OptionList)
@@ -182,22 +188,22 @@ class ThemePickerScreen(Screen[None]):
         para built-in carga del .kdl vendorizado."""
         out: list[tuple[str, str]] = []
         if theme.is_user:
-            for component, slot in zellij_themes.RICH_SLOTS_TO_EXPOSE:
-                value = zellij_themes.get_rich_slot(theme, component, slot)
+            for component, slot in theme_writer.RICH_SLOTS_TO_EXPOSE:
+                value = theme_writer.get_rich_slot(theme, component, slot)
                 if value is not None:
-                    out.append((zellij_themes.display_slot(component, slot), value))
+                    out.append((theme_writer.display_slot(component, slot), value))
             return out
 
         bundled = zellij_theme_assets.load_bundled_theme(theme.name)
         if bundled is None:
             return out
-        for component, slot in zellij_themes.RICH_SLOTS_TO_EXPOSE:
+        for component, slot in theme_writer.RICH_SLOTS_TO_EXPOSE:
             comp = bundled.components.get(component)
             if comp is None:
                 continue
             value = getattr(comp, slot, None)
             if value is not None:
-                out.append((zellij_themes.display_slot(component, slot), value))
+                out.append((theme_writer.display_slot(component, slot), value))
         return out
 
     @on(OptionList.OptionHighlighted, "#theme-list")
@@ -228,7 +234,7 @@ class ThemePickerScreen(Screen[None]):
             self.app.notify(f"'{name}' is already the active theme", severity="information")
             return
         try:
-            backup = zellij_config.set_active_theme(self.config_path, name)
+            backup = config_ops.set_active_theme(self.config_path, name)
         except Exception as exc:  # noqa: BLE001
             self.app.notify(f"Error applying theme: {exc}", severity="error", timeout=8)
             return
@@ -306,7 +312,7 @@ class ThemePickerScreen(Screen[None]):
         def after(name: str | None) -> None:
             if not name:
                 return
-            if not zellij_themes.is_valid_theme_name(name):
+            if not is_valid_theme_name(name):
                 self.app.notify(
                     f"Invalid name: {name!r}. "
                     "Start with a letter; use letters, numbers, '_' or '-'.",
@@ -314,20 +320,20 @@ class ThemePickerScreen(Screen[None]):
                     timeout=8,
                 )
                 return
-            current_names = {t.name for t in zellij_themes.list_user_themes(self.config_path)}
+            current_names = {t.name for t in list_user_themes(self.config_path)}
             if name in current_names:
                 self.app.notify(
                     f"User theme '{name}' already exists. Use a different name.",
                     severity="error",
                 )
                 return
-            from zellij_themes.models import ZellijTheme as _ZT
+            from ztc.zellij.models import ZellijTheme as _ZT
             from ztc.screens.custom_theme_editor import CustomThemeEditorScreen
 
             new_theme = _ZT(
                 name=name,
                 source="user",
-                colors=zellij_themes.default_legacy_slots(),
+                colors=theme_writer.default_legacy_slots(),
             )
             self.app.push_screen(
                 CustomThemeEditorScreen(
@@ -370,7 +376,7 @@ class ThemePickerScreen(Screen[None]):
         def after(dst: str | None) -> None:
             if not dst:
                 return
-            if not zellij_themes.is_valid_theme_name(dst):
+            if not is_valid_theme_name(dst):
                 self.app.notify(
                     f"Invalid name: {dst!r}.",
                     severity="error",
@@ -379,7 +385,7 @@ class ThemePickerScreen(Screen[None]):
             backend = getattr(self.app, "backend", None)
             backend_path = getattr(self.app, "backend_path", None)
             try:
-                backup = zellij_themes.clone_theme(
+                backup = theme_writer.clone_theme(
                     self.config_path,
                     src,
                     dst,
@@ -423,7 +429,7 @@ class ThemePickerScreen(Screen[None]):
             if not ok:
                 return
             try:
-                backup = zellij_themes.delete_user_theme(self.config_path, theme.name)
+                backup = theme_writer.delete_user_theme(self.config_path, theme.name)
             except Exception as exc:  # noqa: BLE001
                 self.app.notify(f"Delete error: {exc}", severity="error")
                 return

@@ -11,14 +11,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ztc.services import zellij_themes
-from zellij_themes import theme_assets as zta
-from zellij_themes.colors import (
+from ztc.services.colors import (
     CanonicalSlot,
     is_valid_hex,
     normalize_hex,
 )
 from ztc.services.terminals import TerminalBackend
+from ztc.zellij import theme_assets as zta
+from ztc.zellij.user_themes import list_user_themes
 
 # Mapping 1:1 entre los 10 slots de la Paleta ANSI y los slots
 # canonicos. fg/bg -> primary, los 8 ANSI -> normal.
@@ -66,7 +66,7 @@ def _resolve_zellij_slots(
     Prioriza user themes definidos en config.kdl. Si no es user, deriva
     desde los .kdl vendorizados. Si tampoco esta vendorizado, devuelve {}.
     """
-    for ut in zellij_themes.list_user_themes(config_path):
+    for ut in list_user_themes(config_path):
         if ut.name == zellij_name:
             return {c.name: c.value for c in ut.colors if is_valid_hex(c.value)}
 
@@ -84,7 +84,7 @@ def _resolve_zellij_rich_slots(
     built-in carga el .kdl vendorizado."""
     out: dict[tuple[str, str], str] = {}
 
-    for ut in zellij_themes.list_user_themes(config_path):
+    for ut in list_user_themes(config_path):
         if ut.name == zellij_name:
             for rc in ut.raw_components:
                 comp = zta._parse_component(rc)

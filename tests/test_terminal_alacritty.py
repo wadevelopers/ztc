@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import tomlkit
 
-from zellij_themes import colors
+from ztc.services import colors
 from ztc.services.terminals.alacritty import (
     KNOWN_SLOTS,
     AlacrittyBackend,

@@ -12,7 +12,7 @@ from textual.widgets.option_list import Option
 from textual.widgets.tree import TreeNode
 
 from ztc.models.layout import Layout, Pane, Tab
-from ztc.services import kdl_io, layout_ops
+from ztc.zellij import layout_io, layout_ops
 from ztc.widgets.confirm import (
     ConfirmByNameModal,
     PaneEditModal,
@@ -110,7 +110,7 @@ class LayoutEditorScreen(Screen[None]):
 
     def _refresh_preview(self) -> None:
         preview = self.query_one("#preview", Static)
-        preview.update(kdl_io.dump_layout(self.layout_model))
+        preview.update(layout_io.dump_layout(self.layout_model))
 
     def _rebuild_tabs(self) -> None:
         option_list = self.query_one("#tabs-list", OptionList)
@@ -386,7 +386,7 @@ class LayoutEditorScreen(Screen[None]):
 
     def action_save(self) -> None:
         try:
-            backup = kdl_io.write_layout(self.layout_model)
+            backup = layout_io.write_layout(self.layout_model)
         except Exception as exc:  # noqa: BLE001
             self.app.notify(f"Save error: {exc}", severity="error", timeout=10)
             return

@@ -10,10 +10,10 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
-from zellij_themes import colors
-
-from ztc.services import zellij_config, zellij_themes
+from ztc.services import colors
 from ztc.services.terminals import TerminalBackend
+from ztc.zellij.config import read_active_theme
+from ztc.zellij.user_themes import list_user_themes
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.widgets.confirm import EditColorModal, PromptModal
 
@@ -166,9 +166,9 @@ class ColorEditorScreen(Screen[None]):
 
     def _refresh_warnings(self) -> None:
         zellij_bg: str | None = None
-        active = zellij_config.read_active_theme(self.zellij_config_path)
+        active = read_active_theme(self.zellij_config_path)
         if active:
-            user_themes = zellij_themes.list_user_themes(self.zellij_config_path)
+            user_themes = list_user_themes(self.zellij_config_path)
             for theme in user_themes:
                 if theme.name == active:
                     for color in theme.colors:

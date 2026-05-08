@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ztc.models.layout import Layout, Pane, Tab
-from ztc.services import kdl_io
+from ztc.zellij import layout_io as kdl_io
 
 FIX = Path(__file__).parent / "fixtures" / "zellij"
 

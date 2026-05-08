@@ -11,7 +11,7 @@ from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.models.layout import Layout
-from ztc.services import kdl_io, layout_ops, zellij_config
+from ztc.zellij import config_ops, layout_io, layout_ops
 from ztc.widgets.confirm import ConfirmByNameModal, PromptModal
 
 
@@ -76,7 +76,7 @@ class LayoutListScreen(Screen[None]):
 
     def action_refresh(self) -> None:
         self.layouts_dir.mkdir(parents=True, exist_ok=True)
-        self._layouts = zellij_config.list_layouts(self.layouts_dir)
+        self._layouts = config_ops.list_layouts(self.layouts_dir)
         option_list = self.query_one("#layout-list", OptionList)
         option_list.clear_options()
         for layout in self._layouts:
@@ -158,7 +158,7 @@ class LayoutListScreen(Screen[None]):
                 )
                 return
             layout = layout_ops.new_blank_layout(self.layouts_dir, name)
-            kdl_io.write_layout(layout, backup=False)
+            layout_io.write_layout(layout, backup=False)
             self.action_refresh()
             from ztc.screens.layout_editor import LayoutEditorScreen
 
@@ -185,7 +185,7 @@ class LayoutListScreen(Screen[None]):
                 self.app.notify("Cancelled.", severity="information")
                 return
             try:
-                backup = kdl_io.delete_layout(layout.path)
+                backup = layout_io.delete_layout(layout.path)
             except Exception as exc:  # noqa: BLE001
                 self.app.notify(f"Delete error: {exc}", severity="error")
                 return

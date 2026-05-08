@@ -481,7 +481,7 @@ class EditColorModal(ModalScreen[str | None]):
         self.dismiss(None)
 
     def _refresh(self) -> None:
-        from zellij_themes.colors import is_valid_hex, normalize_hex
+        from ztc.services.colors import is_valid_hex, normalize_hex
 
         value = self.query_one("#hex-input", Input).value.strip()
         valid = is_valid_hex(value)
@@ -497,7 +497,7 @@ class EditColorModal(ModalScreen[str | None]):
             status.update("Invalid format")
 
     def _submit(self) -> None:
-        from zellij_themes.colors import is_valid_hex, normalize_hex
+        from ztc.services.colors import is_valid_hex, normalize_hex
 
         value = self.query_one("#hex-input", Input).value.strip()
         if not is_valid_hex(value):

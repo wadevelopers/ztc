@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from ztc.services import zellij_config
+from ztc.zellij import config_ops as zellij_config
 
 
 @pytest.mark.skipif(shutil.which("zellij") is None, reason="zellij no instalado")

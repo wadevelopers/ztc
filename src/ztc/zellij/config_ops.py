@@ -1,8 +1,7 @@
-"""Wrappers de escritura sobre el config.kdl de Zellij + helpers de
-layouts y setup.
-
-`read_active_theme` se importo a `zellij_themes.config` (shared) y se
-re-exporta acá para mantener los call sites existentes.
+"""Operaciones sobre el config.kdl de Zellij: escritura de
+`set_active_theme`, lectura de layouts disponibles, verificacion de
+instalacion. La lectura del tema activo (`read_active_theme`) vive en
+`ztc.zellij.config`; los call sites la importan desde alli.
 """
 
 from __future__ import annotations
@@ -12,12 +11,10 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from zellij_themes.config import read_active_theme  # re-export
-
 from ztc.models.layout import Layout
-from ztc.services import kdl_io
 from ztc.services.atomic import write_atomic
 from ztc.services.backups import make_backup
+from ztc.zellij import layout_io
 
 # Linea no comentada que empieza por `theme "..."`. Acepta indentacion vacia.
 # Se requiere ausencia de `//` antes de `theme` en la misma linea.
@@ -93,7 +90,7 @@ def list_layouts(layouts_dir: Path) -> list[Layout]:
     items: list[Layout] = []
     for path in sorted(layouts_dir.glob("*.kdl")):
         try:
-            layout = kdl_io.load_layout(path)
+            layout = layout_io.load_layout(path)
         except Exception:
             layout = Layout(name=path.stem, path=path)
         items.append(layout)

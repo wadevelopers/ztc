@@ -6,9 +6,26 @@ from pathlib import Path
 
 import pytest
 
-from zellij_themes.models import ZellijColor, ZellijTheme
-from ztc.services import zellij_themes
 from ztc.services.terminals.alacritty import AlacrittyBackend
+from ztc.zellij.models import ZellijColor, ZellijTheme
+from ztc.zellij.theme_writer import (
+    clone_theme,
+    default_legacy_slots,
+    delete_user_theme,
+    derive_rich_block,
+    find_themes_block,
+    get_rich_slot,
+    render_themes_block,
+    save_user_themes,
+    set_rich_slot,
+    unset_rich_slot,
+    upsert_user_theme,
+)
+from ztc.zellij.user_themes import (
+    LEGACY_SLOTS,
+    is_valid_theme_name,
+    list_user_themes,
+)
 
 
 def test_parser_captures_raw_components(tmp_path: Path) -> None:
@@ -31,7 +48,7 @@ def test_parser_captures_raw_components(tmp_path: Path) -> None:
         '}\n',
         encoding="utf-8",
     )
-    themes = zellij_themes.list_user_themes(cfg)
+    themes = list_user_themes(cfg)
     assert len(themes) == 1
     t = themes[0]
     # Slots legacy se siguen capturando.
@@ -59,8 +76,8 @@ def test_renderer_emits_raw_components(tmp_path: Path) -> None:
         '}\n'
     )
     cfg.write_text(original, encoding="utf-8")
-    themes = zellij_themes.list_user_themes(cfg)
-    rendered = zellij_themes.render_themes_block(themes)
+    themes = list_user_themes(cfg)
+    rendered = render_themes_block(themes)
     # El render debe contener tanto slots legacy como bloque rich.
     assert 'fg "#cdd6f4"' in rendered
     assert "text_selected {" in rendered
@@ -83,8 +100,8 @@ def test_renderer_converts_rgb_triples_to_hex(tmp_path: Path) -> None:
         '}\n',
         encoding="utf-8",
     )
-    themes = zellij_themes.list_user_themes(cfg)
-    rendered = zellij_themes.render_themes_block(themes)
+    themes = list_user_themes(cfg)
+    rendered = render_themes_block(themes)
     assert '"#ffc864"' in rendered
     assert '"#585b70"' in rendered
     # Sin sufijos float ni triples sueltos.
@@ -96,23 +113,23 @@ def test_get_set_unset_rich_slot() -> None:
     """Helpers para manipular slots ricos del theme."""
     t = ZellijTheme(name="test", source="user")
     # Set crea el componente desde cero
-    zellij_themes.set_rich_slot(t, "text_selected", "background", "#5566aa")
-    assert zellij_themes.get_rich_slot(t, "text_selected", "background") == "#5566aa"
+    set_rich_slot(t, "text_selected", "background", "#5566aa")
+    assert get_rich_slot(t, "text_selected", "background") == "#5566aa"
     # Set en componente existente agrega slot nuevo
-    zellij_themes.set_rich_slot(t, "text_selected", "base", "#ffffff")
-    assert zellij_themes.get_rich_slot(t, "text_selected", "base") == "#ffffff"
+    set_rich_slot(t, "text_selected", "base", "#ffffff")
+    assert get_rich_slot(t, "text_selected", "base") == "#ffffff"
     # Set sobre slot existente actualiza
-    zellij_themes.set_rich_slot(t, "text_selected", "background", "#aabbcc")
-    assert zellij_themes.get_rich_slot(t, "text_selected", "background") == "#aabbcc"
+    set_rich_slot(t, "text_selected", "background", "#aabbcc")
+    assert get_rich_slot(t, "text_selected", "background") == "#aabbcc"
     # Get inexistente devuelve None
-    assert zellij_themes.get_rich_slot(t, "foo", "bar") is None
+    assert get_rich_slot(t, "foo", "bar") is None
     # Unset elimina el slot
-    zellij_themes.unset_rich_slot(t, "text_selected", "background")
-    assert zellij_themes.get_rich_slot(t, "text_selected", "background") is None
+    unset_rich_slot(t, "text_selected", "background")
+    assert get_rich_slot(t, "text_selected", "background") is None
     # base sigue ahi
-    assert zellij_themes.get_rich_slot(t, "text_selected", "base") == "#ffffff"
+    assert get_rich_slot(t, "text_selected", "base") == "#ffffff"
     # Unset del ultimo slot elimina la componente entera
-    zellij_themes.unset_rich_slot(t, "text_selected", "base")
+    unset_rich_slot(t, "text_selected", "base")
     assert len(t.raw_components) == 0
 
 
@@ -134,9 +151,9 @@ def test_save_round_trip_preserves_rich_overrides(tmp_path: Path) -> None:
         '}\n',
         encoding="utf-8",
     )
-    themes = zellij_themes.list_user_themes(cfg)
-    zellij_themes.save_user_themes(cfg, themes, backup=False)
-    themes_again = zellij_themes.list_user_themes(cfg)
+    themes = list_user_themes(cfg)
+    save_user_themes(cfg, themes, backup=False)
+    themes_again = list_user_themes(cfg)
     assert len(themes_again) == 1
     component_names = {rc.name for rc in themes_again[0].raw_components}
     assert "text_selected" in component_names
@@ -144,18 +161,18 @@ def test_save_round_trip_preserves_rich_overrides(tmp_path: Path) -> None:
     assert "frame_selected" in component_names
     # El override puntual del usuario sobrevive al round-trip.
     assert (
-        zellij_themes.get_rich_slot(themes_again[0], "text_selected", "background")
+        get_rich_slot(themes_again[0], "text_selected", "background")
         == "#222222"
     )
 
 
 def test_is_valid_theme_name() -> None:
-    assert zellij_themes.is_valid_theme_name("dracula")
-    assert zellij_themes.is_valid_theme_name("custom_dark")
-    assert zellij_themes.is_valid_theme_name("my-theme-2")
-    assert not zellij_themes.is_valid_theme_name("2bad")  # empieza por digito
-    assert not zellij_themes.is_valid_theme_name("with space")
-    assert not zellij_themes.is_valid_theme_name("")
+    assert is_valid_theme_name("dracula")
+    assert is_valid_theme_name("custom_dark")
+    assert is_valid_theme_name("my-theme-2")
+    assert not is_valid_theme_name("2bad")  # empieza por digito
+    assert not is_valid_theme_name("with space")
+    assert not is_valid_theme_name("")
 
 
 def test_find_themes_block_handles_nested_braces() -> None:
@@ -169,7 +186,7 @@ def test_find_themes_block_handles_nested_braces() -> None:
         "}\n"
         'theme "a"\n'
     )
-    rng = zellij_themes.find_themes_block(text)
+    rng = find_themes_block(text)
     assert rng is not None
     start, end = rng
     block = text[start:end]
@@ -180,12 +197,12 @@ def test_find_themes_block_handles_nested_braces() -> None:
 
 
 def test_find_themes_block_returns_none_when_missing() -> None:
-    assert zellij_themes.find_themes_block("// no themes here\n") is None
+    assert find_themes_block("// no themes here\n") is None
 
 
 def test_find_themes_block_handles_brace_in_string() -> None:
     text = 'themes {\n    a { fg "#}{ raro }" }\n}\n'
-    rng = zellij_themes.find_themes_block(text)
+    rng = find_themes_block(text)
     assert rng is not None
     start, end = rng
     assert text[start:end].endswith("}")
@@ -202,7 +219,7 @@ def test_render_themes_block_format() -> None:
             colors=[ZellijColor("fg", "#fff"), ZellijColor("bg", "#000")],
         )
     ]
-    text = zellij_themes.render_themes_block(themes)
+    text = render_themes_block(themes)
     assert text.startswith('themes {\n    t1 {\n        fg "#fff"\n        bg "#000"\n')
     # Las 7 componentes activas presentes.
     for comp in (
@@ -235,7 +252,7 @@ def test_save_user_themes_replaces_existing_block(tmp_path: Path) -> None:
             colors=[ZellijColor("fg", "#abcdef"), ZellijColor("bg", "#111111")],
         )
     ]
-    backup = zellij_themes.save_user_themes(cfg, new)
+    backup = save_user_themes(cfg, new)
     text = cfg.read_text(encoding="utf-8")
     # Bloque viejo desaparece, bloque nuevo presente.
     assert "old {" not in text
@@ -259,7 +276,7 @@ def test_save_user_themes_appends_when_no_block(tmp_path: Path) -> None:
             colors=[ZellijColor("bg", "#000000")],
         )
     ]
-    zellij_themes.save_user_themes(cfg, themes)
+    save_user_themes(cfg, themes)
     text = cfg.read_text(encoding="utf-8")
     assert text.startswith('default_mode "normal"')
     assert "themes {" in text
@@ -272,7 +289,7 @@ def test_save_user_themes_empty_list_removes_block(tmp_path: Path) -> None:
         'keybinds {}\n\nthemes {\n    a {\n        fg "#000"\n    }\n}\n\ndefault_mode "normal"\n',
         encoding="utf-8",
     )
-    zellij_themes.save_user_themes(cfg, [])
+    save_user_themes(cfg, [])
     text = cfg.read_text(encoding="utf-8")
     assert "themes {" not in text
     assert "keybinds {}" in text
@@ -282,18 +299,18 @@ def test_save_user_themes_empty_list_removes_block(tmp_path: Path) -> None:
 def test_upsert_user_theme_adds_then_updates(tmp_path: Path) -> None:
     cfg = tmp_path / "config.kdl"
     cfg.write_text("// empty\n", encoding="utf-8")
-    zellij_themes.upsert_user_theme(
+    upsert_user_theme(
         cfg,
         ZellijTheme(name="a", source="user", colors=[ZellijColor("fg", "#111")]),
     )
-    themes = zellij_themes.list_user_themes(cfg)
+    themes = list_user_themes(cfg)
     assert [t.name for t in themes] == ["a"]
     # Update: cambiar el color.
-    zellij_themes.upsert_user_theme(
+    upsert_user_theme(
         cfg,
         ZellijTheme(name="a", source="user", colors=[ZellijColor("fg", "#222")]),
     )
-    themes = zellij_themes.list_user_themes(cfg)
+    themes = list_user_themes(cfg)
     assert themes[0].colors[0].value == "#222"
 
 
@@ -306,8 +323,8 @@ def test_delete_user_theme_removes_only_target(tmp_path: Path) -> None:
         '}\n',
         encoding="utf-8",
     )
-    zellij_themes.delete_user_theme(cfg, "a")
-    themes = zellij_themes.list_user_themes(cfg)
+    delete_user_theme(cfg, "a")
+    themes = list_user_themes(cfg)
     assert [t.name for t in themes] == ["b"]
 
 
@@ -317,7 +334,7 @@ def test_delete_user_theme_no_op_when_missing(tmp_path: Path) -> None:
         'themes {\n    a {\n        fg "#000"\n    }\n}\n',
         encoding="utf-8",
     )
-    backup = zellij_themes.delete_user_theme(cfg, "nope")
+    backup = delete_user_theme(cfg, "nope")
     assert backup is None  # no se hizo escritura
 
 
@@ -327,8 +344,8 @@ def test_clone_user_theme_copies_colors(tmp_path: Path) -> None:
         'themes {\n    src {\n        fg "#abc"\n    }\n}\n',
         encoding="utf-8",
     )
-    zellij_themes.clone_theme(cfg, "src", "dst")
-    themes = {t.name: t for t in zellij_themes.list_user_themes(cfg)}
+    clone_theme(cfg, "src", "dst")
+    themes = {t.name: t for t in list_user_themes(cfg)}
     assert "dst" in themes
     assert themes["dst"].colors[0].value == "#abc"
 
@@ -338,11 +355,11 @@ def test_clone_builtin_extracts_colors_from_bundled(tmp_path: Path) -> None:
     cfg.write_text("// empty\n", encoding="utf-8")
     # 'dracula' es built-in vendorizado: clonar extrae slots legacy
     # desde los componentes UI del .kdl bundled aplicando la regla unica.
-    zellij_themes.clone_theme(cfg, "dracula", "my-dracula")
-    themes = zellij_themes.list_user_themes(cfg)
+    clone_theme(cfg, "dracula", "my-dracula")
+    themes = list_user_themes(cfg)
     assert themes[0].name == "my-dracula"
     by_name = {c.name: c.value for c in themes[0].colors}
-    assert list(by_name.keys()) == list(zellij_themes.LEGACY_SLOTS)
+    assert list(by_name.keys()) == list(LEGACY_SLOTS)
     # fg de dracula = ribbon_unselected.background = #f8f8f2.
     assert by_name["fg"] == "#f8f8f2"
     # bg de dracula = text_unselected.background = #000000 (sin override).
@@ -356,8 +373,8 @@ def test_clone_ayu_dark_bg_is_text_unselected(tmp_path: Path) -> None:
     (#131721), no en text_selected.background (#475266 = pane seleccionado)."""
     cfg = tmp_path / "config.kdl"
     cfg.write_text("// empty\n", encoding="utf-8")
-    zellij_themes.clone_theme(cfg, "ayu-dark", "my-ayu")
-    by_name = {c.name: c.value for c in zellij_themes.list_user_themes(cfg)[0].colors}
+    clone_theme(cfg, "ayu-dark", "my-ayu")
+    by_name = {c.name: c.value for c in list_user_themes(cfg)[0].colors}
     assert by_name["bg"] == "#131721"
 
 
@@ -380,12 +397,12 @@ def test_clone_active_theme_overlays_alacritty(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    zellij_themes.clone_theme(
+    clone_theme(
         cfg, "dracula", "my-dracula",
         backend=AlacrittyBackend(), backend_path=ala,
     )
     by_name = {
-        c.name: c.value for c in zellij_themes.list_user_themes(cfg)[0].colors
+        c.name: c.value for c in list_user_themes(cfg)[0].colors
     }
     # Mapping 1:1: primary.foreground -> fg, primary.background -> bg.
     assert by_name["bg"] == "#222222"
@@ -409,12 +426,12 @@ def test_clone_non_active_theme_ignores_alacritty(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     # Cloneamos tokyo-night (NO es el activo).
-    zellij_themes.clone_theme(
+    clone_theme(
         cfg, "tokyo-night", "my-tn",
         backend=AlacrittyBackend(), backend_path=ala,
     )
     by_name = {
-        c.name: c.value for c in zellij_themes.list_user_themes(cfg)[0].colors
+        c.name: c.value for c in list_user_themes(cfg)[0].colors
     }
     # Debe coger los del .kdl de tokyo-night, NO los de alacritty.
     assert by_name["bg"] != "#222222"
@@ -434,11 +451,11 @@ def test_clone_active_user_theme_overlays_alacritty(tmp_path: Path) -> None:
         '[colors.primary]\nbackground = "#222222"\nforeground = "#eeeeee"\n',
         encoding="utf-8",
     )
-    zellij_themes.clone_theme(
+    clone_theme(
         cfg, "mio", "mio-copia",
         backend=AlacrittyBackend(), backend_path=ala,
     )
-    themes = zellij_themes.list_user_themes(cfg)
+    themes = list_user_themes(cfg)
     clone = next(t for t in themes if t.name == "mio-copia")
     by_name = {c.name: c.value for c in clone.colors}
     assert by_name["bg"] == "#222222"
@@ -450,9 +467,9 @@ def test_clone_without_backend_uses_kdl_only(tmp_path: Path) -> None:
     """Sin backend, comportamiento clasico: solo .kdl."""
     cfg = tmp_path / "config.kdl"
     cfg.write_text('theme "dracula"\n', encoding="utf-8")
-    zellij_themes.clone_theme(cfg, "dracula", "my-dracula")
+    clone_theme(cfg, "dracula", "my-dracula")
     by_name = {
-        c.name: c.value for c in zellij_themes.list_user_themes(cfg)[0].colors
+        c.name: c.value for c in list_user_themes(cfg)[0].colors
     }
     # Sin override de dracula bg, queda como text_unselected.background = #000000.
     assert by_name["bg"] == "#000000"
@@ -466,7 +483,7 @@ def test_clone_builtin_preserves_rich_components(tmp_path: Path) -> None:
     obscuros (table_*, list_*, exit_code_*, multiplayer_*) no se vuelcan."""
     cfg = tmp_path / "config.kdl"
     cfg.write_text("// empty\n", encoding="utf-8")
-    zellij_themes.clone_theme(cfg, "molokai-dark", "my-molokai")
+    clone_theme(cfg, "molokai-dark", "my-molokai")
     text = cfg.read_text(encoding="utf-8")
     # Las 6 componentes activas presentes.
     assert "text_unselected {" in text
@@ -488,9 +505,9 @@ def test_clone_user_theme_preserves_rich_components(tmp_path: Path) -> None:
     los preserva (clone de clone)."""
     cfg = tmp_path / "config.kdl"
     cfg.write_text("// empty\n", encoding="utf-8")
-    zellij_themes.clone_theme(cfg, "dracula", "my-dracula")
-    zellij_themes.clone_theme(cfg, "my-dracula", "my-dracula-2")
-    themes = {t.name: t for t in zellij_themes.list_user_themes(cfg)}
+    clone_theme(cfg, "dracula", "my-dracula")
+    clone_theme(cfg, "my-dracula", "my-dracula-2")
+    themes = {t.name: t for t in list_user_themes(cfg)}
     assert "my-dracula-2" in themes
     component_names = {rc.name for rc in themes["my-dracula-2"].raw_components}
     assert "text_selected" in component_names
@@ -501,8 +518,8 @@ def test_clone_unknown_uses_black_defaults(tmp_path: Path) -> None:
     cfg = tmp_path / "config.kdl"
     cfg.write_text("// empty\n", encoding="utf-8")
     # Theme name desconocido (no built-in, no user) -> defaults #000000.
-    zellij_themes.clone_theme(cfg, "totally-fake-theme", "copy")
-    themes = zellij_themes.list_user_themes(cfg)
+    clone_theme(cfg, "totally-fake-theme", "copy")
+    themes = list_user_themes(cfg)
     assert themes[0].colors[0].value == "#000000"
 
 
@@ -513,14 +530,14 @@ def test_clone_rejects_existing_name(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     with pytest.raises(ValueError):
-        zellij_themes.clone_theme(cfg, "foo", "foo")
+        clone_theme(cfg, "foo", "foo")
 
 
 def test_clone_rejects_invalid_name(tmp_path: Path) -> None:
     cfg = tmp_path / "config.kdl"
     cfg.write_text("// empty\n", encoding="utf-8")
     with pytest.raises(ValueError):
-        zellij_themes.clone_theme(cfg, "dracula", "1invalid")
+        clone_theme(cfg, "dracula", "1invalid")
 
 
 def test_render_always_emits_legacy_plus_rich(tmp_path: Path) -> None:
@@ -537,7 +554,7 @@ def test_render_always_emits_legacy_plus_rich(tmp_path: Path) -> None:
             ],
         )
     ]
-    text = zellij_themes.render_themes_block(themes)
+    text = render_themes_block(themes)
     assert 'fg "#aabbcc"' in text
     assert 'bg "#112233"' in text
     # Sin raw_components, igual emite las 7 componentes ricas derivadas.
@@ -557,7 +574,7 @@ def test_render_drops_orange_legacy_slot() -> None:
             ZellijColor("orange", "#ff8800"),  # ignorado al renderizar
         ],
     )
-    text = zellij_themes.render_themes_block([theme])
+    text = render_themes_block([theme])
     # No aparece como nodo legacy 'orange'.
     assert "        orange " not in text
 
@@ -570,11 +587,11 @@ def test_render_emits_only_components_with_exposed_slots(tmp_path: Path) -> None
     legacy_dict = {"red": "#ff0000", "green": "#00ff00", "blue": "#0000ff"}
     legacy = [
         ZellijColor(name=s, value=legacy_dict.get(s, "#abcdef"))
-        for s in zellij_themes.LEGACY_SLOTS
+        for s in LEGACY_SLOTS
     ]
     theme = ZellijTheme(name="t", source="user", colors=legacy)
-    zellij_themes.set_rich_slot(theme, "text_selected", "background", "#deadbe")
-    text = zellij_themes.render_themes_block([theme])
+    set_rich_slot(theme, "text_selected", "background", "#deadbe")
+    text = render_themes_block([theme])
 
     # Componentes con `background` expuesto -> emiten 6 slots.
     for component in ("text_unselected", "text_selected", "ribbon_unselected", "ribbon_selected"):
@@ -620,7 +637,7 @@ def test_derive_rich_block_matches_zellij_from_palette() -> None:
         "cyan": "#00ffff",
         "white": "#ffffff",
     }
-    derived = zellij_themes.derive_rich_block(palette, orange_hint="#ffa500")
+    derived = derive_rich_block(palette, orange_hint="#ffa500")
     # Tabs activa: ribbon_selected.background = palette.green.
     assert derived["ribbon_selected"]["background"] == "#00ff00"
     assert derived["ribbon_selected"]["base"] == "#000000"
@@ -635,6 +652,6 @@ def test_derive_rich_block_matches_zellij_from_palette() -> None:
 
 
 def test_default_legacy_slots() -> None:
-    slots = zellij_themes.default_legacy_slots()
-    assert [s.name for s in slots] == list(zellij_themes.LEGACY_SLOTS)
+    slots = default_legacy_slots()
+    assert [s.name for s in slots] == list(LEGACY_SLOTS)
     assert all(s.value.startswith("#") for s in slots)

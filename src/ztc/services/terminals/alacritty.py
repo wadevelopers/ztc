@@ -14,7 +14,7 @@ from tomlkit.items import Array
 from tomlkit.toml_document import TOMLDocument
 
 from ztc.services import toml_io
-from zellij_themes.colors import (
+from ztc.services.colors import (
     CanonicalSlot,
     is_valid_hex,
     normalize_hex,

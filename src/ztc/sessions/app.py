@@ -52,7 +52,7 @@ class SessionLauncherApp(App[None]):
         """Registra los temas Textual derivados de los .kdl bundleados de
         Zellij + los user themes definidos en config.kdl. Permite que el
         TUI matchee el theme activo del usuario."""
-        from zellij_themes import theme_assets, user_themes
+        from ztc.zellij import theme_assets, user_themes
 
         # Built-in vendorizados.
         for ui_theme in theme_assets.load_all_bundled_themes():
@@ -78,8 +78,8 @@ class SessionLauncherApp(App[None]):
     def _sync_theme_with_zellij(self) -> None:
         """Aplica el tema Textual con el mismo nombre que el tema activo
         de Zellij. Si no esta registrado, cae a `textual-dark`."""
-        from zellij_themes import TEXTUAL_FALLBACK
-        from zellij_themes.config import read_active_theme
+        from ztc.zellij import TEXTUAL_FALLBACK
+        from ztc.zellij.config import read_active_theme
 
         active = read_active_theme(self.zellij_config_path)
         target = active if active else TEXTUAL_FALLBACK

@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from zellij_themes.colors import CanonicalSlot
+from ztc.services.colors import CanonicalSlot
 
 # Doc opaco que cada backend tipa internamente (TOMLDocument para
 # alacritty, lista de lineas para kitty/ghostty).

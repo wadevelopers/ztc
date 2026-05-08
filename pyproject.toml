@@ -14,11 +14,7 @@ dependencies = [
     "textual>=0.80",
     "tomlkit>=0.13",
     "kdl-py>=1.2",
-    "zellij-themes",
 ]
-
-[tool.uv.sources]
-zellij-themes = { path = "../zellij-themes", editable = true }
 
 [project.scripts]
 ztc = "ztc.__main__:main"

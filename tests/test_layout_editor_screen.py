@@ -9,7 +9,7 @@ from ztc.app import TermConfigApp
 from ztc.models.config import Paths
 from ztc.screens.layout_editor import LayoutEditorScreen
 from ztc.screens.layout_list import LayoutListScreen
-from ztc.services import kdl_io
+from ztc.zellij import layout_io as kdl_io
 from ztc.services.runtime_detect import TerminalDetection
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.widgets.confirm import (

@@ -38,7 +38,7 @@ from pathlib import Path
 
 from ztc.services.atomic import write_atomic
 from ztc.services.backups import make_backup
-from zellij_themes.colors import CanonicalSlot
+from ztc.services.colors import CanonicalSlot
 
 # Profundidad maxima para expandir `include`. Evita loops por
 # circular includes y tambien acota el costo de parsing.

@@ -2,31 +2,36 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ztc.services import zellij_themes
+from ztc.zellij import TEXTUAL_FALLBACK
+from ztc.zellij.user_themes import (
+    list_all_themes,
+    list_builtin_themes,
+    list_user_themes,
+)
 
 FIX = Path(__file__).parent / "fixtures" / "zellij"
 
 
 def test_builtin_list_includes_known_names() -> None:
-    names = {t.name for t in zellij_themes.list_builtin_themes()}
+    names = {t.name for t in list_builtin_themes()}
     for expected in ("dracula", "tokyo-night", "catppuccin-mocha", "nord"):
         assert expected in names
 
 
 def test_builtin_list_excludes_ansi() -> None:
     """'ansi' usa indices de paleta del terminal, no RGB; no se lista."""
-    names = {t.name for t in zellij_themes.list_builtin_themes()}
+    names = {t.name for t in list_builtin_themes()}
     assert "ansi" not in names
 
 
 def test_builtin_themes_have_no_duplicates_and_are_sorted() -> None:
-    names = [t.name for t in zellij_themes.list_builtin_themes()]
+    names = [t.name for t in list_builtin_themes()]
     assert names == sorted(names)
     assert len(names) == len(set(names))
 
 
 def test_list_user_themes_parses_block() -> None:
-    themes = zellij_themes.list_user_themes(FIX / "config_with_user_themes.kdl")
+    themes = list_user_themes(FIX / "config_with_user_themes.kdl")
     by_name = {t.name: t for t in themes}
     assert set(by_name.keys()) == {"custom_dark", "midnight"}
 
@@ -39,15 +44,15 @@ def test_list_user_themes_parses_block() -> None:
 
 
 def test_list_user_themes_handles_missing_file(tmp_path: Path) -> None:
-    assert zellij_themes.list_user_themes(tmp_path / "nope.kdl") == []
+    assert list_user_themes(tmp_path / "nope.kdl") == []
 
 
 def test_list_user_themes_handles_no_themes_block() -> None:
-    assert zellij_themes.list_user_themes(FIX / "config_with_theme.kdl") == []
+    assert list_user_themes(FIX / "config_with_theme.kdl") == []
 
 
 def test_list_all_themes_user_first_then_builtins() -> None:
-    themes = zellij_themes.list_all_themes(FIX / "config_with_user_themes.kdl")
+    themes = list_all_themes(FIX / "config_with_user_themes.kdl")
     user_count = sum(1 for t in themes if t.is_user)
     assert user_count == 2
     # Los primeros dos deben ser user themes (ordenados antes de builtins).
@@ -59,7 +64,7 @@ def test_list_all_themes_user_first_then_builtins() -> None:
 
 
 def test_textual_fallback_constant_is_textual_dark() -> None:
-    assert zellij_themes.TEXTUAL_FALLBACK == "textual-dark"
+    assert TEXTUAL_FALLBACK == "textual-dark"
 
 
 def test_list_all_themes_user_overrides_builtin_name(tmp_path: Path) -> None:
@@ -68,7 +73,7 @@ def test_list_all_themes_user_overrides_builtin_name(tmp_path: Path) -> None:
         'themes {\n    dracula {\n        fg "#fff"\n    }\n}\n',
         encoding="utf-8",
     )
-    themes = zellij_themes.list_all_themes(cfg)
+    themes = list_all_themes(cfg)
     drac = [t for t in themes if t.name == "dracula"]
     assert len(drac) == 1
     assert drac[0].is_user  # el usuario gana

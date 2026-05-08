@@ -18,9 +18,10 @@ from ztc.screens.theme_editor import ThemePickerScreen
 from ztc.sessions.screens.picker import PickerScreen
 from ztc.sessions.services.zellij_session import attach_argv, new_session_argv
 from ztc.sessions.types import LaunchTarget
-from zellij_themes import theme_assets as zellij_theme_assets
-
-from ztc.services import zellij_config, zellij_themes
+from ztc.zellij import TEXTUAL_FALLBACK
+from ztc.zellij import theme_assets as zellij_theme_assets
+from ztc.zellij.config import read_active_theme
+from ztc.zellij.user_themes import list_user_themes
 from ztc.services.runtime_detect import (
     TerminalDetection,
     detect_terminal,
@@ -280,7 +281,7 @@ class TermConfigApp(App[None]):
         # mismo builder rich-based para que primary/accent/etc. salgan iguales
         # que en el built-in equivalente. Fallback al builder legacy si no hay
         # rich (caso raro: tema editado a mano sin bloques ricos).
-        for ut in zellij_themes.list_user_themes(self.paths.zellij_config):
+        for ut in list_user_themes(self.paths.zellij_config):
             ui_theme = zellij_theme_assets.user_theme_to_ui_theme(ut)
             textual_theme = (
                 zellij_theme_assets.build_textual_theme(ui_theme)
@@ -294,7 +295,7 @@ class TermConfigApp(App[None]):
 
     def sync_theme_with_zellij(self) -> None:
         """Aplica el tema Textual con el mismo nombre que el tema Zellij activo."""
-        active = zellij_config.read_active_theme(self.paths.zellij_config)
+        active = read_active_theme(self.paths.zellij_config)
         self.apply_theme_for_zellij(active)
 
     def apply_theme_for_zellij(self, zellij_name: str | None) -> None:
@@ -308,9 +309,9 @@ class TermConfigApp(App[None]):
         actualizados del Theme registrado (caso: editar el user theme activo
         y guardar — sin esto el TUI no se refrescaria hasta reiniciar).
         """
-        target = zellij_name if zellij_name else zellij_themes.TEXTUAL_FALLBACK
+        target = zellij_name if zellij_name else TEXTUAL_FALLBACK
         if target not in self.available_themes:
-            target = zellij_themes.TEXTUAL_FALLBACK
+            target = TEXTUAL_FALLBACK
         if self.theme != target:
             self.theme = target
         else:
