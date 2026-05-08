@@ -1,12 +1,55 @@
 # ztc
 
 TUI en Python para administrar el setup de terminal: colores de la
-terminal soportada y temas/layouts/sesiones de Zellij.
+terminal soportada y temas/layouts/sesiones de Zellij. Expone dos
+comandos: `ztc` (app completa) y `zsm` (launcher de sesiones).
 
 - [`PLAN.md`](PLAN.md) — diseno y roadmap del proyecto.
 - [`PLAN_MULTI_TERMINAL.md`](PLAN_MULTI_TERMINAL.md) — spec de la
   arquitectura multi-terminal (vigente).
 - [`NOTES.md`](NOTES.md) — gotchas operativos y notas de uso.
+
+## Installation
+
+```bash
+uv tool install ztc
+```
+
+Instala dos comandos en `PATH`:
+
+- `ztc`: app completa con menu (themes, layouts, sessions, terminal colors).
+- `zsm`: launcher rapido de sesiones — equivalente a abrir `ztc` y elegir
+  "Zellij sessions" desde el menu, pero sin pasar por el menu.
+
+### Requisitos
+
+- Python 3.11+.
+- Zellij (opcional). Si no esta instalado, los items de Zellij en el menu
+  aparecen disabled con la nota `(zellij not installed)`.
+- Para edicion de colores: Alacritty o Kitty configurados.
+
+## Usage
+
+### `ztc` — app completa
+
+Abre el menu con todas las features:
+
+- **Zellij theme**: elegir/editar el tema activo de Zellij.
+- **Zellij layouts**: gestionar layouts.
+- **Zellij sessions**: launcher de sesiones (equivalente a `zsm` directo).
+- **Terminal colors**: editar colores de Alacritty/Kitty sincronizados con
+  el tema de Zellij.
+
+Navegacion: `↑↓` mover, `↲` abrir, `q` salir.
+
+### `zsm` — launcher rapido de sesiones
+
+Abre directamente el selector de sesiones, sin pasar por el menu de ztc.
+Util como reemplazo del shell-prompt-to-zellij: cada vez que abris una
+terminal, ejecutas `zsm`, eligis attach/new/bash, y entras al destino.
+
+Atajos dentro del selector: `enter` attach, `n` new, `l` new+layout,
+`r` rename, `k` kill, `d` delete, `b` bash, `q` salir.
 
 ## Estado
 
@@ -74,19 +117,51 @@ modificas un color desde el editor:
 Limitacion: `globinclude` y `envinclude` no se expanden, solo
 `include` directo. Includes anidados se permiten hasta profundidad 5.
 
+## How it works
+
+### `zsm` reemplaza su propio proceso al lanzar
+
+Cuando elegis attach/new/bash en `zsm`, no se abre Zellij como un proceso
+hijo — el comando usa `os.execvp` para **reemplazar** el proceso `zsm`
+por Zellij. Visualmente:
+
+```
+shell (PID 100)
+  └─ zsm (PID 200)         ← TUI corriendo
+       │ elegis "attach mi-sesion"
+       │ os.execvp("zellij", "attach", "mi-sesion")
+       ↓
+shell (PID 100)
+  └─ zellij (PID 200)      ← MISMO PID, distinto programa
+       │ trabajas en zellij
+       │ cerras zellij
+       ↓
+shell (PID 100)            ← vuelve el control al shell
+```
+
+`zsm` no consume memoria mientras estas en zellij — fue literalmente
+reemplazado, ya no existe como proceso.
+
+### Misma logica para "Zellij sessions" desde `ztc`
+
+Cuando elegis attach/new/bash desde el menu embebido de ztc, ztc se
+reemplaza por Zellij con el mismo mecanismo. La unica diferencia es que
+`cancel` (Esc/q) vuelve al menu de ztc en lugar de salir al shell.
+
+### Limitacion: lanzar fuera de Zellij
+
+Las operaciones attach a otra sesion y crear nueva requieren que el
+proceso que las ejecuta **no este dentro de una sesion Zellij** — es una
+restriccion de Zellij, no del launcher. El caso de uso primario de `zsm`
+es ejecutarlo desde el shell antes de entrar a Zellij. Si lo invocas
+desde un pane de Zellij existente, esas operaciones van a fallar.
+
 ## Desarrollo
 
 ```bash
 uv venv
 uv pip install -e ".[dev]"
-uv run ztc
+uv run ztc       # app completa
+uv run zsm       # launcher de sesiones
 uv run pytest
-```
-
-## Instalacion
-
-```bash
-uv tool install .
-# o
-pipx install .
 ```

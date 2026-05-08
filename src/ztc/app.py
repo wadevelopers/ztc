@@ -90,7 +90,7 @@ class TermConfigApp(App[None]):
     #main-menu {
         height: auto;
         max-height: 20;
-        width: 25;
+        width: 43;
         border: round $panel;
     }
     """
