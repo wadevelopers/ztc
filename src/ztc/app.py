@@ -14,6 +14,7 @@ from ztc import __version__
 from ztc.models.config import Paths
 from ztc.screens.color_editor import ColorEditorScreen
 from ztc.screens.layout_list import LayoutListScreen
+from ztc.screens.terminal_settings import TerminalSettingsScreen
 from ztc.screens.theme_editor import ThemePickerScreen
 from ztc.sessions.screens.picker import PickerScreen
 from ztc.sessions.services.zellij_session import attach_argv, new_session_argv
@@ -214,6 +215,11 @@ class TermConfigApp(App[None]):
                 id="colors",
                 disabled=colors_disabled,
             ),
+            Option(
+                _padded("Terminal settings", colors_suffix),
+                id="terminal-settings",
+                disabled=colors_disabled,
+            ),
         ]
 
     def _colors_option_state(self) -> tuple[str, bool]:
@@ -351,6 +357,15 @@ class TermConfigApp(App[None]):
                     backend=self.backend,
                     backend_path=self.backend_path,
                     zellij_config_path=self.paths.zellij_config,
+                )
+            )
+        elif event.option.id == "terminal-settings":
+            if self.backend is None or self.backend_path is None:
+                return
+            self.push_screen(
+                TerminalSettingsScreen(
+                    backend=self.backend,
+                    backend_path=self.backend_path,
                 )
             )
 

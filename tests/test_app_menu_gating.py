@@ -66,9 +66,12 @@ async def test_happy_path_alacritty_with_zellij(tmp_path: Path) -> None:
         assert "SSH" not in colors_label
         assert "zellij not installed" not in themes_label.lower()
         assert "zellij not installed" not in sessions_label.lower()
-        # 4 items: themes, layouts, sessions, colors.
+        # 5 items: themes, layouts, sessions, colors, terminal-settings.
         option_list = app.query_one("#main-menu", OptionList)
-        assert option_list.option_count == 4
+        assert option_list.option_count == 5
+        # terminal-settings comparte gating con colors (mismo backend/SSH).
+        ts_label, ts_disabled = _option_state(app, "terminal-settings")
+        assert ts_disabled is False
 
 
 # ---------- terminal no soportada ----------
@@ -254,6 +257,26 @@ async def test_colors_opens_editor_when_enabled(tmp_path: Path) -> None:
         await pilot.press("down", "down", "down", "enter")
         await pilot.pause()
         assert isinstance(app.screen, ColorEditorScreen)
+
+
+async def test_terminal_settings_opens_editor_when_enabled(tmp_path: Path) -> None:
+    from ztc.screens.terminal_settings import TerminalSettingsScreen
+    from ztc.services.terminals.alacritty import AlacrittyBackend
+
+    app = TermConfigApp(
+        paths=_paths(tmp_path),
+        backend=AlacrittyBackend(),
+        backend_path=tmp_path / "alacritty.toml",
+        detection=TerminalDetection(
+            kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
+        ),
+        zellij_installed=True,
+    )
+    async with app.run_test() as pilot:
+        # Item "terminal-settings" es el 5o (despues de themes/layouts/sessions/colors).
+        await pilot.press("down", "down", "down", "down", "enter")
+        await pilot.pause()
+        assert isinstance(app.screen, TerminalSettingsScreen)
 
 
 # ---------- E2E con Kitty: deteccion -> editor -> edit -> save ----------
