@@ -17,7 +17,8 @@ uv tool install ztc
 
 Instala dos comandos en `PATH`:
 
-- `ztc`: app completa con menu (themes, layouts, sessions, terminal colors).
+- `ztc`: app completa con menu (themes, layouts, sessions, terminal
+  colors, terminal settings).
 - `zsm`: launcher rapido de sesiones — equivalente a abrir `ztc` y elegir
   "Zellij sessions" desde el menu, pero sin pasar por el menu.
 
@@ -26,7 +27,9 @@ Instala dos comandos en `PATH`:
 - Python 3.11+.
 - Zellij (opcional). Si no esta instalado, los items de Zellij en el menu
   aparecen disabled con la nota `(zellij not installed)`.
-- Para edicion de colores: Alacritty o Kitty configurados.
+- Para edicion de colores y settings: Alacritty o Kitty configurados.
+- Para selector de fuente en Terminal settings: `fontconfig` (fc-list).
+  Sin el, el campo `font.family` cae a un input de texto libre.
 
 ## Usage
 
@@ -39,6 +42,11 @@ Abre el menu con todas las features:
 - **Zellij sessions**: launcher de sesiones (equivalente a `zsm` directo).
 - **Terminal colors**: editar colores de Alacritty/Kitty sincronizados con
   el tema de Zellij.
+- **Terminal settings**: editar padding, opacity, font size/family y
+  cursor shape del backend activo. Mismos 6 settings funcionan en
+  Alacritty (`alacritty.toml`) y Kitty (`kitty.conf`); el backend se
+  encarga del formato propio. `font.family` ofrece un selector con
+  las fuentes monoespaciadas detectadas via fontconfig.
 
 Navegacion: `↑↓` mover, `↲` abrir, `q` salir.
 
