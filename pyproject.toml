@@ -35,6 +35,9 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/ztc"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/ztc/zellij/assets/zellij_themes" = "ztc/zellij/assets/zellij_themes"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
