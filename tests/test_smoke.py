@@ -8,7 +8,7 @@ def test_import_app():
     from ztc.app import TermConfigApp
 
     app = TermConfigApp()
-    assert app.TITLE == "term-config-tui"
+    assert app.TITLE.startswith("ztc")
 
 
 def test_default_paths_point_to_home():

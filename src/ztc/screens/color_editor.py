@@ -28,13 +28,13 @@ class ColorEditorScreen(Screen[None]):
     """
 
     BINDINGS = [
-        Binding("enter", "edit", "Editar"),
-        Binding("x", "reset", "Resetear slot"),
-        Binding("i", "import", "Importar tema"),
-        Binding("r", "reload", "Recargar"),
-        Binding("s", "save", "Guardar"),
-        Binding("escape", "back", "Volver"),
-        Binding("q", "back", "Volver", show=False),
+        Binding("enter", "edit", "Edit"),
+        Binding("x", "reset", "Reset slot"),
+        Binding("i", "import", "Import theme"),
+        Binding("r", "reload", "Reload"),
+        Binding("s", "save", "Save"),
+        Binding("escape", "back", "Back"),
+        Binding("q", "back", "Back", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -289,9 +289,9 @@ class ColorEditorScreen(Screen[None]):
 
         self.app.push_screen(
             PromptModal(
-                title=f"Importar tema desde archivo",
+                title=f"Import theme from file",
                 placeholder=f"nombre de archivo (junto a {self.backend_path.name}) o ruta absoluta",
-                confirm_label="Importar",
+                confirm_label="Import",
             ),
             after,
         )

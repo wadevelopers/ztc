@@ -20,11 +20,11 @@ class LayoutListScreen(Screen[None]):
 
     BINDINGS = [
         Binding("enter", "open", "Abrir"),
-        Binding("n", "new", "Nuevo"),
-        Binding("d", "delete", "Borrar"),
-        Binding("r", "refresh", "Refrescar"),
-        Binding("escape", "app.pop_screen", "Volver"),
-        Binding("q", "app.pop_screen", "Volver", show=False),
+        Binding("n", "new", "New"),
+        Binding("d", "delete", "Delete"),
+        Binding("r", "refresh", "Refresh"),
+        Binding("escape", "app.pop_screen", "Back"),
+        Binding("q", "app.pop_screen", "Back", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -170,7 +170,7 @@ class LayoutListScreen(Screen[None]):
             PromptModal(
                 title="Nuevo layout",
                 placeholder="ej. trabajo",
-                confirm_label="Crear",
+                confirm_label="Create",
             ),
             after,
         )
@@ -197,10 +197,10 @@ class LayoutListScreen(Screen[None]):
 
         self.app.push_screen(
             ConfirmByNameModal(
-                title="Borrar layout",
+                title="Delete layout",
                 message=f"Esto borrara el archivo {layout.path}.",
                 expected=layout.name,
-                confirm_label="Borrar",
+                confirm_label="Delete",
             ),
             after,
         )

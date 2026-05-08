@@ -23,13 +23,13 @@ class ThemePickerScreen(Screen[None]):
     """Pantalla para elegir el tema activo de Zellij."""
 
     BINDINGS = [
-        Binding("enter", "apply", "Aplicar", show=True),
-        Binding("n", "new_theme", "Nuevo"),
-        Binding("e", "edit_theme", "Editar"),
-        Binding("c", "clone_theme", "Clonar"),
-        Binding("d", "delete_theme", "Borrar"),
-        Binding("escape", "app.pop_screen", "Volver", show=True),
-        Binding("q", "app.pop_screen", "Volver", show=False),
+        Binding("enter", "apply", "Apply", show=True),
+        Binding("n", "new_theme", "New"),
+        Binding("e", "edit_theme", "Edit"),
+        Binding("c", "clone_theme", "Clone"),
+        Binding("d", "delete_theme", "Delete"),
+        Binding("escape", "app.pop_screen", "Back", show=True),
+        Binding("q", "app.pop_screen", "Back", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -339,7 +339,7 @@ class ThemePickerScreen(Screen[None]):
             PromptModal(
                 title="Nuevo user theme",
                 placeholder="ej. mi-tema",
-                confirm_label="Crear",
+                confirm_label="Create",
             ),
             after,
         )
@@ -403,7 +403,7 @@ class ThemePickerScreen(Screen[None]):
             PromptModal(
                 title=f"Clonar '{src}' [{kind}]",
                 placeholder=f"{src}-copy",
-                confirm_label="Clonar",
+                confirm_label="Clone",
             ),
             after,
         )
@@ -435,13 +435,13 @@ class ThemePickerScreen(Screen[None]):
 
         self.app.push_screen(
             ConfirmByNameModal(
-                title="Borrar user theme",
+                title="Delete user theme",
                 message=(
                     f"Esto eliminara '{theme.name}' del bloque themes en config.kdl. "
                     "Si es el tema activo, Zellij caera al tema 'default' al recargar."
                 ),
                 expected=theme.name,
-                confirm_label="Borrar",
+                confirm_label="Delete",
             ),
             after,
         )

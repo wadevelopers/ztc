@@ -60,9 +60,9 @@ async def test_happy_path_alacritty_with_zellij(tmp_path: Path) -> None:
         assert themes_disabled is False
         assert layouts_disabled is False
         assert colors_disabled is False
-        assert "no soportada" not in colors_label
+        assert "unsupported" not in colors_label
         assert "SSH" not in colors_label
-        assert "zellij no instalado" not in themes_label.lower()
+        assert "zellij not installed" not in themes_label.lower()
 
 
 # ---------- terminal no soportada ----------
@@ -80,7 +80,7 @@ async def test_unsupported_terminal_disables_colors(tmp_path: Path) -> None:
         colors_label, colors_disabled = _option_state(app, "colors")
         themes_label, themes_disabled = _option_state(app, "themes")
         assert colors_disabled is True
-        assert "no soportada" in colors_label
+        assert "unsupported" in colors_label
         # Zellij sigue habilitado: independencia de bloques.
         assert themes_disabled is False
 
@@ -143,8 +143,8 @@ async def test_no_zellij_disables_only_zellij_options(tmp_path: Path) -> None:
         colors_label, colors_disabled = _option_state(app, "colors")
         assert themes_disabled is True
         assert layouts_disabled is True
-        assert "zellij no instalado" in themes_label
-        assert "zellij no instalado" in layouts_label
+        assert "zellij not installed" in themes_label
+        assert "zellij not installed" in layouts_label
         # Colores intacto: independencia de bloques.
         assert colors_disabled is False
 
@@ -166,7 +166,7 @@ async def test_override_invalid_value_disables_colors(tmp_path: Path) -> None:
     async with app.run_test():
         colors_label, colors_disabled = _option_state(app, "colors")
         assert colors_disabled is True
-        assert "override invalido" in colors_label
+        assert "invalid override" in colors_label
         # Backend tampoco resuelto.
         assert app.backend is None
 

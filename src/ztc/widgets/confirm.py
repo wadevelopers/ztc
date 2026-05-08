@@ -16,7 +16,7 @@ class ConfirmByNameModal(ModalScreen[bool]):
     """Modal para confirmar acciones destructivas escribiendo el nombre objetivo."""
 
     BINDINGS = [
-        Binding("escape", "dismiss_false", "Cancelar"),
+        Binding("escape", "dismiss_false", "Cancel"),
     ]
 
     DEFAULT_CSS = """
@@ -56,7 +56,7 @@ class ConfirmByNameModal(ModalScreen[bool]):
         title: str,
         message: str,
         expected: str,
-        confirm_label: str = "Confirmar",
+        confirm_label: str = "Confirm",
     ) -> None:
         super().__init__()
         self._title = title
@@ -74,7 +74,7 @@ class ConfirmByNameModal(ModalScreen[bool]):
             )
             yield Input(placeholder=self._expected, id="confirm-input")
             with Horizontal(id="buttons"):
-                yield Button("Cancelar", id="cancel", variant="default")
+                yield Button("Cancel", id="cancel", variant="default")
                 yield Button(
                     self._confirm_label,
                     id="confirm",
@@ -111,7 +111,7 @@ class ConfirmByNameModal(ModalScreen[bool]):
 class PromptModal(ModalScreen[str | None]):
     """Modal generico de un solo input: pide texto, devuelve string o None si cancela."""
 
-    BINDINGS = [Binding("escape", "dismiss_none", "Cancelar")]
+    BINDINGS = [Binding("escape", "dismiss_none", "Cancel")]
 
     DEFAULT_CSS = """
     PromptModal {
@@ -164,7 +164,7 @@ class PromptModal(ModalScreen[str | None]):
                 value=self._initial, placeholder=self._placeholder, id="prompt-input"
             )
             with Horizontal(id="buttons"):
-                yield Button("Cancelar", id="cancel")
+                yield Button("Cancel", id="cancel")
                 yield Button(
                     self._confirm_label,
                     id="confirm",
@@ -213,7 +213,7 @@ class PaneEditModal(ModalScreen[Pane | None]):
     El pane original no se muta: el caller decide como aplicarlo.
     """
 
-    BINDINGS = [Binding("escape", "dismiss_none", "Cancelar")]
+    BINDINGS = [Binding("escape", "dismiss_none", "Cancel")]
 
     DEFAULT_CSS = """
     PaneEditModal {
@@ -339,8 +339,8 @@ class PaneEditModal(ModalScreen[Pane | None]):
                     yield Switch(value=self._pane.borderless, id="borderless")
 
             with Horizontal(id="buttons"):
-                yield Button("Cancelar", id="cancel")
-                yield Button("Guardar", id="save", variant="primary")
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", id="save", variant="primary")
 
     def on_mount(self) -> None:
         self.query_one("#name", Input).focus()
@@ -392,7 +392,7 @@ def _none_if_empty(value: str) -> str | None:
 class EditColorModal(ModalScreen[str | None]):
     """Modal para editar un valor de color hex con validacion en vivo."""
 
-    BINDINGS = [Binding("escape", "dismiss_none", "Cancelar")]
+    BINDINGS = [Binding("escape", "dismiss_none", "Cancel")]
 
     DEFAULT_CSS = """
     EditColorModal {
@@ -452,8 +452,8 @@ class EditColorModal(ModalScreen[str | None]):
             yield Static("", id="swatch")
             yield Static("", id="status")
             with Horizontal(id="buttons"):
-                yield Button("Cancelar", id="cancel")
-                yield Button("Guardar", id="save", variant="primary", disabled=True)
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", id="save", variant="primary", disabled=True)
 
     def on_mount(self) -> None:
         inp = self.query_one("#hex-input", Input)

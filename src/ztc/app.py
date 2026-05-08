@@ -30,12 +30,15 @@ from ztc.services.terminals.registry import (
 
 
 class TermConfigApp(App[None]):
-    TITLE = "term-config-tui"
+    TITLE = "ztc — Zellij & Terminal Config"
     SUB_TITLE = f"v{__version__}"
 
+    # `ctrl+p` choca con el menu "pane" de Zellij; usamos `P` (Shift+P).
+    # Binding propia para overridear el label "palette" que Textual hardcodea.
+    COMMAND_PALETTE_BINDING = "P"
     BINDINGS = [
-        Binding("p", "command_palette", "Buscar"),
-        Binding("q", "quit", "Salir"),
+        Binding("P", "command_palette", "Palette", priority=True, show=False),
+        Binding("q", "quit", "Exit"),
     ]
 
     DEFAULT_CSS = """
@@ -106,9 +109,9 @@ class TermConfigApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical(id="menu-wrap"):
-            yield Static("term-config-tui", classes="menu-title")
+            yield Static("ztc — Zellij & Terminal Config", classes="menu-title")
             yield Static(
-                "Flechas para navegar  /  Enter para abrir  /  q para salir",
+                "Arrows to navigate  /  Enter to open  /  q to exit",
                 classes="menu-hint",
             )
             yield OptionList(
@@ -119,7 +122,7 @@ class TermConfigApp(App[None]):
 
     def _build_menu_options(self) -> list[Option]:
         # Bloque "Tema/Layouts Zellij" depende solo de zellij_installed.
-        zellij_suffix = "" if self.zellij_installed else "  (zellij no instalado)"
+        zellij_suffix = "" if self.zellij_installed else "  (zellij not installed)"
         zellij_disabled = not self.zellij_installed
 
         # Bloque "Colores de terminal" depende del backend disponible y
@@ -128,17 +131,17 @@ class TermConfigApp(App[None]):
 
         return [
             Option(
-                f"Tema Zellij{zellij_suffix}",
+                f"Zellij theme{zellij_suffix}",
                 id="themes",
                 disabled=zellij_disabled,
             ),
             Option(
-                f"Layouts Zellij{zellij_suffix}",
+                f"Zellij layouts{zellij_suffix}",
                 id="layouts",
                 disabled=zellij_disabled,
             ),
             Option(
-                f"Colores de terminal{colors_suffix}",
+                f"Terminal colors{colors_suffix}",
                 id="colors",
                 disabled=colors_disabled,
             ),
@@ -149,9 +152,9 @@ class TermConfigApp(App[None]):
         if d.via_ssh:
             return "  (SSH)", True
         if d.invalid_override_value is not None:
-            return "  (override invalido)", True
+            return "  (invalid override)", True
         if not is_backend_available(d.kind):
-            return "  (no soportada)", True
+            return "  (unsupported)", True
         return "", False
 
     def on_mount(self) -> None:
@@ -166,24 +169,24 @@ class TermConfigApp(App[None]):
         if d.invalid_override_value is not None:
             self.notify(
                 (
-                    f"Valor invalido para TERM_CONFIG_TUI_BACKEND: "
+                    f"Invalid value for TERM_CONFIG_TUI_BACKEND: "
                     f"'{d.invalid_override_value}'. "
-                    "Valores validos: auto, alacritty, kitty."
+                    "Valid values: auto, alacritty, kitty."
                 ),
                 severity="warning",
                 timeout=10,
             )
         elif d.via_ssh:
             self.notify(
-                "Estas por SSH; la edicion de colores no aplica al cliente.",
+                "You are over SSH; color editing does not apply to the client.",
                 severity="warning",
                 timeout=8,
             )
         elif not is_backend_available(d.kind):
             self.notify(
                 (
-                    "Terminal no soportada para edicion de colores. "
-                    "Soportadas: Alacritty, Kitty."
+                    "Terminal not supported for color editing. "
+                    "Supported: Alacritty, Kitty."
                 ),
                 severity="warning",
                 timeout=8,
@@ -191,7 +194,7 @@ class TermConfigApp(App[None]):
 
         if not self.zellij_installed:
             self.notify(
-                "Zellij no instalado: opciones de Zellij deshabilitadas.",
+                "Zellij not installed: Zellij options disabled.",
                 severity="warning",
                 timeout=8,
             )

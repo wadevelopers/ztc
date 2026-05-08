@@ -26,11 +26,11 @@ class CustomThemeEditorScreen(Screen[None]):
     """Edita los slots de un user theme: paleta legacy + slots ricos."""
 
     BINDINGS = [
-        Binding("enter", "edit", "Editar slot"),
-        Binding("x", "reset", "Resetear slot"),
-        Binding("s", "save", "Guardar"),
-        Binding("escape", "back", "Volver"),
-        Binding("q", "back", "Volver", show=False),
+        Binding("enter", "edit", "Edit slot"),
+        Binding("x", "reset", "Reset slot"),
+        Binding("s", "save", "Save"),
+        Binding("escape", "back", "Back"),
+        Binding("q", "back", "Back", show=False),
     ]
 
     DEFAULT_CSS = """

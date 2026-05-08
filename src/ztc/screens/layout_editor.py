@@ -27,8 +27,8 @@ class LayoutEditorScreen(Screen[None]):
         # Pane operations
         Binding("a", "add_pane", "Anadir pane"),
         Binding("s", "split_pane", "Partir"),
-        Binding("d", "delete_pane", "Borrar pane"),
-        Binding("e", "edit_pane", "Editar"),
+        Binding("d", "delete_pane", "Delete pane"),
+        Binding("e", "edit_pane", "Edit"),
         Binding("J", "move_down", "Bajar"),
         Binding("K", "move_up", "Subir"),
         Binding("greater_than_sign", "size_up", "+5%"),
@@ -38,8 +38,8 @@ class LayoutEditorScreen(Screen[None]):
         Binding("D", "delete_tab", "Borrar tab"),
         Binding("r", "rename_tab", "Renombrar tab"),
         # Save / back
-        Binding("ctrl+s", "save", "Guardar"),
-        Binding("escape", "back", "Volver"),
+        Binding("ctrl+s", "save", "Save"),
+        Binding("escape", "back", "Back"),
     ]
 
     DEFAULT_CSS = """
@@ -315,7 +315,7 @@ class LayoutEditorScreen(Screen[None]):
             PromptModal(
                 title="Nueva tab",
                 placeholder="ej. dev",
-                confirm_label="Crear",
+                confirm_label="Create",
             ),
             after,
         )
@@ -344,7 +344,7 @@ class LayoutEditorScreen(Screen[None]):
                         "(no del disco hasta guardar)."
                     ),
                     expected=tab.name,
-                    confirm_label="Borrar",
+                    confirm_label="Delete",
                 ),
                 lambda ok: do_delete() if ok else None,
             )
@@ -353,7 +353,7 @@ class LayoutEditorScreen(Screen[None]):
                 PromptModal(
                     title=f"Borrar tab #{self._selected_tab_index + 1}",
                     placeholder="escribe SI para confirmar",
-                    confirm_label="Borrar",
+                    confirm_label="Delete",
                 ),
                 lambda result: do_delete() if result == "SI" else None,
             )
@@ -376,7 +376,7 @@ class LayoutEditorScreen(Screen[None]):
                 title="Renombrar tab",
                 initial=tab.name or "",
                 placeholder="nombre de la tab",
-                confirm_label="Renombrar",
+                confirm_label="Rename",
                 allow_empty=True,
             ),
             after,
