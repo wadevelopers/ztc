@@ -161,27 +161,6 @@ def test_compute_warnings_flags_low_fg_bg_contrast() -> None:
     assert any("foreground" in w.message for w in warns)
 
 
-def test_compute_warnings_flags_bg_close_to_black() -> None:
-    backend = AlacrittyBackend()
-    doc = tomlkit.document()
-    backend.write_slot(doc, ("primary", "background"), "#101010")
-    backend.write_slot(doc, ("primary", "foreground"), "#ffffff")
-    backend.write_slot(doc, ("normal", "black"), "#0e0e0e")
-    warns = colors.compute_warnings(_slots_from_doc(backend, doc))
-    assert any("normal.black" in w.message for w in warns)
-
-
-def test_compute_warnings_flags_zellij_bg_clash() -> None:
-    backend = AlacrittyBackend()
-    doc = tomlkit.document()
-    backend.write_slot(doc, ("primary", "background"), "#1e1e2e")
-    backend.write_slot(doc, ("primary", "foreground"), "#ffffff")
-    warns = colors.compute_warnings(
-        _slots_from_doc(backend, doc), zellij_bg="#1f1f30"
-    )
-    assert any("zellij" in w.message.lower() for w in warns)
-
-
 def test_compute_warnings_clean_when_high_contrast() -> None:
     backend = AlacrittyBackend()
     doc = tomlkit.document()

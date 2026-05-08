@@ -5,7 +5,7 @@ from pathlib import Path
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Center, Vertical
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
@@ -29,6 +29,32 @@ from ztc.services.terminals.registry import (
 )
 
 
+_LOGO_ZTC = (
+    "███████╗████████╗ ██████╗\n"
+    "╚══███╔╝╚══██╔══╝██╔════╝\n"
+    "  ███╔╝    ██║   ██║     \n"
+    " ███╔╝     ██║   ██║     \n"
+    "███████╗   ██║   ╚██████╗\n"
+    "╚══════╝   ╚═╝    ╚═════╝"
+)
+
+
+class MenuOptionList(OptionList):
+    """OptionList con los bindings de navegacion visibles en Footer.
+
+    Reescribe los bindings que OptionList registra como `show=False`
+    (`up`, `down`, `enter`) con `show=True` y `key_display` custom.
+    Mantiene las mismas acciones (`cursor_up`/`cursor_down`/`select`)
+    para no romper el comportamiento.
+    """
+
+    BINDINGS = [
+        Binding("up", "cursor_up", "Navigate", key_display="↑↓", show=True),
+        Binding("down", "cursor_down", "Navigate", show=False),
+        Binding("enter", "select", "Open", key_display="↲", show=True),
+    ]
+
+
 class TermConfigApp(App[None]):
     TITLE = "ztc — Zellij & Terminal Config"
     SUB_TITLE = f"v{__version__}"
@@ -44,19 +70,23 @@ class TermConfigApp(App[None]):
     DEFAULT_CSS = """
     #menu-wrap {
         padding: 1 2;
+        align: center middle;
     }
-    .menu-title {
+    #logo {
+        color: $secondary;
         text-style: bold;
-        color: $accent;
-        margin-bottom: 1;
+        height: auto;
+        text-align: center;
     }
-    .menu-hint {
-        color: $text-muted;
+    #logo-subtitle {
+        color: $secondary;
         margin-bottom: 1;
+        text-align: center;
     }
     #main-menu {
         height: auto;
         max-height: 20;
+        width: 25;
         border: round $panel;
     }
     """
@@ -109,15 +139,13 @@ class TermConfigApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical(id="menu-wrap"):
-            yield Static("ztc — Zellij & Terminal Config", classes="menu-title")
-            yield Static(
-                "Arrows to navigate  /  Enter to open  /  q to exit",
-                classes="menu-hint",
-            )
-            yield OptionList(
-                *self._build_menu_options(),
-                id="main-menu",
-            )
+            yield Static(_LOGO_ZTC, id="logo")
+            yield Static("Zellij & Terminal Config", id="logo-subtitle")
+            with Center():
+                yield MenuOptionList(
+                    *self._build_menu_options(),
+                    id="main-menu",
+                )
         yield Footer()
 
     def _build_menu_options(self) -> list[Option]:
