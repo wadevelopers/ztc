@@ -1,0 +1,1 @@
+"""zsm — Zellij Session Manager."""

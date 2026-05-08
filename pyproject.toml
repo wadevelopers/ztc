@@ -22,6 +22,7 @@ zellij-themes = { path = "../zellij-themes", editable = true }
 
 [project.scripts]
 ztc = "ztc.__main__:main"
+zsm = "ztc.sessions.__main__:main"
 
 [project.optional-dependencies]
 dev = [
