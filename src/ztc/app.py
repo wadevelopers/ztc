@@ -308,6 +308,7 @@ class TermConfigApp(App[None]):
                 PickerScreen(
                     on_launch=self._handle_session_launch,
                     on_cancel=self.pop_screen,
+                    zellij_installed=self.zellij_installed,
                 )
             )
         elif event.option.id == "colors":

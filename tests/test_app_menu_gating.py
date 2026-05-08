@@ -451,6 +451,67 @@ async def test_sessions_launch_bash_invokes_execvp(
     assert argv == ["/bin/zsh"]
 
 
+async def test_picker_blocks_launch_when_zellij_not_installed(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Cuando PickerScreen recibe zellij_installed=False, los handlers
+    de attach/new/new+layout muestran toast y no invocan execvp.
+    `bash` queda habilitado porque no requiere zellij."""
+    from ztc.sessions.screens.picker import PickerScreen
+
+    captured: list[tuple[str, list[str]]] = []
+
+    def fake_execvp(file: str, args: list[str]) -> None:
+        captured.append((file, list(args)))
+        raise SystemExit(0)
+
+    monkeypatch.setattr("ztc.app.os.execvp", fake_execvp)
+
+    app = TermConfigApp(
+        paths=_paths(tmp_path),
+        backend_path=tmp_path / "alacritty.toml",
+        detection=TerminalDetection(
+            kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
+        ),
+        zellij_installed=True,  # ztc tiene zellij; pero le pasamos False al picker.
+    )
+    async with app.run_test() as pilot:
+        # Montamos PickerScreen directamente con zellij_installed=False.
+        screen = PickerScreen(
+            on_launch=app._handle_session_launch,
+            on_cancel=app.pop_screen,
+            zellij_installed=False,
+        )
+        app.push_screen(screen)
+        await pilot.pause()
+
+        # action_attach: no llama execvp (no hay sesion highlighted, igual
+        # se prueba que el guard se chequea primero).
+        screen.action_attach()
+        await pilot.pause()
+        assert captured == []
+
+        # action_new_session: bloqueado por el guard, no abre el modal.
+        screen.action_new_session()
+        await pilot.pause()
+        assert captured == []
+
+        # action_new_with_layout: bloqueado por el guard.
+        screen.action_new_with_layout()
+        await pilot.pause()
+        assert captured == []
+
+        # action_bash: NO se bloquea (no requiere zellij).
+        try:
+            screen.action_bash()
+        except SystemExit:
+            pass
+        await pilot.pause()
+        # Llego a invocar el on_launch -> execvp del shell.
+        assert len(captured) == 1
+        assert "bash" in captured[0][0] or "sh" in captured[0][0]
+
+
 async def test_sessions_launch_none_target_is_noop(
     tmp_path: Path, monkeypatch
 ) -> None:

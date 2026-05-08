@@ -6,6 +6,7 @@ from pathlib import Path
 from textual.app import App
 from textual.binding import Binding
 
+from ztc.services.runtime_detect import detect_zellij_installed
 from ztc.sessions.screens.picker import PickerScreen
 from ztc.sessions.types import LaunchTarget
 
@@ -32,11 +33,18 @@ class SessionLauncherApp(App[None]):
         super().__init__()
         self.target: LaunchTarget = None
         self.zellij_config_path = _zellij_config_path()
+        self.zellij_installed = detect_zellij_installed()
 
     def on_mount(self) -> None:
         self._register_zellij_themes()
         self._sync_theme_with_zellij()
-        self.push_screen(PickerScreen())
+        self.push_screen(PickerScreen(zellij_installed=self.zellij_installed))
+        if not self.zellij_installed:
+            self.notify(
+                "Zellij is not installed. Sessions cannot be listed or launched.",
+                severity="warning",
+                timeout=8,
+            )
 
     # ---------- temas Textual sincronizados con Zellij ----------
 

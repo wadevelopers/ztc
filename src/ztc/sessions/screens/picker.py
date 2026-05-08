@@ -80,11 +80,26 @@ class PickerScreen(Screen[None]):
         *,
         on_launch: Callable[[LaunchTarget], None] | None = None,
         on_cancel: Callable[[], None] | None = None,
+        zellij_installed: bool = True,
     ) -> None:
         super().__init__()
         self._sessions: list[ZellijSession] = []
         self._on_launch = on_launch or self._default_launch
         self._on_cancel = on_cancel or self._default_cancel
+        self._zellij_installed = zellij_installed
+
+    def _require_zellij(self) -> bool:
+        """Guard: si zellij no esta instalado, notifica y devuelve False.
+        Las acciones que requieren `zellij` (attach/new/new+layout/bash)
+        lo llaman al inicio y abortan si retorna False."""
+        if self._zellij_installed:
+            return True
+        self.app.notify(
+            "Zellij is not installed. Install it first.",
+            severity="error",
+            timeout=4,
+        )
+        return False
 
     def _default_launch(self, target: LaunchTarget) -> None:
         # Comportamiento standalone: setear target en la app + exit;
@@ -421,15 +436,20 @@ class PickerScreen(Screen[None]):
     # ---------- acciones que ejecutan zellij/bash (exec) ----------
 
     def action_attach(self) -> None:
+        if not self._require_zellij():
+            return
         s = self._highlighted()
         if s is None:
             return
         self._on_launch(("attach", s.name, None))
 
     def action_bash(self) -> None:
+        # bash no requiere zellij — funciona sin zellij instalado.
         self._on_launch(("bash", None, None))
 
     def action_new_session(self) -> None:
+        if not self._require_zellij():
+            return
         default = zellij_session.next_default_name(self._existing_names())
         self.app.push_screen(
             NewSessionModal(title="New session", default_name=default),
@@ -437,6 +457,8 @@ class PickerScreen(Screen[None]):
         )
 
     def action_new_with_layout(self) -> None:
+        if not self._require_zellij():
+            return
         default_name = zellij_session.next_default_name(self._existing_names())
         layouts = layouts_svc.list_layout_files()
         if not layouts:

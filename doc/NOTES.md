@@ -421,18 +421,3 @@ pipx install .
 - "Recrear sesion con layout actualizado" no esta automatizado: hay que
   matar y recrear a mano desde el Session Manager.
 - Undo/redo en el editor no esta implementado (Fase 5 pendiente).
-
----
-
-## 11. Pendientes
-
-- **`zsm` no detecta zellij faltante upfront**
-  (`src/ztc/sessions/app.py`, `src/ztc/sessions/screens/picker.py`):
-  cuando `zsm` corre sin Zellij en `PATH`, lista de sesiones aparece vacia
-  (silenciosa) y al elegir attach/new/bash crashea con
-  `FileNotFoundError [Errno 2]` desde `os.execvp`. Comportamiento
-  preexistente al refactor de consolidacion. Fix: agregar deteccion
-  via `shutil.which("zellij")` en `SessionLauncherApp.on_mount` y pasar
-  `zellij_installed` a `PickerScreen`; mostrar toast al inicio +
-  deshabilitar bindings de attach/new/bash si no esta. Hacerlo despues
-  de cerrar `PLAN_ZSM_AS_SUBPACKAGE.md`.
