@@ -90,8 +90,16 @@ class TermConfigApp(App[None]):
     #main-menu {
         height: auto;
         max-height: 20;
-        width: 43;
         border: round $panel;
+    }
+    /* Sin suffixes: ancho compacto (igual al logo). */
+    #main-menu.narrow {
+        width: 25;
+    }
+    /* Con suffixes "(zellij not installed)" / "(unsupported)" / etc.:
+       ancho amplio para que los suffixes quepan alineados a la derecha. */
+    #main-menu.wide {
+        width: 43;
     }
     """
 
@@ -149,11 +157,26 @@ class TermConfigApp(App[None]):
                 yield MenuOptionList(
                     *self._build_menu_options(),
                     id="main-menu",
+                    classes="wide" if self._has_menu_suffixes() else "narrow",
                 )
         yield Footer()
 
+    # Ancho util de contenido del menu en modo "wide" (width 43). Verificado
+    # en runtime: el OptionList expone content_size.width=39 cuando el widget
+    # mide 43 (border + padding/scroll-reserve consumen 4 cells, no 2).
+    _MENU_WIDE_INNER = 39
+
+    def _has_menu_suffixes(self) -> bool:
+        """True si algun item del menu tendria suffix (zellij not installed,
+        SSH, unsupported, invalid override). Define si el menu se renderiza
+        narrow (25, igual al logo) o wide (43, suffixes alineados a derecha)."""
+        if not self.zellij_installed:
+            return True
+        colors_suffix, _ = self._colors_option_state()
+        return bool(colors_suffix)
+
     def _build_menu_options(self) -> list[Option]:
-        # Bloque "Tema/Layouts Zellij" depende solo de zellij_installed.
+        # Bloque "Tema/Layouts/Sessions Zellij" depende solo de zellij_installed.
         zellij_suffix = "" if self.zellij_installed else "  (zellij not installed)"
         zellij_disabled = not self.zellij_installed
 
@@ -161,24 +184,32 @@ class TermConfigApp(App[None]):
         # de no estar por SSH; los dos bloques son independientes.
         colors_suffix, colors_disabled = self._colors_option_state()
 
+        # Si hay suffixes, padear cada label para que el suffix quede pegado
+        # al borde derecho del menu. ljust al ancho disponible menos el largo
+        # del suffix, asi el suffix llena hasta el final.
+        def _padded(label: str, suffix: str) -> str:
+            if not suffix:
+                return label
+            return label.ljust(self._MENU_WIDE_INNER - len(suffix)) + suffix
+
         return [
             Option(
-                f"Zellij theme{zellij_suffix}",
+                _padded("Zellij themes", zellij_suffix),
                 id="themes",
                 disabled=zellij_disabled,
             ),
             Option(
-                f"Zellij layouts{zellij_suffix}",
+                _padded("Zellij layouts", zellij_suffix),
                 id="layouts",
                 disabled=zellij_disabled,
             ),
             Option(
-                f"Zellij sessions{zellij_suffix}",
+                _padded("Zellij sessions", zellij_suffix),
                 id="sessions",
                 disabled=zellij_disabled,
             ),
             Option(
-                f"Terminal colors{colors_suffix}",
+                _padded("Terminal colors", colors_suffix),
                 id="colors",
                 disabled=colors_disabled,
             ),
@@ -221,10 +252,7 @@ class TermConfigApp(App[None]):
             )
         elif not is_backend_available(d.kind):
             self.notify(
-                (
-                    "Terminal not supported for color editing. "
-                    "Supported: Alacritty, Kitty."
-                ),
+                "Terminal not supported\nSupported: Alacritty, Kitty",
                 severity="warning",
                 timeout=8,
             )
@@ -309,6 +337,7 @@ class TermConfigApp(App[None]):
                     on_launch=self._handle_session_launch,
                     on_cancel=self.pop_screen,
                     zellij_installed=self.zellij_installed,
+                    embedded=True,
                 )
             )
         elif event.option.id == "colors":

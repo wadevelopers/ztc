@@ -81,12 +81,25 @@ class PickerScreen(Screen[None]):
         on_launch: Callable[[LaunchTarget], None] | None = None,
         on_cancel: Callable[[], None] | None = None,
         zellij_installed: bool = True,
+        embedded: bool = False,
     ) -> None:
         super().__init__()
         self._sessions: list[ZellijSession] = []
         self._on_launch = on_launch or self._default_launch
         self._on_cancel = on_cancel or self._default_cancel
         self._zellij_installed = zellij_installed
+        self._embedded = embedded
+        if embedded:
+            # En modo embebido, "cancel" vuelve al menu (no cierra la app).
+            # Ocultamos `q Exit` del Footer y mostramos `Esc Back` para
+            # reflejar la accion real. La tecla `q` sigue funcionando como
+            # atajo (no se anuncia, pero llama a action_quit -> on_cancel).
+            self._bindings.key_to_bindings["q"] = [
+                Binding("q", "quit", "Back", show=False)
+            ]
+            self._bindings.key_to_bindings["escape"] = [
+                Binding("escape", "quit", "Back", show=True)
+            ]
 
     def _require_zellij(self) -> bool:
         """Guard: si zellij no esta instalado, notifica y devuelve False.
