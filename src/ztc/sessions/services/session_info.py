@@ -239,18 +239,34 @@ def _collect_layout_panes(
         cmd = child.props.get("command")
         effective_cwd = _resolve_cwd(child.props.get("cwd"), parent_cwd)
         size = _format_size(child.props.get("size"))
-        bg = child.props.get("default_bg")
         split = child.props.get("split_direction")
         pane = PaneInfo(
             command=cmd if isinstance(cmd, str) else None,
             cwd=effective_cwd,
             size=size,
-            default_bg=bg if isinstance(bg, str) else None,
+            default_bg=_read_default_bg(child),
             split_direction=split if isinstance(split, str) else None,
             children=_collect_layout_panes(child, parent_cwd=effective_cwd),
         )
         out.append(pane)
     return out
+
+
+def _read_default_bg(node) -> str | None:
+    """`default_bg` can be a property (`default_bg="#hex"`) or a child
+    node (`default_bg "#hex"`). Layouts dumped by Zellij itself tend
+    to use the property form; hand-written ones tend to use the child
+    node form. Accept both."""
+    prop = node.props.get("default_bg")
+    if isinstance(prop, str):
+        return prop
+    for sub in node.nodes:
+        if sub.name == "default_bg" and sub.args:
+            val = sub.args[0]
+            if isinstance(val, str):
+                return val
+            break
+    return None
 
 
 def _resolve_cwd(own: object, parent_cwd: str | None) -> str | None:

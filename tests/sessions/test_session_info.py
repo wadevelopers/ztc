@@ -303,3 +303,49 @@ tabs {
     assert details is not None
     assert details.source == "merged"
     assert details.mtime == os.path.getmtime(meta)
+
+
+# ---------- default_bg parsing (regresion) ----------
+
+
+def test_default_bg_property_form(tmp_cache: Path) -> None:
+    """`pane default_bg="#hex"` (forma propiedad). Es la forma que
+    suele dumpear Zellij en los layouts de sesion."""
+    _write_layout(
+        tmp_cache,
+        "colors",
+        '''layout {
+    tab name="t" {
+        pane command="btop" default_bg="#aabbcc"
+    }
+}
+''',
+    )
+    details = session_info.read_session_details("colors")
+    assert details is not None
+    panes = details.tabs[0].panes
+    assert len(panes) == 1
+    assert panes[0].default_bg == "#aabbcc"
+
+
+def test_default_bg_child_node_form(tmp_cache: Path) -> None:
+    """`pane { default_bg "#hex" }` (forma nodo hijo). Es la forma
+    canonica de Zellij para layouts hechos a mano. Antes del fix de
+    `_read_default_bg` esta variante devolvia None silenciosamente."""
+    _write_layout(
+        tmp_cache,
+        "colors",
+        '''layout {
+    tab name="t" {
+        pane command="btop" {
+            default_bg "#aabbcc"
+        }
+    }
+}
+''',
+    )
+    details = session_info.read_session_details("colors")
+    assert details is not None
+    panes = details.tabs[0].panes
+    assert len(panes) == 1
+    assert panes[0].default_bg == "#aabbcc"

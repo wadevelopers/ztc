@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from rich.text import Text
@@ -29,7 +28,6 @@ from ztc.services.terminals.registry import (
     is_backend_available,
 )
 from ztc.sessions.screens.picker import PickerScreen
-from ztc.sessions.services.zellij_session import attach_argv, new_session_argv
 from ztc.sessions.types import LaunchTarget
 from ztc.widgets.confirm import BUTTON_CSS
 from ztc.widgets.header import StaticHeader
@@ -155,6 +153,14 @@ class TermConfigApp(App[None]):
             else:
                 self.backend = None
                 self.backend_path = backend_path
+
+        # Target diferido del launcher embebido. Si el usuario elige
+        # attach/new/bash desde "Zellij sessions", lo guardamos aca y
+        # llamamos `self.exit()`. El `execvp` lo hace `__main__.py`
+        # despues que Textual restaura el estado de la terminal — sin
+        # eso, zellij hereda raw mode + alt-screen y la terminal queda
+        # bloqueada al salir.
+        self.pending_launch: LaunchTarget = None
 
     # ---------- compose / mount ----------
 
@@ -394,14 +400,11 @@ class TermConfigApp(App[None]):
     def _handle_session_launch(self, target: LaunchTarget) -> None:
         if target is None:
             return  # guard defensivo: cancel va por on_cancel, no deberia llegar acá.
-        action, payload, extra = target
-        if action == "attach":
-            argv = attach_argv(payload or "")
-        elif action == "new":
-            argv = new_session_argv(payload or "", layout=extra)
-        elif action == "bash":
-            shell = os.environ.get("SHELL") or "/bin/bash"
-            argv = [shell]
-        else:
-            return
-        os.execvp(argv[0], argv)
+        # No `execvp` directo aca: estamos dentro del event loop de Textual,
+        # con la terminal en raw mode + alt-screen. Si reemplazamos el
+        # proceso ahora, zellij hereda ese estado y al salir la terminal
+        # queda bloqueada. En su lugar, guardamos el target y salimos
+        # limpiamente; `__main__.py` ejecuta `execvp` despues que Textual
+        # restauro la terminal.
+        self.pending_launch = target
+        self.exit()

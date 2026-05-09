@@ -1,12 +1,17 @@
 """Tests del gating del menu principal segun deteccion de terminal y Zellij.
 
-Cubren los escenarios de UX definidos en doc/PLAN_MULTI_TERMINAL.md (Fase B):
+Cubren los escenarios:
 - Terminal soportada + zellij + no SSH -> happy path.
-- Terminal no soportada -> "Colores de terminal" disabled "(no soportada)".
+- Terminal no soportada -> "Colores de terminal" disabled "(unsupported)".
 - SSH detectado -> "Colores de terminal" disabled "(SSH)".
-- Zellij no instalado -> "Tema/Layouts Zellij" disabled, colores intactos.
-- Override env var valido -> respeta override.
-- Override env var invalido -> disabled "(override invalido)".
+- Zellij no instalado -> "Tema/Layouts/Sessions Zellij" disabled.
+- Override env var valido / invalido.
+
+Tambien cubren el contrato del launcher embebido:
+- `_handle_session_launch` setea `app.pending_launch` y NO invoca
+  `os.execvp` desde el event loop (el `execvp` lo hace
+  `launcher.dispatch_target` despues que `app.run()` retorna,
+  cuando Textual ya restauro la terminal).
 """
 
 from __future__ import annotations
@@ -374,23 +379,13 @@ async def test_sessions_cancel_returns_to_menu(tmp_path: Path) -> None:
         assert not isinstance(app.screen, PickerScreen)
 
 
-async def test_sessions_launch_attach_invokes_execvp(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """Test critico: seleccionar attach desde PickerScreen embebida invoca
-    os.execvp con argv esperado. Captura el bug de diseno previo donde la
-    integracion quedaba silenciosamente rota si se usaba el default
-    standalone (setear app.target sobre TermConfigApp que no lo lee).
-    """
-    captured: list[tuple[str, list[str]]] = []
-
-    def fake_execvp(file: str, args: list[str]) -> None:
-        captured.append((file, list(args)))
-        raise SystemExit(0)  # corta el flujo, igual que execvp real
-
-    # Monkeypatch sobre el modulo ztc.app, donde se hace `os.execvp`.
-    monkeypatch.setattr("ztc.app.os.execvp", fake_execvp)
-
+async def test_sessions_launch_attach_sets_pending(tmp_path: Path) -> None:
+    """`_handle_session_launch` debe SOLO guardar el target en
+    `pending_launch` y disparar `app.exit()`. NO debe llamar `execvp`
+    desde dentro del event loop — si lo hace, zellij hereda raw mode
+    + alt-screen y la terminal queda bloqueada al salir. El `execvp`
+    ocurre en `launcher.dispatch_target` despues que `app.run()`
+    retorna y Textual restauro la terminal."""
     app = TermConfigApp(
         paths=_paths(tmp_path),
         backend_path=tmp_path / "alacritty.toml",
@@ -399,30 +394,12 @@ async def test_sessions_launch_attach_invokes_execvp(
         ),
         zellij_installed=True,
     )
-    # Invocar el handler directamente con un target simulado evita
-    # depender de zellij CLI / sesiones reales en tests.
-    try:
-        app._handle_session_launch(("attach", "mi-sesion", None))
-    except SystemExit:
-        pass
-    assert len(captured) == 1
-    file, argv = captured[0]
-    assert file == "zellij"
-    assert "attach" in argv
-    assert "mi-sesion" in argv
+    assert app.pending_launch is None
+    app._handle_session_launch(("attach", "mi-sesion", None))
+    assert app.pending_launch == ("attach", "mi-sesion", None)
 
 
-async def test_sessions_launch_new_invokes_execvp(
-    tmp_path: Path, monkeypatch
-) -> None:
-    captured: list[tuple[str, list[str]]] = []
-
-    def fake_execvp(file: str, args: list[str]) -> None:
-        captured.append((file, list(args)))
-        raise SystemExit(0)
-
-    monkeypatch.setattr("ztc.app.os.execvp", fake_execvp)
-
+async def test_sessions_launch_new_sets_pending(tmp_path: Path) -> None:
     app = TermConfigApp(
         paths=_paths(tmp_path),
         backend_path=tmp_path / "alacritty.toml",
@@ -431,30 +408,11 @@ async def test_sessions_launch_new_invokes_execvp(
         ),
         zellij_installed=True,
     )
-    try:
-        app._handle_session_launch(("new", "nueva", "compact"))
-    except SystemExit:
-        pass
-    assert len(captured) == 1
-    file, argv = captured[0]
-    assert file == "zellij"
-    # new_session_argv arma `zellij -n compact -s nueva`.
-    assert "nueva" in argv
-    assert "compact" in argv
+    app._handle_session_launch(("new", "nueva", "compact"))
+    assert app.pending_launch == ("new", "nueva", "compact")
 
 
-async def test_sessions_launch_bash_invokes_execvp(
-    tmp_path: Path, monkeypatch
-) -> None:
-    captured: list[tuple[str, list[str]]] = []
-
-    def fake_execvp(file: str, args: list[str]) -> None:
-        captured.append((file, list(args)))
-        raise SystemExit(0)
-
-    monkeypatch.setattr("ztc.app.os.execvp", fake_execvp)
-    monkeypatch.setenv("SHELL", "/bin/zsh")
-
+async def test_sessions_launch_bash_sets_pending(tmp_path: Path) -> None:
     app = TermConfigApp(
         paths=_paths(tmp_path),
         backend_path=tmp_path / "alacritty.toml",
@@ -463,31 +421,17 @@ async def test_sessions_launch_bash_invokes_execvp(
         ),
         zellij_installed=True,
     )
-    try:
-        app._handle_session_launch(("bash", None, None))
-    except SystemExit:
-        pass
-    assert len(captured) == 1
-    file, argv = captured[0]
-    assert file == "/bin/zsh"
-    assert argv == ["/bin/zsh"]
+    app._handle_session_launch(("bash", None, None))
+    assert app.pending_launch == ("bash", None, None)
 
 
 async def test_picker_blocks_launch_when_zellij_not_installed(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path,
 ) -> None:
     """Cuando PickerScreen recibe zellij_installed=False, los handlers
-    de attach/new/new+layout muestran toast y no invocan execvp.
+    de attach/new/new+layout muestran toast y NO setean pending_launch.
     `bash` queda habilitado porque no requiere zellij."""
     from ztc.sessions.screens.picker import PickerScreen
-
-    captured: list[tuple[str, list[str]]] = []
-
-    def fake_execvp(file: str, args: list[str]) -> None:
-        captured.append((file, list(args)))
-        raise SystemExit(0)
-
-    monkeypatch.setattr("ztc.app.os.execvp", fake_execvp)
 
     app = TermConfigApp(
         paths=_paths(tmp_path),
@@ -498,7 +442,6 @@ async def test_picker_blocks_launch_when_zellij_not_installed(
         zellij_installed=True,  # ztc tiene zellij; pero le pasamos False al picker.
     )
     async with app.run_test() as pilot:
-        # Montamos PickerScreen directamente con zellij_installed=False.
         screen = PickerScreen(
             on_launch=app._handle_session_launch,
             on_cancel=app.pop_screen,
@@ -507,45 +450,30 @@ async def test_picker_blocks_launch_when_zellij_not_installed(
         app.push_screen(screen)
         await pilot.pause()
 
-        # action_attach: no llama execvp (no hay sesion highlighted, igual
-        # se prueba que el guard se chequea primero).
+        # action_attach: bloqueado por el guard, pending_launch sigue None.
         screen.action_attach()
         await pilot.pause()
-        assert captured == []
+        assert app.pending_launch is None
 
-        # action_new_session: bloqueado por el guard, no abre el modal.
+        # action_new_session: bloqueado, pending_launch sigue None.
         screen.action_new_session()
         await pilot.pause()
-        assert captured == []
+        assert app.pending_launch is None
 
-        # action_new_with_layout: bloqueado por el guard.
+        # action_new_with_layout: bloqueado, pending_launch sigue None.
         screen.action_new_with_layout()
         await pilot.pause()
-        assert captured == []
+        assert app.pending_launch is None
 
-        # action_bash: NO se bloquea (no requiere zellij).
-        try:
-            screen.action_bash()
-        except SystemExit:
-            pass
+        # action_bash: NO se bloquea -> on_launch -> setea pending_launch.
+        screen.action_bash()
         await pilot.pause()
-        # Llego a invocar el on_launch -> execvp del shell.
-        assert len(captured) == 1
-        assert "bash" in captured[0][0] or "sh" in captured[0][0]
+        assert app.pending_launch == ("bash", None, None)
 
 
-async def test_sessions_launch_none_target_is_noop(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """Guard defensivo: si por alguna razon llega target=None al handler,
-    no debe invocar execvp."""
-    captured: list[tuple[str, list[str]]] = []
-
-    def fake_execvp(file: str, args: list[str]) -> None:
-        captured.append((file, list(args)))
-
-    monkeypatch.setattr("ztc.app.os.execvp", fake_execvp)
-
+async def test_sessions_launch_none_target_is_noop(tmp_path: Path) -> None:
+    """Guard defensivo: target=None al handler deja `pending_launch` como
+    None (no marca nada para dispatchear)."""
     app = TermConfigApp(
         paths=_paths(tmp_path),
         backend_path=tmp_path / "alacritty.toml",
@@ -555,4 +483,4 @@ async def test_sessions_launch_none_target_is_noop(
         zellij_installed=True,
     )
     app._handle_session_launch(None)
-    assert captured == []
+    assert app.pending_launch is None
