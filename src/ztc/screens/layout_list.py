@@ -7,12 +7,13 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, OptionList, Static
+from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.models.layout import Layout
-from ztc.zellij import config_ops, layout_io, layout_ops
 from ztc.widgets.confirm import ConfirmByNameModal, PromptModal
+from ztc.widgets.header import StaticHeader
+from ztc.zellij import config_ops, layout_io, layout_ops
 
 
 class LayoutListScreen(Screen[None]):
@@ -64,7 +65,7 @@ class LayoutListScreen(Screen[None]):
         self._layouts: list[Layout] = []
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield StaticHeader()
         yield Static("", id="status")
         with Horizontal(id="body"):
             yield OptionList(id="layout-list")

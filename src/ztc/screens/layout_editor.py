@@ -7,18 +7,19 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.screen import Screen
-from textual.widgets import Header, OptionList, Static, Tree
+from textual.widgets import OptionList, Static, Tree
 from textual.widgets.option_list import Option
 from textual.widgets.tree import TreeNode
 
 from ztc.models.layout import Layout, Pane, Tab
-from ztc.zellij import layout_io, layout_ops
 from ztc.widgets.confirm import (
     ConfirmByNameModal,
     KdlPreviewModal,
     PaneEditModal,
     PromptModal,
 )
+from ztc.widgets.header import StaticHeader
+from ztc.zellij import layout_io, layout_ops
 
 
 class _LayoutTabsList(OptionList):
@@ -131,7 +132,7 @@ class LayoutEditorScreen(Screen[None]):
         self._selected_pane_id: int | None = None
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield StaticHeader()
         yield Static("", id="header-info")
         with Horizontal(id="editor-body"):
             yield _LayoutTabsList(id="tabs-list")

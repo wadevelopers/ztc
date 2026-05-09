@@ -7,17 +7,18 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, OptionList, Static
+from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.services import theme_sync
+from ztc.widgets.confirm import (
+    EditColorModal,
+)
+from ztc.widgets.header import StaticHeader
 from ztc.zellij import theme_writer
 from ztc.zellij.config import read_active_theme
 from ztc.zellij.models import ZellijColor, ZellijTheme
 from ztc.zellij.user_themes import LEGACY_SLOTS
-from ztc.widgets.confirm import (
-    EditColorModal,
-)
 
 _LEGACY_PREFIX = "legacy:"
 _RICH_PREFIX = "rich:"
@@ -81,7 +82,7 @@ class CustomThemeEditorScreen(Screen[None]):
         self.dirty = False
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield StaticHeader()
         yield Static("", id="header-info")
         with Horizontal(id="body"):
             yield OptionList(id="slot-list")

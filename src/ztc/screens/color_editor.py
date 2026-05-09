@@ -7,15 +7,16 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
-from textual.widgets import Footer, Header, OptionList, Static
+from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.services import colors
 from ztc.services.terminals import TerminalBackend
-from ztc.zellij.config import read_active_theme
-from ztc.zellij.user_themes import list_user_themes
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.widgets.confirm import EditColorModal, PromptModal
+from ztc.widgets.header import StaticHeader
+from ztc.zellij.config import read_active_theme
+from ztc.zellij.user_themes import list_user_themes
 
 
 class ColorEditorScreen(Screen[None]):
@@ -98,7 +99,7 @@ class ColorEditorScreen(Screen[None]):
         self.dirty = False
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield StaticHeader()
         yield Static("", id="header-info")
         with Horizontal(id="body"):
             yield OptionList(id="slot-list")

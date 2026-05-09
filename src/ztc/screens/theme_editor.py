@@ -7,10 +7,12 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, OptionList, Static
+from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.services import theme_sync
+from ztc.widgets.confirm import ConfirmByNameModal, PromptModal
+from ztc.widgets.header import StaticHeader
 from ztc.zellij import config_ops, theme_writer
 from ztc.zellij import theme_assets as zellij_theme_assets
 from ztc.zellij.config import read_active_theme
@@ -20,7 +22,6 @@ from ztc.zellij.user_themes import (
     list_all_themes,
     list_user_themes,
 )
-from ztc.widgets.confirm import ConfirmByNameModal, PromptModal
 
 _HEADER_PREFIX = "header:"
 
@@ -79,7 +80,7 @@ class ThemePickerScreen(Screen[None]):
         self._active: str | None = None
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield StaticHeader()
         yield Static("", id="status")
         with Horizontal(id="body"):
             yield OptionList(id="theme-list")
@@ -332,8 +333,8 @@ class ThemePickerScreen(Screen[None]):
                     severity="error",
                 )
                 return
-            from ztc.zellij.models import ZellijTheme as _ZT
             from ztc.screens.custom_theme_editor import CustomThemeEditorScreen
+            from ztc.zellij.models import ZellijTheme as _ZT
 
             new_theme = _ZT(
                 name=name,

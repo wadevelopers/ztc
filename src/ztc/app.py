@@ -7,7 +7,7 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Center, Vertical
-from textual.widgets import Footer, Header, OptionList, Static
+from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc import __version__
@@ -16,14 +16,6 @@ from ztc.screens.color_editor import ColorEditorScreen
 from ztc.screens.layout_list import LayoutListScreen
 from ztc.screens.terminal_settings import TerminalSettingsScreen
 from ztc.screens.theme_editor import ThemePickerScreen
-from ztc.sessions.screens.picker import PickerScreen
-from ztc.sessions.services.zellij_session import attach_argv, new_session_argv
-from ztc.sessions.types import LaunchTarget
-from ztc.widgets.confirm import BUTTON_CSS
-from ztc.zellij import TEXTUAL_FALLBACK
-from ztc.zellij import theme_assets as zellij_theme_assets
-from ztc.zellij.config import read_active_theme
-from ztc.zellij.user_themes import list_user_themes
 from ztc.services.runtime_detect import (
     TerminalDetection,
     detect_terminal,
@@ -34,7 +26,15 @@ from ztc.services.terminals.registry import (
     get_backend,
     is_backend_available,
 )
-
+from ztc.sessions.screens.picker import PickerScreen
+from ztc.sessions.services.zellij_session import attach_argv, new_session_argv
+from ztc.sessions.types import LaunchTarget
+from ztc.widgets.confirm import BUTTON_CSS
+from ztc.widgets.header import StaticHeader
+from ztc.zellij import TEXTUAL_FALLBACK
+from ztc.zellij import theme_assets as zellij_theme_assets
+from ztc.zellij.config import read_active_theme
+from ztc.zellij.user_themes import list_user_themes
 
 _LOGO_ZTC = (
     "███████╗████████╗ ██████╗\n"
@@ -152,7 +152,7 @@ class TermConfigApp(App[None]):
     # ---------- compose / mount ----------
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield StaticHeader()
         with Vertical(id="menu-wrap"):
             yield Static(_LOGO_ZTC, id="logo")
             yield Static("Zellij & Terminal Config", id="logo-subtitle")

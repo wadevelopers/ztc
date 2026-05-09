@@ -12,7 +12,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, OptionList, Static
+from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.services.fonts import list_monospace_fonts
@@ -24,6 +24,7 @@ from ztc.services.terminals.settings import (
     coerce_setting_value,
 )
 from ztc.widgets.confirm import EnumPickerModal, FontPickerModal, PromptModal
+from ztc.widgets.header import StaticHeader
 
 
 class TerminalSettingsScreen(Screen[None]):
@@ -84,7 +85,7 @@ class TerminalSettingsScreen(Screen[None]):
         self.dirty = False
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield StaticHeader()
         yield Static("", id="header-info")
         with Horizontal(id="body"):
             yield OptionList(id="setting-list")

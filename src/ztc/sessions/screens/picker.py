@@ -10,7 +10,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, OptionList, Static
+from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.sessions.models.session import ZellijSession
@@ -23,6 +23,7 @@ from ztc.sessions.widgets.modals import (
     NewSessionModal,
     NewSessionResult,
 )
+from ztc.widgets.header import StaticHeader
 
 
 class PickerScreen(Screen[None]):
@@ -136,7 +137,7 @@ class PickerScreen(Screen[None]):
         self.app.exit()
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield StaticHeader()
         yield Static("", id="status")
         with Horizontal(id="body"):
             yield OptionList(id="session-list")
