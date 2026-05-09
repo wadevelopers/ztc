@@ -3,18 +3,26 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ztc"
+name = "ztc-tui"
 version = "1.0.0"
-description = "ztc — Zellij & Terminal Config: TUI para administrar colores de Alacritty/Kitty y temas/layouts de Zellij."
+description = "ZTC — Zellij & Terminal Config: TUI for managing Alacritty/Kitty colors and settings, plus Zellij themes, layouts and sessions."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "martin" }]
+authors = [
+    { name = "WA Developers SRL" },
+    { name = "Martin Wasmosy" },
+]
 dependencies = [
     "textual>=0.80",
     "tomlkit>=0.13",
     "kdl-py>=1.2",
 ]
+
+[project.urls]
+Homepage = "https://wadevelopers.com"
+Repository = "https://github.com/wadevelopers/ztc"
+Issues = "https://github.com/wadevelopers/ztc/issues"
 
 [project.scripts]
 ztc = "ztc.__main__:main"

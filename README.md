@@ -1,175 +1,151 @@
-# ztc
+# ZTC — Zellij & Terminal Config
 
-TUI en Python para administrar el setup de terminal: colores de la
-terminal soportada y temas/layouts/sesiones de Zellij. Expone dos
-comandos: `ztc` (app completa) y `zsm` (launcher de sesiones).
+TUI for managing your terminal setup: Alacritty/Kitty colors and
+settings plus Zellij themes, layouts and sessions. All from a single
+interface, without having to remember TOML/KDL/conf syntax.
 
-- [`doc/PLAN.md`](doc/PLAN.md) — diseno y roadmap del proyecto.
-- [`doc/PLAN_MULTI_TERMINAL.md`](doc/PLAN_MULTI_TERMINAL.md) — spec de la
-  arquitectura multi-terminal (vigente).
-- [`doc/NOTES.md`](doc/NOTES.md) — gotchas operativos y notas de uso.
+![ZTC demo](doc/screenshots/ztc-demo.gif)
 
 ## Installation
 
 ```bash
-uv tool install ztc
+uv tool install git+https://github.com/wadevelopers/ztc
 ```
 
-Instala dos comandos en `PATH`:
+This installs two commands on your `PATH`:
 
-- `ztc`: app completa con menu (themes, layouts, sessions, terminal
-  colors, terminal settings).
-- `zsm`: launcher rapido de sesiones — equivalente a abrir `ztc` y elegir
-  "Zellij sessions" desde el menu, pero sin pasar por el menu.
+- **`ztc`**: full app with menu access to all features.
+- **`zsm`**: quick session launcher — equivalent to opening `ztc` and
+  going straight to "Zellij sessions". Useful as a replacement for the
+  pre-Zellij shell prompt.
 
-### Requisitos
+> A PyPI release is planned for v1.1.0 (under the package name
+> `ztc-tui`). See [`doc/ROADMAP.md`](doc/ROADMAP.md).
 
-- Python 3.11+.
-- Zellij (opcional). Si no esta instalado, los items de Zellij en el menu
-  aparecen disabled con la nota `(zellij not installed)`.
-- Para edicion de colores y settings: Alacritty o Kitty configurados.
-- Para selector de fuente en Terminal settings: `fontconfig` (fc-list).
-  Sin el, el campo `font.family` cae a un input de texto libre.
+### Requirements
 
-## Usage
+- Python 3.11+
+- Alacritty or Kitty (for color and settings editing).
+- Zellij (optional). Without Zellij, the Zellij menu items appear
+  disabled.
+- `fontconfig` (`fc-list`) — optional. Enables the visual font picker
+  in Terminal settings; without it, `font.family` falls back to a
+  free-text input.
 
-### `ztc` — app completa
+## Features
 
-Abre el menu con todas las features:
+The main `ztc` menu exposes five modules:
 
-- **Zellij theme**: elegir/editar el tema activo de Zellij.
-- **Zellij layouts**: gestionar layouts.
-- **Zellij sessions**: launcher de sesiones (equivalente a `zsm` directo).
-- **Terminal colors**: editar colores de Alacritty/Kitty sincronizados con
-  el tema de Zellij.
-- **Terminal settings**: editar padding, opacity, font size/family y
-  cursor shape del backend activo. Mismos 6 settings funcionan en
-  Alacritty (`alacritty.toml`) y Kitty (`kitty.conf`); el backend se
-  encarga del formato propio. `font.family` ofrece un selector con
-  las fuentes monoespaciadas detectadas via fontconfig.
+- **Zellij themes** — pick or edit the active Zellij theme. Custom
+  themes can be created and edited slot by slot, both in the legacy
+  ANSI palette and in the rich UI slots.
+- **Zellij layouts** — visual layout editor: tab/pane tree, splits,
+  margins, borders, names and plugin configuration.
+- **Zellij sessions** — list, attach, create, rename and delete
+  sessions. Also exposed as a standalone CLI (`zsm`).
+- **Terminal colors** — editor for the 16 ANSI colors plus the special
+  slots (foreground, background, cursor) of the active backend.
+  Contrast warnings are computed against the active Zellij theme
+  background.
+- **Terminal settings** — six values: padding x, padding y, opacity,
+  font family, font size and cursor shape. The same six work on both
+  backends; each is serialized to its native format (TOML for
+  Alacritty, flat key/value for Kitty).
 
-Navegacion: `↑↓` mover, `↲` abrir, `q` salir.
+General navigation: `↑↓` to move, `↲` to open, `Esc` to go back, `q`
+to quit (only from the main menu — inside editors `q` is a no-op so it
+cannot be pressed accidentally).
 
-### `zsm` — launcher rapido de sesiones
+## Automatic terminal detection
 
-Abre directamente el selector de sesiones, sin pasar por el menu de ztc.
-Util como reemplazo del shell-prompt-to-zellij: cada vez que abris una
-terminal, ejecutas `zsm`, eligis attach/new/bash, y entras al destino.
+The app detects which terminal launched it by reading env vars that
+survive multiplexers like Zellij and tmux:
 
-Atajos dentro del selector: `enter` attach, `n` new, `l` new+layout,
-`r` rename, `k` kill, `d` delete, `b` bash, `q` salir.
-
-## Estado
-
-En desarrollo. Soporte para edicion de colores en Alacritty y Kitty
-con deteccion automatica de la terminal en uso.
-
-## Terminales soportadas
-
-| Terminal | Formato | Notas |
-|---|---|---|
-| **Alacritty** | TOML | Soporte completo + `import_theme_file` desde otro `alacritty.toml`. |
-| **Kitty** | flat key/value | Soporte completo, incluyendo expansion de `include` para reflejar el estado efectivo. |
-
-Ghostty queda diferida (ver Fase D futura en `doc/PLAN_MULTI_TERMINAL.md`).
-
-## Como elige el backend la app
-
-La app detecta automaticamente desde que terminal se la lanzo, mirando
-env vars distintivas que sobreviven multiplexores como Zellij/tmux:
-
-| Terminal | Marker |
+| Backend | Marker |
 |---|---|
-| Alacritty | `ALACRITTY_WINDOW_ID` o `ALACRITTY_SOCKET` |
-| Kitty | `KITTY_PID`, `KITTY_WINDOW_ID`, o `TERM=xterm-kitty` |
+| Alacritty | `ALACRITTY_WINDOW_ID` or `ALACRITTY_SOCKET` |
+| Kitty | `KITTY_PID`, `KITTY_WINDOW_ID`, or `TERM=xterm-kitty` |
 
-Si la terminal no es soportada (gnome-terminal, iTerm2, etc.), la
-opcion "Colores de terminal" aparece deshabilitada con `(no soportada)`.
-Las funciones de Zellij siguen disponibles si Zellij esta instalado.
+If the host terminal is unsupported (gnome-terminal, etc.), the
+Terminal colors and Terminal settings entries are disabled with the
+note `(unsupported)`. Zellij features remain available as long as
+Zellij is installed.
 
-### Override por env var
+### Override
 
 ```bash
 TERM_CONFIG_TUI_BACKEND=alacritty ztc
 TERM_CONFIG_TUI_BACKEND=kitty ztc
-TERM_CONFIG_TUI_BACKEND=auto ztc    # default
+TERM_CONFIG_TUI_BACKEND=auto ztc    # default: auto-detect
 ```
 
-Util para tests, multiplexores raros o casos donde la deteccion
-automatica no acierta. Un valor invalido (`wezterm`, etc.) deshabilita
-la edicion de colores con un toast explicando el problema.
+If `SSH_CONNECTION` is set, color and settings editing are disabled
+because the local client config file is not accessible from the remote
+host.
 
-### SSH
+## Editing colors in Kitty with `include`
 
-Si detecta `SSH_CONNECTION`, deshabilita la edicion de colores: el
-archivo de config local de tu cliente no es accesible desde el host
-remoto.
+If your `kitty.conf` includes a theme file (e.g.
+`include themes/tokyonight.conf`), the app reads the effective colors
+by expanding the include. When you modify a color from the editor:
 
-## Edicion de colores en Kitty con `include`
+1. The new line is added at the end of your main `kitty.conf`.
+2. Kitty applies "last-occurrence-wins", so the new line takes
+   precedence over the include.
+3. The theme file itself is **not modified** — it stays intact.
+4. If you later switch the include to a different theme, the colors
+   you edited still take precedence. To restore a slot to the theme
+   value, press `x` (Reset slot) in the editor: that removes the line
+   from the main config so the include wins again.
 
-Si tu `kitty.conf` incluye un tema (`include themes/tokyonight.conf`),
-la app lee los colores efectivos expandiendo el include. Cuando
-modificas un color desde el editor:
+Limitation: only direct `include` is expanded. `globinclude` and
+`envinclude` are not. Nested includes are supported up to depth 5.
 
-1. La nueva linea se appendea **al final de tu `kitty.conf`** (el
-   archivo principal).
-2. Como kitty procesa el archivo top-to-bottom y aplica
-   "last-occurrence-wins", la linea appendeada gana sobre el include.
-3. El archivo de tema (`themes/tokyonight.conf`) **no se toca** —
-   tu tema queda intacto.
-4. Si despues cambias el include a otro tema, los colores que
-   editaste siguen ganando (porque siguen al final del main). Para
-   "volver al tema" en un slot editado, usa "Resetear slot" (`x`)
-   en el editor: borra la linea del main y el include vuelve a ganar.
+## How `zsm` launches Zellij
 
-Limitacion: `globinclude` y `envinclude` no se expanden, solo
-`include` directo. Includes anidados se permiten hasta profundidad 5.
-
-## How it works
-
-### `zsm` reemplaza su propio proceso al lanzar
-
-Cuando elegis attach/new/bash en `zsm`, no se abre Zellij como un proceso
-hijo — el comando usa `os.execvp` para **reemplazar** el proceso `zsm`
-por Zellij. Visualmente:
+`zsm` (and the embedded launcher inside `ztc`) use `os.execvp` to
+**replace** their own process with Zellij when you choose attach/new/
+bash — they do not run Zellij as a child:
 
 ```
 shell (PID 100)
-  └─ zsm (PID 200)         ← TUI corriendo
-       │ elegis "attach mi-sesion"
-       │ os.execvp("zellij", "attach", "mi-sesion")
+  └─ zsm (PID 200)         ← TUI running
+       │ you pick "attach my-session"
+       │ os.execvp("zellij", "attach", "my-session")
        ↓
 shell (PID 100)
-  └─ zellij (PID 200)      ← MISMO PID, distinto programa
-       │ trabajas en zellij
-       │ cerras zellij
-       ↓
-shell (PID 100)            ← vuelve el control al shell
+  └─ zellij (PID 200)      ← SAME PID, different program
 ```
 
-`zsm` no consume memoria mientras estas en zellij — fue literalmente
-reemplazado, ya no existe como proceso.
+`zsm` consumes no memory while you are inside Zellij — it has been
+literally replaced by Zellij.
 
-### Misma logica para "Zellij sessions" desde `ztc`
+**Limitation**: attaching to a session and creating a new session
+require that the launching process is **not** already inside a Zellij
+session. That is a Zellij restriction, not the launcher's. The primary
+use case for `zsm` is to run it from the shell before entering
+Zellij.
 
-Cuando elegis attach/new/bash desde el menu embebido de ztc, ztc se
-reemplaza por Zellij con el mismo mecanismo. La unica diferencia es que
-`cancel` (Esc/q) vuelve al menu de ztc en lugar de salir al shell.
+## Multi-terminal architecture
 
-### Limitacion: lanzar fuera de Zellij
+Backends today: Alacritty (TOML) and Kitty (flat key/value). The
+abstraction lives in `src/ztc/services/terminals/`: implementing the
+`TerminalBackend` interface for a new terminal (e.g. Ghostty, WezTerm,
+Foot) integrates it without touching the rest of the code. Fork
+contributions are welcome — see [`doc/ROADMAP.md`](doc/ROADMAP.md).
 
-Las operaciones attach a otra sesion y crear nueva requieren que el
-proceso que las ejecuta **no este dentro de una sesion Zellij** — es una
-restriccion de Zellij, no del launcher. El caso de uso primario de `zsm`
-es ejecutarlo desde el shell antes de entrar a Zellij. Si lo invocas
-desde un pane de Zellij existente, esas operaciones van a fallar.
-
-## Desarrollo
+## Development
 
 ```bash
+git clone https://github.com/wadevelopers/ztc
+cd ztc
 uv venv
 uv pip install -e ".[dev]"
-uv run ztc       # app completa
-uv run zsm       # launcher de sesiones
+uv run ztc       # full app
+uv run zsm       # session launcher
 uv run pytest
 ```
+
+## License
+
+[MIT](LICENSE) — © 2026 WA Developers SRL.
