@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from rich.text import Text
+
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -90,6 +92,11 @@ class TermConfigApp(App[None]):
         margin-bottom: 1;
         text-align: center;
     }
+    #company-link {
+        color: $text-muted;
+        margin-top: 1;
+        text-align: center;
+    }
     #main-menu {
         height: auto;
         max-height: 20;
@@ -162,12 +169,26 @@ class TermConfigApp(App[None]):
                     id="main-menu",
                     classes="wide" if self._has_menu_suffixes() else "narrow",
                 )
+            yield Static(self._company_link(), id="company-link")
         yield Footer()
 
     # Ancho util de contenido del menu en modo "wide" (width 43). Verificado
     # en runtime: el OptionList expone content_size.width=39 cuando el widget
     # mide 43 (border + padding/scroll-reserve consumen 4 cells, no 2).
     _MENU_WIDE_INNER = 39
+
+    @staticmethod
+    def _company_link() -> Text:
+        """Texto con la URL como hyperlink ANSI (OSC 8). Lo construimos
+        con Text + style en vez de markup `[link=URL]` porque el parser
+        de Rich markup interpreta mal el `://` de URLs sin comillas."""
+        text = Text()
+        text.append("WA Developers SRL — ", style="dim")
+        text.append(
+            "wadevelopers.com",
+            style="underline link https://wadevelopers.com",
+        )
+        return text
 
     def _has_menu_suffixes(self) -> bool:
         """True si algun item del menu tendria suffix (zellij not installed,
