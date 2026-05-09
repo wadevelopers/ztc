@@ -106,7 +106,8 @@ async def test_reset_removes_setting_from_doc(tmp_path: Path) -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         # Highlight el setting de opacity (3er en supported_settings).
-        # Index segun orden del catalogo: padding.x, padding.y, opacity, font.size, font.family, cursor.shape
+        # Index segun orden del catalogo:
+        # padding.x, padding.y, opacity, font.size, font.family, cursor.shape
         from textual.widgets import OptionList
 
         ol = app.screen.query_one("#setting-list", OptionList)

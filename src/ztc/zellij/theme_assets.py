@@ -167,7 +167,7 @@ def load_bundled_raw_components(name: str) -> list:
     return [child for child in theme_node.nodes if child.nodes]
 
 
-def _apply_rich_overrides(theme_name: str, theme_node: "kdl.Node") -> None:
+def _apply_rich_overrides(theme_name: str, theme_node: kdl.Node) -> None:
     """Patchea in-place los slots ricos de un theme_node segun
     RICH_THEME_OVERRIDES. Si el slot no existe en el .kdl original lo
     crea; si existe, sobrescribe sus args."""

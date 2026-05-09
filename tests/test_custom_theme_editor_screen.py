@@ -9,12 +9,12 @@ from ztc.models.config import Paths
 from ztc.screens.custom_theme_editor import CustomThemeEditorScreen
 from ztc.screens.theme_editor import ThemePickerScreen
 from ztc.services.runtime_detect import TerminalDetection
-from ztc.zellij.user_themes import list_user_themes
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.widgets.confirm import (
     ConfirmByNameModal,
     PromptModal,
 )
+from ztc.zellij.user_themes import list_user_themes
 
 
 def _paths_with_user_themes(tmp_path: Path) -> Paths:

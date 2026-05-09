@@ -120,7 +120,6 @@ def zellij_setup_check(timeout: float = 10.0) -> tuple[bool, str]:
 
 __all__ = [
     "list_layouts",
-    "read_active_theme",
     "set_active_theme",
     "zellij_setup_check",
 ]

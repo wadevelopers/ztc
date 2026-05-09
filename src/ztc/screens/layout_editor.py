@@ -194,7 +194,7 @@ class LayoutEditorScreen(Screen[None]):
         # alineada verticalmente con la `P` de `P Palette` en la fila
         # de abajo (Esc Back = 8 chars, P Palette = 9; con 2 espacios
         # ambos miden 9).
-        return f"[$footer-key-foreground b]Esc[/]  Back"
+        return "[$footer-key-foreground b]Esc[/]  Back"
 
     def _file_keys_label(self) -> str:
         keys = [

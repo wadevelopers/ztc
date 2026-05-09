@@ -5,7 +5,6 @@ TOML inline tables vs dotted tables (deben ser equivalentes al leer)."""
 
 from __future__ import annotations
 
-
 import pytest
 import tomlkit
 

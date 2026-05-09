@@ -16,7 +16,6 @@ from ztc.sessions.services.zellij_session import (
     list_sessions,
 )
 
-
 # ---------- _extract_client_session_name (parser puro) ----------
 
 
@@ -74,7 +73,8 @@ def _mock_pgrep(stdout: str):
 def test_clients_counted_per_session() -> None:
     pgrep_output = _make_pgrep_output(
         [
-            "808405 /home/martin/.local/bin/zellij --server /run/user/1000/zellij/contract_version_1/main",
+            "808405 /home/martin/.local/bin/zellij --server "
+            "/run/user/1000/zellij/contract_version_1/main",
             "808500 /home/martin/.local/bin/zellij attach main",
             "808600 /home/martin/.local/bin/zellij -s work",
         ]
@@ -98,7 +98,8 @@ def test_multiple_clients_for_same_session() -> None:
         [
             "100 /home/martin/.local/bin/zellij attach main",
             "200 /home/martin/.local/bin/zellij attach main",
-            "300 /home/martin/.local/bin/zellij --server /run/user/1000/zellij/contract_version_1/main",
+            "300 /home/martin/.local/bin/zellij --server "
+            "/run/user/1000/zellij/contract_version_1/main",
         ]
     )
     with (
@@ -118,7 +119,8 @@ def test_only_servers_yields_empty_dict() -> None:
     """Server vivo sin clientes attacheados = sesion detached."""
     pgrep_output = _make_pgrep_output(
         [
-            "100 /home/martin/.local/bin/zellij --server /run/user/1000/zellij/contract_version_1/orphan",
+            "100 /home/martin/.local/bin/zellij --server "
+            "/run/user/1000/zellij/contract_version_1/orphan",
         ]
     )
     with (

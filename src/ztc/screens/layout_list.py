@@ -159,7 +159,8 @@ class LayoutListScreen(Screen[None]):
             target = self.layouts_dir / f"{name}.kdl"
             if target.exists():
                 self.app.notify(
-                    f"{target.name} already exists. Use a different name or delete the existing one.",
+                    f"{target.name} already exists. "
+                    "Use a different name or delete the existing one.",
                     severity="error",
                 )
                 return

@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 
 import kdl
 
+from ztc.services.atomic import write_atomic
+from ztc.services.backups import make_backup
 from ztc.zellij.config import read_active_theme
 from ztc.zellij.models import ZellijColor, ZellijTheme
 from ztc.zellij.user_themes import (
@@ -19,9 +21,6 @@ from ztc.zellij.user_themes import (
     is_valid_theme_name,
     list_user_themes,
 )
-
-from ztc.services.atomic import write_atomic
-from ztc.services.backups import make_backup
 
 if TYPE_CHECKING:
     from ztc.services.terminals import TerminalBackend
@@ -322,7 +321,7 @@ def clone_theme(
     src_name: str,
     dst_name: str,
     *,
-    backend: "TerminalBackend | None" = None,
+    backend: TerminalBackend | None = None,
     backend_path: Path | None = None,
     backup: bool = True,
 ) -> Path | None:
@@ -378,12 +377,11 @@ def clone_theme(
 
 
 def _read_terminal_legacy_slots(
-    backend: "TerminalBackend", backend_path: Path
+    backend: TerminalBackend, backend_path: Path
 ) -> dict[str, str]:
     """Devuelve {legacy_slot: hex} con los valores actuales del archivo
     de la terminal, invirtiendo el mapping de theme_sync."""
     from ztc.services.colors import is_valid_hex, normalize_hex
-
     from ztc.services.theme_sync import _LEGACY_TO_CANONICAL
 
     doc = backend.load(backend_path)

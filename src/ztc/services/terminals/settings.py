@@ -132,24 +132,20 @@ def validate_setting_value(setting: CanonicalSetting, value: object) -> bool:
         return False
 
     if setting.kind == SettingKind.INT:
-        if not isinstance(value, int) or isinstance(value, bool):
-            return False
-        if setting.min_value is not None and value < setting.min_value:
-            return False
-        if setting.max_value is not None and value > setting.max_value:
-            return False
-        return True
+        return (
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and (setting.min_value is None or value >= setting.min_value)
+            and (setting.max_value is None or value <= setting.max_value)
+        )
 
     if setting.kind == SettingKind.FLOAT:
-        if isinstance(value, bool):
-            return False
-        if not isinstance(value, (int, float)):
-            return False
-        if setting.min_value is not None and value < setting.min_value:
-            return False
-        if setting.max_value is not None and value > setting.max_value:
-            return False
-        return True
+        return (
+            not isinstance(value, bool)
+            and isinstance(value, (int, float))
+            and (setting.min_value is None or value >= setting.min_value)
+            and (setting.max_value is None or value <= setting.max_value)
+        )
 
     if setting.kind == SettingKind.STR:
         return isinstance(value, str) and len(value) > 0

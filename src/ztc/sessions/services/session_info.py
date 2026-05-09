@@ -48,7 +48,7 @@ class PaneInfo:
     (children side-by-side en columnas), si el pane es un container
     que lo declara. None para leaves o containers que heredan el
     default."""
-    children: list["PaneInfo"] = field(default_factory=list)
+    children: list[PaneInfo] = field(default_factory=list)
 
 
 @dataclass
