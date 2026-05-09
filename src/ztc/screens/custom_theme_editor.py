@@ -32,8 +32,13 @@ class CustomThemeEditorScreen(Screen[None]):
         Binding("x", "reset", "Reset slot"),
         Binding("s", "save", "Save"),
         Binding("escape", "back", "Back"),
-        Binding("q", "back", "Back", show=False),
+        # `q` y `ctrl+q` neutralizados: solo `Esc` sale del editor.
+        Binding("q", "noop", show=False),
+        Binding("ctrl+q", "noop", show=False),
     ]
+
+    def action_noop(self) -> None:
+        pass
 
     DEFAULT_CSS = """
     CustomThemeEditorScreen {

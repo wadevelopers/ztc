@@ -38,9 +38,6 @@ class ConfirmByNameModal(ModalScreen[bool]):
         align-horizontal: right;
         height: 3;
     }
-    Button {
-        margin-left: 1;
-    }
     """
 
     def __init__(
@@ -133,9 +130,6 @@ class NewSessionModal(ModalScreen[NewSessionResult | None]):
     #buttons {
         align-horizontal: right;
         height: 3;
-    }
-    Button {
-        margin-left: 1;
     }
     """
 

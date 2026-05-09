@@ -5,9 +5,9 @@ from pathlib import Path
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal
 from textual.screen import Screen
-from textual.widgets import Footer, Header, OptionList, Static, Tree
+from textual.widgets import Header, OptionList, Static, Tree
 from textual.widgets.option_list import Option
 from textual.widgets.tree import TreeNode
 
@@ -15,32 +15,71 @@ from ztc.models.layout import Layout, Pane, Tab
 from ztc.zellij import layout_io, layout_ops
 from ztc.widgets.confirm import (
     ConfirmByNameModal,
+    KdlPreviewModal,
     PaneEditModal,
     PromptModal,
 )
+
+
+class _LayoutTabsList(OptionList):
+    """OptionList con bindings explicitos: replica los defaults de
+    Textual con descriptions (sino aparecen sin label en el Command
+    Palette al sobreescribir los heredados)."""
+
+    BINDINGS = [
+        Binding("up", "cursor_up", "Up", show=False),
+        Binding("down", "cursor_down", "Down", show=False),
+        Binding("home", "first", "First", show=False),
+        Binding("end", "last", "Last", show=False),
+        Binding("pageup", "page_up", "Page Up", show=False),
+        Binding("pagedown", "page_down", "Page Down", show=False),
+        Binding("enter", "select", "Select", show=False),
+    ]
+
+
+class _PaneTree(Tree):
+    """Tree con bindings explicitos: navegacion vertical + expand/collapse,
+    todos con description para que aparezcan con label en el Command
+    Palette."""
+
+    BINDINGS = [
+        Binding("up", "cursor_up", "Up", show=False),
+        Binding("down", "cursor_down", "Down", show=False),
+        Binding("space", "toggle_node", "Toggle", show=False),
+        Binding("enter", "select_cursor", "Select", show=False),
+    ]
 
 
 class LayoutEditorScreen(Screen[None]):
     """Editor de un layout. Tabs, arbol de panes, preview KDL en vivo."""
 
     BINDINGS = [
+        # Todas las hotkeys con show=False: no usamos Footer estandar de
+        # Textual; las hotkeys se muestran en filas Static custom
+        # (Tabs / Panes / Move / File) que reemplazan al Footer.
         # Pane operations
-        Binding("a", "add_pane", "Add pane"),
-        Binding("s", "split_pane", "Split"),
-        Binding("d", "delete_pane", "Delete pane"),
-        Binding("e", "edit_pane", "Edit"),
-        Binding("J", "move_down", "Move down"),
-        Binding("K", "move_up", "Move up"),
-        Binding("greater_than_sign", "size_up", "+5%"),
-        Binding("less_than_sign", "size_down", "-5%"),
+        Binding("a", "add_pane", "Add", show=False),
+        Binding("S", "split_pane", "Split", show=False),
+        Binding("d", "delete_pane", "Delete", show=False),
+        Binding("e", "edit_pane", "Edit", show=False),
+        # Move (J/K contextual: opera sobre tabs o panes segun foco)
+        Binding("J", "move_down", "Down", show=False),
+        Binding("K", "move_up", "Up", show=False),
         # Tab operations
-        Binding("n", "new_tab", "New tab"),
-        Binding("D", "delete_tab", "Delete tab"),
-        Binding("r", "rename_tab", "Rename tab"),
-        # Save / back
-        Binding("ctrl+s", "save", "Save"),
-        Binding("escape", "back", "Back"),
+        Binding("n", "new_tab", "New tab", show=False),
+        Binding("D", "delete_tab", "Del tab", show=False),
+        Binding("R", "rename_tab", "Rename tab", show=False),
+        # File operations
+        Binding("p", "preview", "Preview KDL", show=False),
+        Binding("r", "reload", "Reload", show=False),
+        Binding("s", "save", "Save", show=False),
+        Binding("escape", "back", "Back", show=False),
+        Binding("q", "noop", show=False),
+        Binding("ctrl+q", "noop", show=False),
     ]
+
+    def action_noop(self) -> None:
+        pass
 
     DEFAULT_CSS = """
     LayoutEditorScreen {
@@ -51,26 +90,35 @@ class LayoutEditorScreen(Screen[None]):
         height: 1;
     }
     #editor-body {
-        height: 60%;
+        height: 1fr;
     }
     #tabs-list {
         width: 28;
-        border-right: solid $panel;
+        margin-right: 1;
     }
     Tree {
         padding: 0 1;
+        border-left: solid $panel;
     }
-    #preview-wrap {
-        height: 1fr;
-        border-top: solid $panel;
-    }
-    #preview-title {
-        padding: 0 1;
-        color: $text-muted;
+    .keys-row {
         height: 1;
+        padding: 0 1;
+        background: $panel;
+        color: $text-muted;
     }
-    #preview {
-        padding: 0 2;
+    /* Fila con left/right alineados (Move). */
+    .keys-row-split {
+        height: 1;
+        background: $panel;
+        color: $text-muted;
+    }
+    .keys-row-split > .keys-left {
+        width: 1fr;
+        padding: 0 1;
+    }
+    .keys-row-split > .keys-right {
+        width: auto;
+        padding: 0 1;
     }
     """
 
@@ -86,19 +134,88 @@ class LayoutEditorScreen(Screen[None]):
         yield Header()
         yield Static("", id="header-info")
         with Horizontal(id="editor-body"):
-            yield OptionList(id="tabs-list")
-            yield Tree("(layout)", id="pane-tree")
-        with Vertical(id="preview-wrap"):
-            yield Static("Preview KDL", id="preview-title")
-            with VerticalScroll():
-                yield Static("", id="preview")
-        yield Footer()
+            yield _LayoutTabsList(id="tabs-list")
+            yield _PaneTree("(layout)", id="pane-tree")
+        # Filas en orden escalonado de menor a mayor cantidad de chips:
+        # Move (2), File (3), Tabs (3), Panes (4). Las columnas se alinean
+        # verticalmente con padding por ancho de label.
+        with Horizontal(id="move-keys", classes="keys-row-split"):
+            yield Static(self._move_keys_label(), classes="keys-left")
+            yield Static(self._back_keys_label(), classes="keys-right")
+        with Horizontal(id="file-keys", classes="keys-row-split"):
+            yield Static(self._file_keys_label(), classes="keys-left")
+            yield Static(self._tab_focus_label(), classes="keys-right")
+        with Horizontal(id="tab-keys", classes="keys-row-split"):
+            yield Static(self._tab_keys_label(), classes="keys-left")
+            yield Static(self._palette_keys_label(), classes="keys-right")
+        yield Static(self._pane_keys_label(), id="pane-keys", classes="keys-row")
+
+    @staticmethod
+    def _key_chip(key: str, label: str, *, width: int | None = None) -> str:
+        # Mismo estilo que el Footer de Textual: tecla en `$footer-key-foreground`
+        # (= $accent en el tema activo) + bold; descripcion en color normal.
+        # `width` opcional: padea el label con espacios a la derecha para
+        # alinear columnas verticalmente entre filas distintas.
+        if width is not None:
+            label = label.ljust(width)
+        return f"[$footer-key-foreground b]{key}[/] {label}"
+
+    # Anchos por columna (label, sin la key + espacio):
+    # Col 1: 6 = len("Reload"). Col 2: 6 = len("Delete"). Col 3: 7 = len("Preview").
+    # Col 4 (solo en Panes "Edit") no se padea — es el ultimo chip de su fila.
+
+    def _tab_keys_label(self) -> str:
+        keys = [
+            self._key_chip("n", "New", width=6),
+            self._key_chip("D", "Delete", width=6),
+            self._key_chip("R", "Rename", width=7),
+        ]
+        return "Tabs:  " + "  ".join(keys)
+
+    def _pane_keys_label(self) -> str:
+        keys = [
+            self._key_chip("a", "Add", width=6),
+            self._key_chip("S", "Split", width=6),
+            self._key_chip("d", "Delete", width=7),
+            self._key_chip("e", "Edit"),
+        ]
+        return "Panes: " + "  ".join(keys)
+
+    def _move_keys_label(self) -> str:
+        keys = [
+            self._key_chip("J", "Down", width=6),
+            self._key_chip("K", "Up", width=6),
+        ]
+        return "Move:  " + "  ".join(keys)
+
+    def _back_keys_label(self) -> str:
+        # Doble espacio entre `Esc` y `Back` para que la `E` quede
+        # alineada verticalmente con la `P` de `P Palette` en la fila
+        # de abajo (Esc Back = 8 chars, P Palette = 9; con 2 espacios
+        # ambos miden 9).
+        return f"[$footer-key-foreground b]Esc[/]  Back"
+
+    def _file_keys_label(self) -> str:
+        keys = [
+            self._key_chip("r", "Reload", width=6),
+            self._key_chip("s", "Save", width=6),
+            self._key_chip("p", "Preview", width=7),
+        ]
+        return "File:  " + "  ".join(keys)
+
+    def _palette_keys_label(self) -> str:
+        # `P` lo registra el App globalmente (action_command_palette).
+        return self._key_chip("P", "Palette")
+
+    def _tab_focus_label(self) -> str:
+        # `Tab` y `Shift+Tab` son bindings default del Screen de Textual
+        # para mover el foco entre widgets (focus_next / focus_previous).
+        return self._key_chip("Tab", "Focus")
 
     def on_mount(self) -> None:
         self._refresh_header()
         self._rebuild_tabs()
         self._rebuild_tree()
-        self._refresh_preview()
 
     # ---------- header / preview / tabs ----------
 
@@ -107,10 +224,6 @@ class LayoutEditorScreen(Screen[None]):
         self.query_one("#header-info", Static).update(
             f"[b]{self.layout_model.name}[/b]{dirty}    {self.layout_model.path}"
         )
-
-    def _refresh_preview(self) -> None:
-        preview = self.query_one("#preview", Static)
-        preview.update(layout_io.dump_layout(self.layout_model))
 
     def _rebuild_tabs(self) -> None:
         option_list = self.query_one("#tabs-list", OptionList)
@@ -183,6 +296,10 @@ class LayoutEditorScreen(Screen[None]):
             return
         target_node = self._find_node(tree.root, self._selected_pane_id)
         if target_node is not None:
+            # `select_node` marca seleccionado pero no mueve el cursor visual.
+            # `move_cursor` mueve el highlight + scrollea — sin esto el cursor
+            # se queda en la raiz tras cualquier _rebuild_tree.
+            tree.move_cursor(target_node)
             tree.select_node(target_node)
             tree.scroll_to_node(target_node)
 
@@ -210,7 +327,6 @@ class LayoutEditorScreen(Screen[None]):
         if not self.dirty:
             self.dirty = True
         self._refresh_header()
-        self._refresh_preview()
 
     def _after_mutation(self, focus_pane: Pane | None) -> None:
         if focus_pane is not None:
@@ -246,8 +362,21 @@ class LayoutEditorScreen(Screen[None]):
         target = self._selected_pane()
         if target is None or self._current_tab() is None:
             return
+        # Capturamos sibling cercano antes de delete para mantener el cursor
+        # en una posicion razonable (no al root).
+        found = layout_ops.find_pane_parent(
+            self.layout_model, self._selected_tab_index, target
+        )
+        next_focus: Pane | None = None
+        if found is not None:
+            siblings, idx = found
+            # El sibling mas cercano: el siguiente, sino el anterior, sino None.
+            if idx + 1 < len(siblings):
+                next_focus = siblings[idx + 1]
+            elif idx > 0:
+                next_focus = siblings[idx - 1]
         if layout_ops.delete_pane(self.layout_model, self._selected_tab_index, target):
-            self._selected_pane_id = None
+            self._selected_pane_id = id(next_focus) if next_focus is not None else None
             self._rebuild_tree()
             self._mark_dirty()
 
@@ -267,35 +396,32 @@ class LayoutEditorScreen(Screen[None]):
         self.app.push_screen(PaneEditModal(target), after)
 
     def action_move_up(self) -> None:
-        target = self._selected_pane()
-        if target is None:
-            return
-        if layout_ops.move_pane(
-            self.layout_model, self._selected_tab_index, target, delta=-1
-        ):
-            self._after_mutation(target)
+        self._move(-1)
 
     def action_move_down(self) -> None:
+        self._move(+1)
+
+    def _move(self, delta: int) -> None:
+        """Mover el item con foco actual: si el foco esta en la lista de
+        tabs, mueve el tab; si esta en el arbol de panes (default),
+        mueve el pane. Mismo binding J/K para ambos contextos."""
+        if isinstance(self.focused, _LayoutTabsList):
+            new_idx = layout_ops.move_tab(
+                self.layout_model, self._selected_tab_index, delta=delta
+            )
+            if new_idx is not None:
+                self._selected_tab_index = new_idx
+                self._rebuild_tabs()
+                self._rebuild_tree()
+                self._mark_dirty()
+            return
+        # Default: mover pane.
         target = self._selected_pane()
         if target is None:
             return
         if layout_ops.move_pane(
-            self.layout_model, self._selected_tab_index, target, delta=1
+            self.layout_model, self._selected_tab_index, target, delta=delta
         ):
-            self._after_mutation(target)
-
-    def action_size_up(self) -> None:
-        target = self._selected_pane()
-        if target is None:
-            return
-        if layout_ops.resize_pane(target, delta_pct=5):
-            self._after_mutation(target)
-
-    def action_size_down(self) -> None:
-        target = self._selected_pane()
-        if target is None:
-            return
-        if layout_ops.resize_pane(target, delta_pct=-5):
             self._after_mutation(target)
 
     # ---------- tab actions ----------
@@ -382,7 +508,37 @@ class LayoutEditorScreen(Screen[None]):
             after,
         )
 
-    # ---------- save / back ----------
+    # ---------- preview ----------
+
+    def action_preview(self) -> None:
+        """Abre un modal con el KDL serializado actual del layout en
+        memoria (refleja los cambios pending, no solo lo que esta en
+        disco)."""
+        text = layout_io.dump_layout(self.layout_model)
+        title = f"KDL preview — {self.layout_model.name}"
+        if self.dirty:
+            title += " *"
+        self.app.push_screen(KdlPreviewModal(title=title, content=text))
+
+    # ---------- save / reload / back ----------
+
+    def action_reload(self) -> None:
+        """Re-lee el layout del disco descartando cambios pending. Mismo
+        patron que ColorEditor / TerminalSettings (sin confirm — el
+        usuario aprieta `r` con intencion de descartar)."""
+        try:
+            fresh = layout_io.load_layout(self.layout_model.path)
+        except Exception as exc:  # noqa: BLE001
+            self.app.notify(f"Reload error: {exc}", severity="error", timeout=8)
+            return
+        self.layout_model = fresh
+        self._selected_tab_index = 0 if fresh.tabs else -1
+        self._selected_pane_id = None
+        self.dirty = False
+        self._refresh_header()
+        self._rebuild_tabs()
+        self._rebuild_tree()
+        self.app.notify("Reloaded from disk.", severity="information")
 
     def action_save(self) -> None:
         try:

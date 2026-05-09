@@ -32,12 +32,15 @@ class PickerScreen(Screen[None]):
         Binding("enter", "attach", "Attach"),
         Binding("n", "new_session", "New"),
         Binding("l", "new_with_layout", "New +layout"),
-        Binding("r", "rename", "Rename"),
+        # `r` Reload, `R` Rename — coherente con los otros editors
+        # (color_editor, terminal_settings, layout_editor) donde `r`
+        # siempre es Reload.
+        Binding("r", "refresh", "Reload"),
+        Binding("R", "rename", "Rename"),
         Binding("k", "kill", "Kill"),
         Binding("d", "delete", "Delete"),
         Binding("D", "delete_force", "--force"),
         Binding("b", "bash", "Bash"),
-        Binding("R", "refresh", "Refresh"),
         Binding("q", "quit", "Exit"),
         Binding("escape", "quit", "Exit", show=False),
     ]
@@ -91,15 +94,22 @@ class PickerScreen(Screen[None]):
         self._embedded = embedded
         if embedded:
             # En modo embebido, "cancel" vuelve al menu (no cierra la app).
-            # Ocultamos `q Exit` del Footer y mostramos `Esc Back` para
-            # reflejar la accion real. La tecla `q` sigue funcionando como
-            # atajo (no se anuncia, pero llama a action_quit -> on_cancel).
+            # Solo `Esc` sale; `q` y `ctrl+q` quedan inertes para
+            # diferenciarlos del modo standalone (donde `q Exit` cierra
+            # la app entera).
             self._bindings.key_to_bindings["q"] = [
-                Binding("q", "quit", "Back", show=False)
+                Binding("q", "noop", show=False)
+            ]
+            self._bindings.key_to_bindings["ctrl+q"] = [
+                Binding("ctrl+q", "noop", show=False)
             ]
             self._bindings.key_to_bindings["escape"] = [
                 Binding("escape", "quit", "Back", show=True)
             ]
+
+    def action_noop(self) -> None:
+        # No-op para `q`/`ctrl+q` en modo embebido (ver __init__).
+        pass
 
     def _require_zellij(self) -> bool:
         """Guard: si zellij no esta instalado, notifica y devuelve False.

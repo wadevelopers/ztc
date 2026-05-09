@@ -19,6 +19,7 @@ from ztc.screens.theme_editor import ThemePickerScreen
 from ztc.sessions.screens.picker import PickerScreen
 from ztc.sessions.services.zellij_session import attach_argv, new_session_argv
 from ztc.sessions.types import LaunchTarget
+from ztc.widgets.confirm import BUTTON_CSS
 from ztc.zellij import TEXTUAL_FALLBACK
 from ztc.zellij import theme_assets as zellij_theme_assets
 from ztc.zellij.config import read_active_theme
@@ -103,7 +104,7 @@ class TermConfigApp(App[None]):
     #main-menu.wide {
         width: 43;
     }
-    """
+    """ + BUTTON_CSS
 
     def __init__(
         self,

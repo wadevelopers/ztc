@@ -9,6 +9,7 @@ from textual.binding import Binding
 from ztc.services.runtime_detect import detect_zellij_installed
 from ztc.sessions.screens.picker import PickerScreen
 from ztc.sessions.types import LaunchTarget
+from ztc.widgets.confirm import BUTTON_CSS
 
 
 def _zellij_config_path() -> Path:
@@ -28,6 +29,8 @@ class SessionLauncherApp(App[None]):
     # Binding propia para overridear el label "palette" que Textual hardcodea.
     COMMAND_PALETTE_BINDING = "P"
     BINDINGS = [Binding("P", "command_palette", "Palette", priority=True, show=False)]
+
+    DEFAULT_CSS = BUTTON_CSS
 
     def __init__(self) -> None:
         super().__init__()

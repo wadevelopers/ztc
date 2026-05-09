@@ -363,8 +363,13 @@ async def test_sessions_cancel_returns_to_menu(tmp_path: Path) -> None:
         await pilot.pause()
         assert isinstance(app.screen, PickerScreen)
 
-        # q dispara action_quit -> on_cancel -> pop_screen, vuelve al menu.
+        # En modo embebido, `q` es noop; solo `Esc` sale.
         await pilot.press("q")
+        await pilot.pause()
+        assert isinstance(app.screen, PickerScreen)  # `q` no hizo nada.
+
+        # `Esc` dispara action_quit -> on_cancel -> pop_screen, vuelve al menu.
+        await pilot.press("escape")
         await pilot.pause()
         assert not isinstance(app.screen, PickerScreen)
 

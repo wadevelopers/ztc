@@ -24,8 +24,13 @@ class LayoutListScreen(Screen[None]):
         Binding("d", "delete", "Delete"),
         Binding("r", "refresh", "Refresh"),
         Binding("escape", "app.pop_screen", "Back"),
-        Binding("q", "app.pop_screen", "Back", show=False),
+        # `q` y `ctrl+q` neutralizados: solo `Esc` sale del listado.
+        Binding("q", "noop", show=False),
+        Binding("ctrl+q", "noop", show=False),
     ]
+
+    def action_noop(self) -> None:
+        pass
 
     DEFAULT_CSS = """
     LayoutListScreen {

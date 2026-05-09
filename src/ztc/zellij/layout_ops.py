@@ -176,3 +176,15 @@ def rename_tab(layout: Layout, index: int, new_name: str) -> bool:
         return False
     layout.tabs[index].name = new_name or None
     return True
+
+
+def move_tab(layout: Layout, index: int, *, delta: int) -> int | None:
+    """Reordena tabs en el layout. delta -1 sube, +1 baja. Devuelve el
+    nuevo indice del tab movido, o None si no se pudo mover (out of bounds)."""
+    if not 0 <= index < len(layout.tabs):
+        return None
+    new_idx = index + delta
+    if not 0 <= new_idx < len(layout.tabs):
+        return None
+    layout.tabs[index], layout.tabs[new_idx] = layout.tabs[new_idx], layout.tabs[index]
+    return new_idx

@@ -15,6 +15,75 @@ from ztc.models.layout import Pane, SplitDirection
 UnsavedChangesChoice = Literal["cancel", "discard", "save"]
 
 
+# Estilo "chip" plano para todos los Buttons de la app: sin el shadow de
+# media-blocks que usa Button por default; border ASCII round que hace
+# juego con el resto de la UI. Cada App (TermConfigApp / SessionLauncherApp)
+# concatena este string a su `DEFAULT_CSS`.
+BUTTON_CSS = """
+/* `!important` necesario porque `Button.-style-default` (definido en
+   Button.DEFAULT_CSS de Textual) tiene mayor specificity que `Screen
+   Button`. Textual soporta `!important` (el propio Button.DEFAULT_CSS
+   lo usa para overrides internos). Sin el flag, las reglas de Textual
+   ganan y los botones siguen viendose con shadow de media-blocks. */
+Button {
+    border: round $panel !important;
+    background: transparent !important;
+    color: $foreground !important;
+    min-width: 12;
+    padding: 0 1;
+    height: 3;
+    margin-left: 1;
+}
+Button:hover {
+    background: $boost !important;
+    border: round $panel !important;
+}
+Button:focus {
+    border: round $accent !important;
+}
+Button.-primary {
+    border: round $primary !important;
+    background: transparent !important;
+    color: $primary !important;
+    text-style: bold;
+}
+Button.-primary:hover {
+    background: $primary 20% !important;
+    border: round $primary !important;
+}
+Button.-success {
+    border: round $success !important;
+    background: transparent !important;
+    color: $success !important;
+    text-style: bold;
+}
+Button.-success:hover {
+    background: $success 20% !important;
+    border: round $success !important;
+}
+Button.-error {
+    border: round $error !important;
+    background: transparent !important;
+    color: $error !important;
+    text-style: bold;
+}
+Button.-error:hover {
+    background: $error 20% !important;
+    border: round $error !important;
+}
+Button.-warning {
+    border: round $warning !important;
+    background: transparent !important;
+    color: $warning !important;
+    text-style: bold;
+}
+Button.-warning:hover {
+    background: $warning 20% !important;
+    border: round $warning !important;
+}
+"""
+
+
 class ConfirmByNameModal(ModalScreen[bool]):
     """Modal para confirmar acciones destructivas escribiendo el nombre objetivo."""
 
@@ -47,9 +116,6 @@ class ConfirmByNameModal(ModalScreen[bool]):
     #buttons {
         align-horizontal: right;
         height: 3;
-    }
-    Button {
-        margin-left: 1;
     }
     """
 
@@ -139,9 +205,6 @@ class PromptModal(ModalScreen[str | None]):
         align-horizontal: right;
         height: 3;
     }
-    Button {
-        margin-left: 1;
-    }
     """
 
     def __init__(
@@ -224,16 +287,22 @@ class PaneEditModal(ModalScreen[Pane | None]):
     }
     #dialog {
         width: 80;
-        height: auto;
-        max-height: 90%;
+        height: 90%;
         border: round $accent;
         padding: 1 2;
         background: $surface;
+        layout: vertical;
     }
     #title {
         text-style: bold;
         color: $accent;
         margin-bottom: 1;
+        height: 1;
+    }
+    /* El form ocupa el espacio entre title y buttons; VerticalScroll
+       habilita scroll cuando el contenido excede la altura disponible. */
+    #form {
+        height: 1fr;
     }
     .row {
         height: 3;
@@ -263,9 +332,6 @@ class PaneEditModal(ModalScreen[Pane | None]):
         height: 3;
         margin-top: 1;
     }
-    Button {
-        margin-left: 1;
-    }
     """
 
     def __init__(self, pane: Pane) -> None:
@@ -274,72 +340,77 @@ class PaneEditModal(ModalScreen[Pane | None]):
         self._is_container = pane.is_container
 
     def compose(self) -> ComposeResult:
+        from textual.containers import VerticalScroll
+
         kind = "container" if self._is_container else "leaf"
         with Vertical(id="dialog"):
             yield Static(f"Edit pane ({kind})", id="title")
 
-            with Horizontal(classes="row"):
-                yield Static("Name", classes="label")
-                yield Input(value=self._pane.name or "", id="name", placeholder="optional")
-
-            with Horizontal(classes="row"):
-                yield Static("Size", classes="label")
-                yield Input(
-                    value=self._pane.size or "",
-                    id="size",
-                    placeholder="e.g. 60% or 1",
-                )
-
-            with Horizontal(classes="row"):
-                yield Static("Focus", classes="label")
-                yield Switch(value=self._pane.focus, id="focus")
-
-            if self._is_container:
+            with VerticalScroll(id="form"):
                 with Horizontal(classes="row"):
-                    yield Static("Split direction", classes="label")
-                    with RadioSet(id="split"):
-                        yield RadioButton(
-                            "vertical",
-                            value=self._pane.split_direction == "vertical",
-                        )
-                        yield RadioButton(
-                            "horizontal",
-                            value=self._pane.split_direction == "horizontal",
-                        )
-                        yield RadioButton(
-                            "(none)",
-                            value=self._pane.split_direction is None,
-                        )
-            else:
-                with Horizontal(classes="row"):
-                    yield Static("Command", classes="label")
+                    yield Static("Name", classes="label")
                     yield Input(
-                        value=self._pane.command or "",
-                        id="command",
-                        placeholder="e.g. nvim",
+                        value=self._pane.name or "", id="name", placeholder="optional"
                     )
+
                 with Horizontal(classes="row"):
-                    yield Static("Args", classes="label")
+                    yield Static("Size", classes="label")
                     yield Input(
-                        value=shlex.join(self._pane.args) if self._pane.args else "",
-                        id="args",
-                        placeholder="e.g. --verbose --file foo.txt",
+                        value=self._pane.size or "",
+                        id="size",
+                        placeholder="e.g. 60% or 1",
                     )
+
                 with Horizontal(classes="row"):
-                    yield Static("CWD", classes="label")
-                    yield Input(
-                        value=self._pane.cwd or "",
-                        id="cwd",
-                        placeholder="optional, e.g. /home/martin/proj",
-                    )
-                with Horizontal(classes="row"):
-                    yield Static("Start suspended", classes="label")
-                    yield Switch(
-                        value=self._pane.start_suspended, id="start_suspended"
-                    )
-                with Horizontal(classes="row"):
-                    yield Static("Borderless", classes="label")
-                    yield Switch(value=self._pane.borderless, id="borderless")
+                    yield Static("Focus", classes="label")
+                    yield Switch(value=self._pane.focus, id="focus")
+
+                if self._is_container:
+                    with Horizontal(classes="row"):
+                        yield Static("Split direction", classes="label")
+                        with RadioSet(id="split"):
+                            yield RadioButton(
+                                "vertical",
+                                value=self._pane.split_direction == "vertical",
+                            )
+                            yield RadioButton(
+                                "horizontal",
+                                value=self._pane.split_direction == "horizontal",
+                            )
+                            yield RadioButton(
+                                "(none)",
+                                value=self._pane.split_direction is None,
+                            )
+                else:
+                    with Horizontal(classes="row"):
+                        yield Static("Command", classes="label")
+                        yield Input(
+                            value=self._pane.command or "",
+                            id="command",
+                            placeholder="e.g. nvim",
+                        )
+                    with Horizontal(classes="row"):
+                        yield Static("Args", classes="label")
+                        yield Input(
+                            value=shlex.join(self._pane.args) if self._pane.args else "",
+                            id="args",
+                            placeholder="e.g. --verbose --file foo.txt",
+                        )
+                    with Horizontal(classes="row"):
+                        yield Static("CWD", classes="label")
+                        yield Input(
+                            value=self._pane.cwd or "",
+                            id="cwd",
+                            placeholder="optional, e.g. /home/martin/proj",
+                        )
+                    with Horizontal(classes="row"):
+                        yield Static("Start suspended", classes="label")
+                        yield Switch(
+                            value=self._pane.start_suspended, id="start_suspended"
+                        )
+                    with Horizontal(classes="row"):
+                        yield Static("Borderless", classes="label")
+                        yield Switch(value=self._pane.borderless, id="borderless")
 
             with Horizontal(id="buttons"):
                 yield Button("Cancel", id="cancel")
@@ -427,9 +498,6 @@ class EditColorModal(ModalScreen[str | None]):
         align-horizontal: right;
         height: 3;
         margin-top: 1;
-    }
-    Button {
-        margin-left: 1;
     }
     """
 
@@ -544,9 +612,6 @@ class UnsavedChangesModal(ModalScreen["UnsavedChangesChoice"]):
         align-horizontal: right;
         height: 3;
     }
-    Button {
-        margin-left: 1;
-    }
     """
 
     def __init__(
@@ -590,6 +655,74 @@ class UnsavedChangesModal(ModalScreen["UnsavedChangesChoice"]):
         self.dismiss("cancel")
 
 
+class KdlPreviewModal(ModalScreen[None]):
+    """Modal de solo lectura que muestra contenido KDL con scroll.
+    Util para previsualizar el archivo de layout antes de guardar.
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss_none", "Close"),
+        Binding("q", "noop", show=False),
+        Binding("ctrl+q", "noop", show=False),
+    ]
+
+    DEFAULT_CSS = """
+    KdlPreviewModal {
+        align: center middle;
+    }
+    #dialog {
+        width: 80%;
+        height: 80%;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #title {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+        height: 1;
+    }
+    #scroller {
+        height: 1fr;
+        border: solid $panel;
+    }
+    #content {
+        padding: 0 1;
+    }
+    #buttons {
+        align-horizontal: right;
+        height: 3;
+        margin-top: 1;
+    }
+    """
+
+    def __init__(self, *, title: str, content: str) -> None:
+        super().__init__()
+        self._title = title
+        self._content = content
+
+    def compose(self) -> ComposeResult:
+        from textual.containers import VerticalScroll
+
+        with Vertical(id="dialog"):
+            yield Static(self._title, id="title")
+            with VerticalScroll(id="scroller"):
+                yield Static(self._content, id="content")
+            with Horizontal(id="buttons"):
+                yield Button("Close", id="close", variant="primary")
+
+    @on(Button.Pressed, "#close")
+    def _on_close(self) -> None:
+        self.dismiss(None)
+
+    def action_dismiss_none(self) -> None:
+        self.dismiss(None)
+
+    def action_noop(self) -> None:
+        pass
+
+
 class FontPickerModal(ModalScreen[str | None]):
     """Modal para elegir una fuente de una lista (e.g. monoespaciadas
     detectadas en el sistema). Devuelve el nombre elegido o None si
@@ -626,9 +759,6 @@ class FontPickerModal(ModalScreen[str | None]):
     #buttons {
         align-horizontal: right;
         height: 3;
-    }
-    Button {
-        margin-left: 1;
     }
     """
 
@@ -723,9 +853,6 @@ class EnumPickerModal(ModalScreen[str | None]):
     #buttons {
         align-horizontal: right;
         height: 3;
-    }
-    Button {
-        margin-left: 1;
     }
     """
 
