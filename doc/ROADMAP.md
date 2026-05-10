@@ -6,28 +6,37 @@ batches. Patch versions are bug-fix-only.
 
 ## v1.2.0 (next)
 
-- **Terminal startup command.** Allow defining a command (or script)
-  that runs every time a new terminal session is opened. Auto-detect
-  scripts in `~/.bashrc.d/` and offer them as a list, with the
-  option to point at a specific script or write a literal command.
-  Ships with a **"Commodore 64 terminal" walkthrough** in the docs
-  as showcase: combines the pane bg/fg from v1.1.0 with a custom
-  welcome banner via this startup command, producing a retro
-  C64-styled terminal end-to-end.
+### Feature
 
-## v1.3.0
+- **Reusable file picker widget.** A `FilePickerModal` that lists
+  files from a configurable directory (with extension filtering
+  and a fallback to manual path entry). Replaces the typed-path
+  inputs in two places:
+  - **Import of theme/settings** in the colors and terminal-settings
+    editors. Today the importer asks for a filename (resolved
+    against the backend's config dir) or an absolute path. The new
+    picker lists the existing files (e.g. `.toml` in
+    `~/.config/alacritty/`, `.conf` in `~/.config/kitty/`).
+  - **Pane `command` field** in the layout editor. Today the user
+    has to type the full path of an executable script. The picker
+    lets them browse the filesystem; the field still accepts free
+    text for commands resolved via `$PATH` (`bash`, `vim`, etc.).
 
-- **File picker for theme/settings imports.** Today the importer
-  takes a typed filename (resolved against the backend's config
-  directory) or an absolute path. Both work but force the user to
-  remember filenames. Add a visual picker that lists the config
-  files already in the backend's directory (e.g. `.toml` files in
-  `~/.config/alacritty/`, `.conf` files in `~/.config/kitty/`),
-  with a fallback to manual path entry for files outside that
-  directory. Open design question for the implementation: list-only
-  with a separate "type a path" action, or hybrid with
-  autocomplete-style input filtered by the list. To decide when
-  drafting the plan.
+### Showcase doc (not a feature)
+
+- **Retro boot-screen walkthrough.** A use-case example, not a new
+  ZTC feature. Combines features that already exist or land in
+  v1.2.0 to recreate the visual style of a classic 8-bit boot screen
+  (purple frame around a darker terminal area, a banner script that
+  prints terminal identity — name, versions, memory, etc.). Pieces:
+  - Terminal bg color + padding from v1.0.0
+  - Pane `default_bg` / `default_fg` from v1.1.0
+  - File picker (v1.2.0) for selecting the banner script in the
+    pane's command field
+  - A bash banner script (shown inline in the doc) that the user
+    saves locally; no bundled assets in ZTC
+  The walkthrough is purely descriptive — its purpose is to show
+  how ZTC's existing features compose into a complete custom look.
 
 ## Released
 
