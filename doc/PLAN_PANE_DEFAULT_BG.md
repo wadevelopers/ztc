@@ -159,52 +159,86 @@ def is_valid_zellij_pane_color(value: str) -> bool:
   `default_bg` and `default_fg` are pane-local visual overrides; the
   rest are theme-level.
 
-## Stage 2 — visual UX (follow-up plan)
+## Stage 2 — visual UX (revised after Stage 1 feedback)
 
-Goal: surface `default_bg` and `default_fg` visually in the layout
-editor, consistent with how the sessions detail view already shows
-swatches.
+Goal: improve readability and visibility of pane attributes in the
+layout editor's tree, including the new `default_bg`/`default_fg`
+fields. Three independent improvements.
 
-### Swatch placement policy
+### A — Expand-to-attributes en el árbol
 
-Sessions detail today (`src/ztc/sessions/screens/picker.py:343-358`)
-shows swatches **only on leaves**, not on containers. Stage 2 mirrors
-that policy in the layout editor:
+Today the tree shows containers with their child panes nested below,
+and leaves with `expand=True` but nothing inside (so the expand
+triangle is meaningless on leaves). All pane info is concatenated
+into one label string: `pane "name"  command=btop  suspended  focus`.
 
-- **Leaves with `default_bg` set**: show a swatch in the tree label
-  and in the modal preview. If `default_fg` is also set, the swatch
-  uses bg as background and fg as text color (preview shows actual
-  rendered look). If `default_fg` is not set, the swatch uses an
-  automatic contrast color (black or white based on bg luminance,
-  same logic as the existing `_contrast_text_color`).
-- **Leaves with only `default_fg` set (no bg)**: **no swatch**. A
-  swatch needs a background to be meaningful, and rendering a
-  one-cell foreground sample without context is more confusing than
-  helpful. The fg value is still visible in the modal text input;
-  it just has no visual preview in the tree.
-- **Containers**: no swatch even if either field is set. Containers
-  are structural; their visible area is mostly covered by children.
+After Stage 2:
 
-If at some point we observe that containers with these fields are
-common in the wild, both views (sessions detail and layout editor)
-should be updated together to add container swatches — but that is
-a separate iteration, not Stage 2.
+- **Containers**: unchanged. Their label shows direction + size
+  (`[ horizontal ] [60%]`); expanding shows their child panes. They
+  do not show attribute child rows even if `default_bg`/`default_fg`
+  is set on them (per swatch placement policy below).
+- **Leaves with attributes** (any of `size`, `command`, `args`,
+  `cwd`, `start_suspended`, `focus`, `borderless`, `default_bg`,
+  `default_fg`): label shows just `pane "name"`; expanding shows
+  one child row per attribute (`command: btop`, `default_bg: ████ #14171f`,
+  etc.). Default-collapsed; the user expands to see details.
+- **Leaves with no attributes** (only `name` or nothing): no expand
+  triangle. Implemented via `parent.add_leaf(label)` instead of
+  `parent.add(label)`.
+
+The `default_bg` / `default_fg` attribute rows include an inline
+swatch (Rich markup `[on #color]    [/]`) before the value, giving
+a visual cue without taking a separate column.
+
+### B — `pane` label coloreado distintivo
+
+The current tree mixes 3 row types that all render the same color:
+container labels (`[ vertical ]`), pane labels (`pane`), and the new
+attribute child rows. Coloring the `pane` keyword makes hierarchy
+obvious at a glance.
+
+Implementation: render the `pane` label using Rich markup with
+`$accent` (Textual theme variable) so the keyword stands out without
+breaking theme consistency. If Rich markup parsing rejects `$accent`,
+fall back to resolving the variable at runtime via
+`self.app.get_css_variables()`.
+
+### C — Live color preview in `PaneEditModal`
+
+Each of the new "Default bg" / "Default fg" rows in the modal gets
+a small Static next to its Input. The Static updates on
+`Input.Changed` to show the current color. If the typed value is
+invalid (per `is_valid_zellij_pane_color`), the preview clears (no
+broken Rich markup).
+
+Because Rich markup understands `#rrggbb` and similar but **does not
+understand** `rgb:rr/gg/bb`, the preview helper converts to a
+Rich-compatible hex form before rendering. New helper
+`zellij_color_to_rich_hex(value)` in `services/colors.py`.
 
 ### Files
 
 | # | Path | Change |
 |---|---|---|
-| 1 | `src/ztc/services/colors.py` | Extract `bg_swatch()` and `contrast_text_color()` from `sessions/screens/picker.py:390-409`. They are general color utilities, not session-specific. Extend `bg_swatch` to take an optional `fg` parameter so it can render with a custom foreground. |
-| 2 | `src/ztc/sessions/screens/picker.py` | Replace the private `_bg_swatch` and `_contrast_text_color` methods with calls to the extracted helpers. Pass the new `default_fg` from the model when present. Behavior unchanged when only bg is set. |
-| 3 | `src/ztc/screens/layout_editor.py` | When rendering a leaf pane in the tree label, prepend the swatch when `default_bg` is set (per the swatch placement policy above). Containers and leaves with only `default_fg` get no swatch. |
-| 4 | `src/ztc/widgets/confirm.py` | Replace the plain Inputs in `PaneEditModal` with rows that show a live swatch preview next to the Input (same pattern as `EditColorModal`'s preview, inlined). The combined swatch shows bg+fg as the user types. |
-| 5 | tests | Visual rendering helpers; modal swatch updates as the user types. |
+| 1 | `src/ztc/services/colors.py` | New helper `zellij_color_to_rich_hex(value: str) -> str \| None` that converts Zellij formats (`#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb:rr/gg/bb`) to a Rich-compatible `#rrggbb` string, or `None` if the input is invalid. Used by both the tree attribute row swatches and the modal preview. |
+| 2 | `src/ztc/screens/layout_editor.py` | (A + B) Rewrite `_pane_label` and `_add_pane_node`: leaves use `add_leaf` when no attributes; otherwise add expandable node and emit one attribute row per non-default field. `pane` label uses `$accent` Rich markup. New helper `_pane_attribute_rows(pane)` returns `list[str]` of formatted attribute lines. |
+| 3 | `src/ztc/widgets/confirm.py` | (C) Add a Static next to each `Default bg` / `Default fg` Input in `PaneEditModal`. Wire `Input.Changed` handlers to update the previews via `zellij_color_to_rich_hex`. Initial value at mount time also reflected. |
+| 4 | `tests/test_layout_editor_screen.py` | Test that an attributes-rich leaf renders attribute child rows; that an empty leaf has no expand triangle (`allow_expand` False or uses `add_leaf`); that the `pane` label includes `$accent` markup. |
+| 5 | `tests/test_widgets_confirm.py` (new file or extend existing) | Test that typing a valid color in the modal updates the preview; typing invalid clears it. |
 
-### Open questions for Stage 2
+### Out of scope for Stage 2 (deferred)
 
-- Should the modal also offer a quick-pick palette of the active
-  Zellij theme's colors (`bg`, `black`, `blue`, etc.)? Useful but
-  adds layout complexity. Decide when entering Stage 2.
+- **Refactor of swatch helpers** (`_bg_swatch` in picker.py): the
+  picker's swatch uses size text inside the colored block in a tree
+  label context — genuinely different from the modal preview's
+  widget-update pattern. Extracting would force an abstraction that
+  doesn't fit. Will revisit if a fourth use site appears.
+- **Quick-pick palette** of theme colors as buttons in the modal:
+  no precedent in the rest of the app, would create UX inconsistency
+  if added only here. Skipped.
+- **Sessions detail container swatches**: out of scope (this plan is
+  about the layout editor; sessions detail policy is unchanged).
 
 ## Notes for review
 

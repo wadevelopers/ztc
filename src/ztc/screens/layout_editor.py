@@ -130,6 +130,11 @@ class LayoutEditorScreen(Screen[None]):
         self.dirty = False
         self._selected_tab_index = 0 if layout.tabs else -1
         self._selected_pane_id: int | None = None
+        # Hex resuelto del color $accent del tema actual. Se setea al
+        # mount porque Rich no entiende `$accent` en markup; lo
+        # resolvemos via `app.get_css_variables()`. Si no hay tema
+        # mounted (caso tests), cae al string `cyan`.
+        self._accent_hex: str = "cyan"
 
     def compose(self) -> ComposeResult:
         yield StaticHeader()
@@ -214,6 +219,12 @@ class LayoutEditorScreen(Screen[None]):
         return self._key_chip("Tab", "Focus")
 
     def on_mount(self) -> None:
+        # Resolver `$accent` del tema activo a un hex usable en Rich
+        # markup. Si la variable no esta o tiene formato no-hex (ej.
+        # `auto 60%` para text-muted), caemos a un Rich color name.
+        raw_accent = self.app.get_css_variables().get("accent", "")
+        if raw_accent.startswith("#"):
+            self._accent_hex = raw_accent
         self._refresh_header()
         self._rebuild_tabs()
         self._rebuild_tree()
@@ -269,28 +280,82 @@ class LayoutEditorScreen(Screen[None]):
         self._restore_selection(tree)
 
     def _add_pane_node(self, parent: TreeNode[Pane], pane: Pane) -> TreeNode[Pane]:
-        node = parent.add(self._pane_label(pane), data=pane, expand=True)
-        for child in pane.children:
-            self._add_pane_node(node, child)
+        if pane.is_container:
+            # Containers expanden mostrando sus panes hijos. Atributos
+            # como default_bg/fg en containers no se exponen en el arbol
+            # (rara vez se usan; editables via modal de todas formas).
+            node = parent.add(self._pane_label(pane), data=pane, expand=True)
+            for child in pane.children:
+                self._add_pane_node(node, child)
+            return node
+
+        # Leaf: si tiene atributos no-default, expanden mostrandolos uno
+        # por linea hija. Si no, se agregan como leaf (sin triangulo).
+        attr_rows = self._pane_attribute_rows(pane)
+        if attr_rows:
+            node = parent.add(self._pane_label(pane), data=pane, expand=False)
+            for row in attr_rows:
+                node.add_leaf(row)
+        else:
+            node = parent.add_leaf(self._pane_label(pane), data=pane)
         return node
 
     def _pane_label(self, pane: Pane) -> str:
-        parts: list[str] = []
         if pane.is_container:
-            parts.append(f"[ {pane.split_direction or 'container'} ]")
-        else:
-            parts.append("pane")
-        if pane.size:
-            parts.append(f"[{pane.size}]")
+            # Container: direccion + size en el label. No coloreado.
+            parts: list[str] = [f"[ {pane.split_direction or 'container'} ]"]
+            if pane.size:
+                parts.append(f"[{pane.size}]")
+            return "  ".join(parts)
+
+        # Leaf: el keyword `pane` coloreado con accent (resuelto a hex
+        # en `on_mount`) para destacar del resto de filas (containers
+        # + atributos hijos).
+        accent = self._accent_hex
+        parts = [f"[bold {accent}]pane[/]"]
         if pane.name:
-            parts.append(f'"{pane.name}"')
-        if pane.command:
-            parts.append(f"command={pane.command}")
-        if pane.start_suspended:
-            parts.append("suspended")
-        if pane.focus:
-            parts.append("focus")
+            parts.append(f'[{accent}]"{pane.name}"[/]')
         return "  ".join(parts)
+
+    def _pane_attribute_rows(self, pane: Pane) -> list[str]:
+        """Filas hijas que se muestran al expandir un leaf con atributos.
+        Una fila por atributo no-default. `default_bg`/`default_fg` traen
+        un swatch inline (`[on #color]    [/]`) antes del valor.
+        Los prefixes usan `dim` (Rich-native) en vez de `$text-muted`
+        (que es `auto 60%` y no es Rich-compatible)."""
+        from ztc.services.colors import zellij_color_to_rich_hex
+
+        rows: list[str] = []
+        if pane.size:
+            rows.append(f"[dim]size:[/] {pane.size}")
+        if pane.command:
+            rows.append(f"[dim]command:[/] {pane.command}")
+        if pane.args:
+            rows.append(f"[dim]args:[/] {' '.join(pane.args)}")
+        if pane.cwd:
+            rows.append(f"[dim]cwd:[/] {pane.cwd}")
+        if pane.start_suspended:
+            rows.append("[dim]start_suspended:[/] true")
+        if pane.focus:
+            rows.append("[dim]focus:[/] true")
+        if pane.borderless:
+            rows.append("[dim]borderless:[/] true")
+        if pane.default_bg:
+            swatch = self._inline_swatch(pane.default_bg, zellij_color_to_rich_hex)
+            rows.append(f"[dim]default_bg:[/] {swatch} {pane.default_bg}")
+        if pane.default_fg:
+            swatch = self._inline_swatch(pane.default_fg, zellij_color_to_rich_hex)
+            rows.append(f"[dim]default_fg:[/] {swatch} {pane.default_fg}")
+        return rows
+
+    @staticmethod
+    def _inline_swatch(color_value: str, converter) -> str:
+        """Devuelve el bloque de color como markup Rich, o un placeholder
+        si el valor no es convertible (ej. invalido escrito a mano)."""
+        rich_hex = converter(color_value)
+        if rich_hex is None:
+            return "    "
+        return f"[on {rich_hex}]    [/]"
 
     def _restore_selection(self, tree: Tree[Pane]) -> None:
         if self._selected_pane_id is None:

@@ -322,6 +322,12 @@ class PaneEditModal(ModalScreen[Pane | None]):
     Switch {
         width: auto;
     }
+    .color-preview {
+        width: 6;
+        height: 1;
+        margin-left: 1;
+        margin-top: 1;
+    }
     RadioSet {
         width: 1fr;
         height: 3;
@@ -372,6 +378,7 @@ class PaneEditModal(ModalScreen[Pane | None]):
                         id="default_bg",
                         placeholder="#rrggbb / rgb:rr/gg/bb",
                     )
+                    yield Static("    ", id="default_bg-preview", classes="color-preview")
                 with Horizontal(classes="row"):
                     yield Static("Default fg", classes="label")
                     yield Input(
@@ -379,6 +386,7 @@ class PaneEditModal(ModalScreen[Pane | None]):
                         id="default_fg",
                         placeholder="#rrggbb / rgb:rr/gg/bb",
                     )
+                    yield Static("    ", id="default_fg-preview", classes="color-preview")
 
                 if self._is_container:
                     with Horizontal(classes="row"):
@@ -433,6 +441,9 @@ class PaneEditModal(ModalScreen[Pane | None]):
 
     def on_mount(self) -> None:
         self.query_one("#name", Input).focus()
+        # Preview inicial reflejando el valor del modelo (si trae color).
+        self._refresh_color_preview("default_bg")
+        self._refresh_color_preview("default_fg")
 
     @on(Button.Pressed, "#cancel")
     def _on_cancel(self) -> None:
@@ -441,6 +452,27 @@ class PaneEditModal(ModalScreen[Pane | None]):
     @on(Button.Pressed, "#save")
     def _on_save(self) -> None:
         self._submit()
+
+    @on(Input.Changed, "#default_bg")
+    def _on_default_bg_changed(self) -> None:
+        self._refresh_color_preview("default_bg")
+
+    @on(Input.Changed, "#default_fg")
+    def _on_default_fg_changed(self) -> None:
+        self._refresh_color_preview("default_fg")
+
+    def _refresh_color_preview(self, field_id: str) -> None:
+        """Actualiza el bloque de color al lado del Input segun el valor
+        actual. Si el valor es invalido o vacio, limpia el preview."""
+        from ztc.services.colors import zellij_color_to_rich_hex
+
+        value = self.query_one(f"#{field_id}", Input).value.strip()
+        preview = self.query_one(f"#{field_id}-preview", Static)
+        rich_hex = zellij_color_to_rich_hex(value) if value else None
+        if rich_hex is None:
+            preview.update("    ")
+        else:
+            preview.update(f"[on {rich_hex}]    [/]")
 
     def action_dismiss_none(self) -> None:
         self.dismiss(None)

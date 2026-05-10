@@ -47,6 +47,34 @@ def is_valid_zellij_pane_color(value: str) -> bool:
     return bool(_ZELLIJ_PANE_COLOR.match(value.strip()))
 
 
+def zellij_color_to_rich_hex(value: str) -> str | None:
+    """Convierte un color en formato Zellij a un `#rrggbb` que Rich
+    entiende para usar como bg/fg en markup. Devuelve None si el
+    formato no es valido.
+
+    Necesario porque Rich entiende `#rgb`, `#rrggbb`, `#rrggbbaa`
+    pero NO `rgb:rr/gg/bb` (sintaxis X11). El alpha en `#rrggbbaa`
+    se descarta — Rich no compone bg con alpha."""
+    s = value.strip()
+    if not is_valid_zellij_pane_color(s):
+        return None
+    if s.startswith("#"):
+        body = s[1:]
+        if len(body) == 3:
+            # Expandir #rgb -> #rrggbb
+            return "#" + "".join(c * 2 for c in body)
+        if len(body) == 8:
+            # Truncar alpha
+            return "#" + body[:6]
+        return s  # ya es #rrggbb
+    if s.startswith("rgb:"):
+        # rgb:6c/72/a4 -> #6c72a4
+        parts = s[4:].split("/")
+        if len(parts) == 3:
+            return "#" + "".join(parts)
+    return None
+
+
 def normalize_hex(value: str) -> str:
     """Devuelve el valor en minusculas con #. Asume que ya es hex valido."""
     return "#" + value.strip().lstrip("#").lower()
