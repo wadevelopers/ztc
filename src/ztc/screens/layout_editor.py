@@ -41,7 +41,15 @@ class _LayoutTabsList(OptionList):
 class _PaneTree(Tree):
     """Tree con bindings explicitos: navegacion vertical + expand/collapse,
     todos con description para que aparezcan con label en el Command
-    Palette."""
+    Palette.
+
+    Skip de attribute rows: las property rows hijas de un leaf (que
+    muestran `command: btop`, `default_bg: ...`, etc.) son display-only
+    — no admiten Edit/Split/Delete porque son atributos del pane padre,
+    no entidades navegables. Se identifican por `data is None` (las
+    pane nodes se agregan con `data=pane`; las attribute rows con
+    `add_leaf(row)` sin data). El override de `action_cursor_down/up`
+    salta sobre esas y aterriza en el siguiente nodo con data."""
 
     BINDINGS = [
         Binding("up", "cursor_up", "Up", show=False),
@@ -49,6 +57,73 @@ class _PaneTree(Tree):
         Binding("space", "toggle_node", "Toggle", show=False),
         Binding("enter", "select_cursor", "Select", show=False),
     ]
+
+    def action_cursor_down(self) -> None:
+        starting_line = self.cursor_line
+        super().action_cursor_down()
+        self._skip_property_rows_or_revert("down", starting_line)
+
+    def action_cursor_up(self) -> None:
+        starting_line = self.cursor_line
+        super().action_cursor_up()
+        self._skip_property_rows_or_revert("up", starting_line)
+
+    @staticmethod
+    def _is_property_row(node) -> bool:
+        """True si el nodo es una fila de atributo (hija de un pane),
+        False si es la raiz del arbol o un pane. Discriminador: la raiz
+        tiene `parent is None`; las property rows tienen un parent con
+        data (= un pane). Los panes mismos tienen data."""
+        return (
+            node.data is None
+            and node.parent is not None
+            and node.parent.data is not None
+        )
+
+    def _skip_property_rows_or_revert(
+        self, direction: str, starting_line: int
+    ) -> None:
+        """Si tras el move el cursor cayo en una property row, avanza
+        en la misma direccion hasta encontrar un nodo navegable (raiz
+        o pane). Si llega a la boundary del arbol sin encontrar uno,
+        revierte a `starting_line`. La raiz SI es navegable — el cursor
+        puede llegar a `tab: xxx` con flechas."""
+        step = (
+            super().action_cursor_down
+            if direction == "down"
+            else super().action_cursor_up
+        )
+        while self.cursor_node is not None and self._is_property_row(
+            self.cursor_node
+        ):
+            previous_line = self.cursor_line
+            step()
+            if self.cursor_line == previous_line:
+                # Boundary alcanzada y seguimos en property row:
+                # revertir al punto de partida para no quedarse trabado.
+                self.cursor_line = starting_line
+                return
+
+    def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:
+        """Fallback para casos donde el cursor llega a una property row
+        sin pasar por `action_cursor_*` — tipicamente click del mouse.
+        Redirige al pane padre.
+
+        Importante: chequeamos `self.cursor_node` (estado **actual**),
+        NO `event.node`. Durante el skip de teclado, super() mueve el
+        cursor por cada property row intermedia y postea un
+        NodeHighlighted por cada paso. Cuando esos eventos se procesan,
+        el cursor ya esta en su posicion final (un pane data-bearing) —
+        si chequearamos `event.node` redirigiriamos a esa property row
+        deshaciendo el avance del skip. Chequeando el cursor actual,
+        durante skip la condicion siempre es False (cursor ya esta en
+        un nodo navegable), y solo se activa para clicks del mouse o
+        movimientos directos via `move_cursor`."""
+        del event  # consultamos `self.cursor_node`, no el evento
+        if self.cursor_node is None:
+            return
+        if self._is_property_row(self.cursor_node):
+            self.move_cursor(self.cursor_node.parent)
 
 
 class LayoutEditorScreen(Screen[None]):
@@ -291,13 +366,19 @@ class LayoutEditorScreen(Screen[None]):
 
         # Leaf: si tiene atributos no-default, expanden mostrandolos uno
         # por linea hija. Si no, se agregan como leaf (sin triangulo).
+        # Para alineacion vertical: Textual omite el icono completo (~2
+        # cells) cuando un nodo no tiene children ni allow_expand. Sin
+        # compensacion, los empty leaves se ven movidos a la izquierda
+        # respecto a sus hermanos con triangulo. Prepend `━ ` (heavy
+        # horizontal + espacio, 2 cells) al label como marcador "este
+        # leaf no se expande" — alineacion preservada y senal visual.
         attr_rows = self._pane_attribute_rows(pane)
         if attr_rows:
             node = parent.add(self._pane_label(pane), data=pane, expand=False)
             for row in attr_rows:
                 node.add_leaf(row)
         else:
-            node = parent.add_leaf(self._pane_label(pane), data=pane)
+            node = parent.add_leaf("━ " + self._pane_label(pane), data=pane)
         return node
 
     def _pane_label(self, pane: Pane) -> str:
@@ -319,43 +400,45 @@ class LayoutEditorScreen(Screen[None]):
 
     def _pane_attribute_rows(self, pane: Pane) -> list[str]:
         """Filas hijas que se muestran al expandir un leaf con atributos.
-        Una fila por atributo no-default. `default_bg`/`default_fg` traen
-        un swatch inline (`[on #color]    [/]`) antes del valor.
-        Los prefixes usan `dim` (Rich-native) en vez de `$text-muted`
-        (que es `auto 60%` y no es Rich-compatible)."""
+        Una fila por atributo no-default. Toda la fila va envuelta en
+        `[dim]...[/]` para que el cursor solo destaque visualmente los
+        nodos accionables (panes, raiz). `default_bg`/`default_fg` traen
+        un swatch inline; el `[on #color]` del swatch compone con el
+        `[dim]` exterior (Rich respeta styles anidados)."""
         from ztc.services.colors import zellij_color_to_rich_hex
 
         rows: list[str] = []
         if pane.size:
-            rows.append(f"[dim]size:[/] {pane.size}")
+            rows.append(f"[dim]size: {pane.size}[/]")
         if pane.command:
-            rows.append(f"[dim]command:[/] {pane.command}")
+            rows.append(f"[dim]command: {pane.command}[/]")
         if pane.args:
-            rows.append(f"[dim]args:[/] {' '.join(pane.args)}")
+            rows.append(f"[dim]args: {' '.join(pane.args)}[/]")
         if pane.cwd:
-            rows.append(f"[dim]cwd:[/] {pane.cwd}")
+            rows.append(f"[dim]cwd: {pane.cwd}[/]")
         if pane.start_suspended:
-            rows.append("[dim]start_suspended:[/] true")
+            rows.append("[dim]start_suspended: true[/]")
         if pane.focus:
-            rows.append("[dim]focus:[/] true")
+            rows.append("[dim]focus: true[/]")
         if pane.borderless:
-            rows.append("[dim]borderless:[/] true")
+            rows.append("[dim]borderless: true[/]")
         if pane.default_bg:
             swatch = self._inline_swatch(pane.default_bg, zellij_color_to_rich_hex)
-            rows.append(f"[dim]default_bg:[/] {swatch} {pane.default_bg}")
+            rows.append(f"[dim]default_bg: {swatch} {pane.default_bg}[/]")
         if pane.default_fg:
             swatch = self._inline_swatch(pane.default_fg, zellij_color_to_rich_hex)
-            rows.append(f"[dim]default_fg:[/] {swatch} {pane.default_fg}")
+            rows.append(f"[dim]default_fg: {swatch} {pane.default_fg}[/]")
         return rows
 
     @staticmethod
     def _inline_swatch(color_value: str, converter) -> str:
-        """Devuelve el bloque de color como markup Rich, o un placeholder
-        si el valor no es convertible (ej. invalido escrito a mano)."""
+        """Devuelve el bloque de color como markup Rich (2 cells —
+        cuadrado en proporciones de terminal). Si el valor no es
+        convertible, devuelve placeholder vacio del mismo ancho."""
         rich_hex = converter(color_value)
         if rich_hex is None:
-            return "    "
-        return f"[on {rich_hex}]    [/]"
+            return "  "
+        return f"[on {rich_hex}]  [/]"
 
     def _restore_selection(self, tree: Tree[Pane]) -> None:
         if self._selected_pane_id is None:

@@ -299,12 +299,12 @@ class PaneEditModal(ModalScreen[Pane | None]):
         margin-bottom: 1;
         height: 1;
     }
-    /* El form ocupa el espacio entre title y buttons; VerticalScroll
-       habilita scroll cuando el contenido excede la altura disponible. */
     #form {
+        width: 100%;
         height: 1fr;
     }
     .row {
+        width: 100%;
         height: 3;
         margin-bottom: 0;
     }
@@ -313,19 +313,24 @@ class PaneEditModal(ModalScreen[Pane | None]):
         color: $text-muted;
         padding-top: 1;
     }
-    .narrow {
-        width: 30;
-    }
     Input {
         width: 1fr;
     }
     Switch {
         width: auto;
     }
+    .field {
+        width: 1fr;
+        height: 3;
+        layout: horizontal;
+    }
+    .color-field {
+        padding-right: 3;
+    }
     .color-preview {
-        width: 6;
+        dock: right;
+        width: 2;
         height: 1;
-        margin-left: 1;
         margin-top: 1;
     }
     RadioSet {
@@ -355,43 +360,54 @@ class PaneEditModal(ModalScreen[Pane | None]):
             with VerticalScroll(id="form"):
                 with Horizontal(classes="row"):
                     yield Static("Name", classes="label")
-                    yield Input(
-                        value=self._pane.name or "", id="name", placeholder="optional"
-                    )
+                    with Horizontal(classes="field"):
+                        yield Input(
+                            value=self._pane.name or "",
+                            id="name",
+                            placeholder="optional",
+                        )
 
                 with Horizontal(classes="row"):
                     yield Static("Size", classes="label")
-                    yield Input(
-                        value=self._pane.size or "",
-                        id="size",
-                        placeholder="e.g. 60% or 1",
-                    )
+                    with Horizontal(classes="field"):
+                        yield Input(
+                            value=self._pane.size or "",
+                            id="size",
+                            placeholder="e.g. 60% or 1",
+                        )
 
                 with Horizontal(classes="row"):
                     yield Static("Focus", classes="label")
-                    yield Switch(value=self._pane.focus, id="focus")
+                    with Horizontal(classes="field"):
+                        yield Switch(value=self._pane.focus, id="focus")
 
                 with Horizontal(classes="row"):
                     yield Static("Default bg", classes="label")
-                    yield Input(
-                        value=self._pane.default_bg or "",
-                        id="default_bg",
-                        placeholder="#rrggbb / rgb:rr/gg/bb",
-                    )
-                    yield Static("    ", id="default_bg-preview", classes="color-preview")
+                    with Horizontal(classes="field color-field"):
+                        yield Input(
+                            value=self._pane.default_bg or "",
+                            id="default_bg",
+                            placeholder="#rrggbb / rgb:rr/gg/bb",
+                        )
+                        yield Static(
+                            "  ", id="default_bg-preview", classes="color-preview"
+                        )
                 with Horizontal(classes="row"):
                     yield Static("Default fg", classes="label")
-                    yield Input(
-                        value=self._pane.default_fg or "",
-                        id="default_fg",
-                        placeholder="#rrggbb / rgb:rr/gg/bb",
-                    )
-                    yield Static("    ", id="default_fg-preview", classes="color-preview")
+                    with Horizontal(classes="field color-field"):
+                        yield Input(
+                            value=self._pane.default_fg or "",
+                            id="default_fg",
+                            placeholder="#rrggbb / rgb:rr/gg/bb",
+                        )
+                        yield Static(
+                            "  ", id="default_fg-preview", classes="color-preview"
+                        )
 
                 if self._is_container:
                     with Horizontal(classes="row"):
                         yield Static("Split direction", classes="label")
-                        with RadioSet(id="split"):
+                        with Horizontal(classes="field"), RadioSet(id="split"):
                             yield RadioButton(
                                 "vertical",
                                 value=self._pane.split_direction == "vertical",
@@ -407,33 +423,43 @@ class PaneEditModal(ModalScreen[Pane | None]):
                 else:
                     with Horizontal(classes="row"):
                         yield Static("Command", classes="label")
-                        yield Input(
-                            value=self._pane.command or "",
-                            id="command",
-                            placeholder="e.g. nvim",
-                        )
+                        with Horizontal(classes="field"):
+                            yield Input(
+                                value=self._pane.command or "",
+                                id="command",
+                                placeholder="e.g. nvim",
+                            )
                     with Horizontal(classes="row"):
                         yield Static("Args", classes="label")
-                        yield Input(
-                            value=shlex.join(self._pane.args) if self._pane.args else "",
-                            id="args",
-                            placeholder="e.g. --verbose --file foo.txt",
-                        )
+                        with Horizontal(classes="field"):
+                            yield Input(
+                                value=(
+                                    shlex.join(self._pane.args)
+                                    if self._pane.args
+                                    else ""
+                                ),
+                                id="args",
+                                placeholder="e.g. --verbose --file foo.txt",
+                            )
                     with Horizontal(classes="row"):
                         yield Static("CWD", classes="label")
-                        yield Input(
-                            value=self._pane.cwd or "",
-                            id="cwd",
-                            placeholder="optional, e.g. /home/martin/proj",
-                        )
+                        with Horizontal(classes="field"):
+                            yield Input(
+                                value=self._pane.cwd or "",
+                                id="cwd",
+                                placeholder="optional, e.g. /home/martin/proj",
+                            )
                     with Horizontal(classes="row"):
                         yield Static("Start suspended", classes="label")
-                        yield Switch(
-                            value=self._pane.start_suspended, id="start_suspended"
-                        )
+                        with Horizontal(classes="field"):
+                            yield Switch(
+                                value=self._pane.start_suspended,
+                                id="start_suspended",
+                            )
                     with Horizontal(classes="row"):
                         yield Static("Borderless", classes="label")
-                        yield Switch(value=self._pane.borderless, id="borderless")
+                        with Horizontal(classes="field"):
+                            yield Switch(value=self._pane.borderless, id="borderless")
 
             with Horizontal(id="buttons"):
                 yield Button("Cancel", id="cancel")
@@ -470,9 +496,9 @@ class PaneEditModal(ModalScreen[Pane | None]):
         preview = self.query_one(f"#{field_id}-preview", Static)
         rich_hex = zellij_color_to_rich_hex(value) if value else None
         if rich_hex is None:
-            preview.update("    ")
+            preview.update("  ")
         else:
-            preview.update(f"[on {rich_hex}]    [/]")
+            preview.update(f"[on {rich_hex}]  [/]")
 
     def action_dismiss_none(self) -> None:
         self.dismiss(None)
@@ -979,4 +1005,3 @@ class EnumPickerModal(ModalScreen[str | None]):
 
     def action_dismiss_none(self) -> None:
         self.dismiss(None)
-

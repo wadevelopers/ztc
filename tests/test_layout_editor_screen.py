@@ -289,6 +289,112 @@ async def test_tree_leaf_with_attributes_expands_to_child_rows(tmp_path: Path) -
         assert "#f8f8f2" in joined
 
 
+async def test_tree_cursor_skips_property_rows_at_end_of_tree(tmp_path: Path) -> None:
+    """Edge case: si la ultima fila visible del arbol es una property
+    row (atributo de un leaf expandido), el cursor no debe quedarse
+    parado ahi. Debe revertir a la ultima posicion data-bearing."""
+    from ztc.models.layout import Pane
+
+    paths = _paths_with_layout(tmp_path)
+    app = _make_app(tmp_path, paths)
+    async with app.run_test() as pilot:
+        await pilot.press("down", "enter", "enter")
+        await pilot.pause()
+        editor = app.screen
+        assert isinstance(editor, LayoutEditorScreen)
+
+        # Tab con un solo pane que tiene atributos (genera filas hijas).
+        editor.layout_model.tabs[0].children = [
+            Pane(name="solo", command="vim", default_bg="#6272a4"),
+        ]
+        editor._rebuild_tree()
+        await pilot.pause()
+
+        tree = editor.query_one("#pane-tree", Tree)
+        leaf_node = tree.root.children[0]
+        # Asegurar que esta expandido para que las property rows sean visibles.
+        leaf_node.expand()
+        await pilot.pause()
+        # Selecciono el pane y trato de bajar mas alla del ultimo nodo:
+        # como solo hay property rows debajo, el cursor debe quedarse
+        # en el pane (no en una property row).
+        tree.select_node(leaf_node)
+        starting_line = tree.cursor_line
+        # Simular varios `down` consecutivos: el cursor no debe terminar
+        # nunca en un nodo data=None.
+        for _ in range(5):
+            tree.action_cursor_down()
+        await pilot.pause()
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data is not None  # nunca property row
+        # Y debe seguir en el unico pane disponible.
+        assert tree.cursor_line == starting_line
+
+
+async def test_tree_cursor_reaches_root_via_arrow_keys(tmp_path: Path) -> None:
+    """La raiz `tab: xxx` es navegable con flechas. Aunque tenga
+    `data is None`, no es una property row (no tiene parent con data),
+    asi que el skip de property rows la deja en paz."""
+    paths = _paths_with_layout(tmp_path)
+    app = _make_app(tmp_path, paths)
+    async with app.run_test() as pilot:
+        await pilot.press("down", "enter", "enter")
+        await pilot.pause()
+        editor = app.screen
+        assert isinstance(editor, LayoutEditorScreen)
+
+        tree = editor.query_one("#pane-tree", Tree)
+        # Posicionar cursor en el primer pane.
+        first_pane = tree.root.children[0]
+        tree.select_node(first_pane)
+        tree.move_cursor(first_pane)
+        await pilot.pause()
+        assert tree.cursor_node is first_pane
+
+        # Up desde el primer pane debe llegar a la raiz.
+        tree.action_cursor_up()
+        await pilot.pause()
+        assert tree.cursor_node is tree.root
+
+
+async def test_tree_property_row_redirects_to_parent_on_direct_cursor(tmp_path: Path) -> None:
+    """Si el cursor cae en una property row sin pasar por
+    `action_cursor_*` (tipico del click del mouse, que setea cursor
+    directo via `move_cursor`), debe redirigir automaticamente al
+    pane padre. El handler `on_tree_node_highlighted` cubre este
+    caso como fallback al skip de teclado."""
+    from ztc.models.layout import Pane
+
+    paths = _paths_with_layout(tmp_path)
+    app = _make_app(tmp_path, paths)
+    async with app.run_test() as pilot:
+        await pilot.press("down", "enter", "enter")
+        await pilot.pause()
+        editor = app.screen
+        assert isinstance(editor, LayoutEditorScreen)
+        editor.layout_model.tabs[0].children = [
+            Pane(name="solo", command="vim", default_bg="#6272a4"),
+        ]
+        editor._rebuild_tree()
+        await pilot.pause()
+        tree = editor.query_one("#pane-tree", Tree)
+        leaf_node = tree.root.children[0]
+        leaf_node.expand()
+        await pilot.pause()
+
+        # Simular click del mouse: mover cursor directo a una property
+        # row (children del leaf son las property rows, todas con data=None).
+        property_node = leaf_node.children[0]
+        assert property_node.data is None  # confirma que es property row
+
+        tree.move_cursor(property_node)
+        await pilot.pause()
+
+        # El handler debe redirigir al pane padre (data-bearing).
+        assert tree.cursor_node is leaf_node
+        assert tree.cursor_node.data is not None
+
+
 async def test_tree_empty_leaf_uses_add_leaf_no_expand(tmp_path: Path) -> None:
     """Un leaf sin atributos no-default no debe tener triangulo de expand.
     Implementado via `add_leaf` que setea `allow_expand=False`."""
@@ -365,18 +471,80 @@ async def test_pane_edit_modal_color_preview_updates_on_input(tmp_path: Path) ->
         bg_input = modal.query_one("#default_bg", Input)
         bg_preview = modal.query_one("#default_bg-preview", Static)
 
-        # Static.content devuelve el markup string actual.
-        # Valido en hex: el preview tiene markup con bg color.
+        # Static.content devuelve el markup string actual. Formato bg
+        # color (espejando _inline_swatch del arbol para consistencia):
+        # `[on #color]  [/]` cuando hay color valido, `"  "` cuando no.
         bg_input.value = "#6272a4"
         await pilot.pause()
-        assert "#6272a4" in str(bg_preview.content)
+        assert "[on #6272a4]  [/]" in str(bg_preview.content)
 
         # Valido en rgb: el helper convierte a hex para Rich.
         bg_input.value = "rgb:6c/72/a4"
         await pilot.pause()
-        assert "#6c72a4" in str(bg_preview.content)
+        assert "[on #6c72a4]  [/]" in str(bg_preview.content)
 
-        # Invalido: preview limpio (sin markup `on `).
+        # Invalido: preview limpio (solo espacios, sin markup `on `).
         bg_input.value = "garbage"
         await pilot.pause()
         assert "on " not in str(bg_preview.content)
+
+
+async def test_pane_edit_modal_fields_stay_inside_dialog(
+    tmp_path: Path,
+) -> None:
+    """Los controles de cada fila deben quedar dentro del ancho visible."""
+
+    paths = _paths_with_layout(tmp_path)
+    app = _make_app(tmp_path, paths)
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.press("down", "enter", "enter")
+        await pilot.pause()
+        editor = app.screen
+        assert isinstance(editor, LayoutEditorScreen)
+        tree = editor.query_one("#pane-tree", Tree)
+        tree.select_node(tree.root.children[0])
+        await pilot.pause()
+        await pilot.press("e")
+        await pilot.pause()
+        modal = app.screen
+        assert isinstance(modal, PaneEditModal)
+
+        dialog = modal.query_one("#dialog")
+        for selector in (
+            "#name",
+            "#size",
+            "#focus",
+            "#default_bg",
+            "#default_bg-preview",
+            "#default_fg",
+            "#default_fg-preview",
+            "#command",
+            "#args",
+            "#cwd",
+            "#start_suspended",
+            "#borderless",
+        ):
+            widget = modal.query_one(selector)
+            assert widget.region.right <= dialog.region.right - 1
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, LayoutEditorScreen)
+
+        app.push_screen(PaneEditModal(editor.layout_model.tabs[1].children[0]))
+        await pilot.pause()
+        container_modal = app.screen
+        assert isinstance(container_modal, PaneEditModal)
+        container_dialog = container_modal.query_one("#dialog")
+        for selector in (
+            "#name",
+            "#size",
+            "#focus",
+            "#default_bg",
+            "#default_bg-preview",
+            "#default_fg",
+            "#default_fg-preview",
+            "#split",
+        ):
+            widget = container_modal.query_one(selector)
+            assert widget.region.right <= container_dialog.region.right - 1
