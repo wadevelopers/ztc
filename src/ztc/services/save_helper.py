@@ -19,7 +19,7 @@ def save_with_reload(
     path: Path,
 ) -> SaveResult:
     backup_path = backend.save(doc, path)
-    reload_ok = backend.reload_after_save()
+    reload_ok = backend.reload_after_save(doc, path)
     hint = backend.manual_reload_hint() if not reload_ok else None
     return SaveResult(
         backup_path=backup_path,

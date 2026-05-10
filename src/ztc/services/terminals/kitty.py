@@ -325,13 +325,17 @@ class KittyBackend:
         write_atomic(path, doc.to_text())
         return backup
 
-    def reload_after_save(self) -> bool:
+    def reload_after_save(self, doc: KittyDoc, path: Path) -> bool:
         target = os.environ.get("KITTY_LISTEN_ON")
+        if not target and is_remote_control_disabled(read_remote_control(doc)):
+            return False
         for binary in ("kitty", "kitten"):
             cmd = [binary, "@"]
             if target:
                 cmd.extend(["--to", target])
             cmd.append("load-config")
+            if not target:
+                cmd.append("--no-response")
             try:
                 result = subprocess.run(
                     cmd,

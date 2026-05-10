@@ -28,7 +28,7 @@ class _Backend:
         self.saved = True
         return self.backup
 
-    def reload_after_save(self) -> bool:
+    def reload_after_save(self, doc: object, path: Path) -> bool:
         return self.reload_ok
 
     def manual_reload_hint(self) -> str | None:

@@ -732,6 +732,8 @@ def test_multiple_ztc_lines_merge_last_wins_and_write_collapses(tmp_path: Path) 
 
 def test_reload_after_save_uses_env_target(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
+    path = Path("kitty.conf")
+    doc = KittyBackend().load(path)
 
     def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(cmd)
@@ -739,14 +741,18 @@ def test_reload_after_save_uses_env_target(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setenv("KITTY_LISTEN_ON", "unix:@ztc-1")
     monkeypatch.setattr(subprocess, "run", fake_run)
-    assert KittyBackend().reload_after_save() is True
+    assert KittyBackend().reload_after_save(doc, path) is True
     assert calls == [["kitty", "@", "--to", "unix:@ztc-1", "load-config"]]
 
 
 def test_reload_after_save_falls_back_to_kitten(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     calls: list[list[str]] = []
+    path = tmp_path / "kitty.conf"
+    path.write_text("allow_remote_control yes\n", encoding="utf-8")
+    doc = KittyBackend().load(path)
 
     def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(cmd)
@@ -754,33 +760,91 @@ def test_reload_after_save_falls_back_to_kitten(
 
     monkeypatch.delenv("KITTY_LISTEN_ON", raising=False)
     monkeypatch.setattr(subprocess, "run", fake_run)
-    assert KittyBackend().reload_after_save() is True
-    assert calls == [["kitty", "@", "load-config"], ["kitten", "@", "load-config"]]
+    assert KittyBackend().reload_after_save(doc, path) is True
+    assert calls == [
+        ["kitty", "@", "load-config", "--no-response"],
+        ["kitten", "@", "load-config", "--no-response"],
+    ]
+
+
+def test_reload_after_save_skips_plain_command_when_remote_control_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[list[str]] = []
+    path = tmp_path / "kitty.conf"
+    path.write_text("allow_remote_control no\n", encoding="utf-8")
+    doc = KittyBackend().load(path)
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.delenv("KITTY_LISTEN_ON", raising=False)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert KittyBackend().reload_after_save(doc, path) is False
+    assert calls == []
+
+
+def test_reload_after_save_skips_plain_command_when_remote_control_absent(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[list[str]] = []
+    path = tmp_path / "kitty.conf"
+    path.write_text("font_size 12.0\n", encoding="utf-8")
+    doc = KittyBackend().load(path)
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.delenv("KITTY_LISTEN_ON", raising=False)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert KittyBackend().reload_after_save(doc, path) is False
+    assert calls == []
 
 
 def test_reload_after_save_returns_false_on_failures(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
+    path = tmp_path / "kitty.conf"
+    path.write_text("allow_remote_control yes\n", encoding="utf-8")
+    doc = KittyBackend().load(path)
+
     def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(cmd, 1)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    assert KittyBackend().reload_after_save() is False
+    assert KittyBackend().reload_after_save(doc, path) is False
 
 
-def test_reload_after_save_catches_exceptions(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reload_after_save_catches_exceptions(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "kitty.conf"
+    path.write_text("allow_remote_control yes\n", encoding="utf-8")
+    doc = KittyBackend().load(path)
+
     def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         raise subprocess.TimeoutExpired(cmd, timeout=2)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    assert KittyBackend().reload_after_save() is False
+    assert KittyBackend().reload_after_save(doc, path) is False
 
 
 def test_reload_after_save_catches_file_not_found(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
+    path = tmp_path / "kitty.conf"
+    path.write_text("allow_remote_control yes\n", encoding="utf-8")
+    doc = KittyBackend().load(path)
+
     def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         raise FileNotFoundError(cmd[0])
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    assert KittyBackend().reload_after_save() is False
+    assert KittyBackend().reload_after_save(doc, path) is False

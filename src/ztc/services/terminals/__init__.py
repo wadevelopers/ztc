@@ -91,9 +91,13 @@ class TerminalBackend(Protocol):
 
     # ---------- runtime post-save ----------
 
-    def reload_after_save(self) -> bool:
+    def reload_after_save(self, doc: BackendDoc, path: Path) -> bool:
         """Intenta aplicar al terminal en ejecucion el archivo recien
         guardado.
+
+        `doc` y `path` son el documento y la ruta que acaban de pasar
+        por `save()`, para que el backend pueda decidir con el estado
+        efectivo recien persistido.
 
         Devuelve True si la recarga funciono o si el backend recarga
         nativamente sin accion extra. Devuelve False si no se pudo
@@ -103,7 +107,7 @@ class TerminalBackend(Protocol):
         ...
 
     def manual_reload_hint(self) -> str | None:
-        """Instruccion visible al usuario cuando `reload_after_save()`
+        """Instruccion visible al usuario cuando `reload_after_save(...)`
         devuelve False. None si el backend no requiere hint manual."""
         ...
 
