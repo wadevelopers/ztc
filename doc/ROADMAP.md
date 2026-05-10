@@ -4,20 +4,7 @@ ZTC follows [SemVer](https://semver.org/). Minor versions ship one
 focused feature each — small, atomic releases instead of large
 batches. Patch versions are bug-fix-only.
 
-## v1.1.0 (next)
-
-- **Editable pane background and foreground colors in the layout
-  editor.** Zellij supports `default_bg` and `default_fg` per pane,
-  giving complete visual control of a panel without touching
-  terminal colors. Today these directives are partially preserved
-  by ZTC (child-node form roundtrips, property form is silently
-  dropped) and never editable from the TUI. v1.1.0 promotes both
-  to first-class fields in the model, makes them editable from
-  `PaneEditModal`, and adds visual swatches in the pane tree
-  consistent with the sessions detail view. See
-  [`PLAN_PANE_DEFAULT_BG.md`](PLAN_PANE_DEFAULT_BG.md).
-
-## v1.2.0
+## v1.2.0 (next)
 
 - **Terminal startup command.** Allow defining a command (or script)
   that runs every time a new terminal session is opened. Auto-detect
@@ -41,6 +28,20 @@ batches. Patch versions are bug-fix-only.
   with a separate "type a path" action, or hybrid with
   autocomplete-style input filtered by the list. To decide when
   drafting the plan.
+
+## Released
+
+- **v1.1.0** — Editable pane `default_bg` / `default_fg` in the layout
+  editor. Both directives are now first-class `Pane` fields, editable
+  from `PaneEditModal` with strict format validation. The tree
+  expands leaves to show their attributes as child rows (with inline
+  color swatches for the bg/fg fields), and the `pane` keyword is
+  rendered with theme-accent color for visual hierarchy. Cursor
+  navigation skips property rows so only actionable nodes (panes,
+  root) receive keyboard focus.
+- **v1.0.0** — First public release. Alacritty/Kitty color and settings
+  editing, Zellij themes, layouts and sessions management; embedded
+  and standalone (`zsm`) launcher.
 
 ## Later (no committed version yet)
 

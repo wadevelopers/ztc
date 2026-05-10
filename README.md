@@ -19,8 +19,9 @@ This installs two commands on your `PATH`:
   going straight to "Zellij sessions". Useful as a replacement for the
   pre-Zellij shell prompt.
 
-> A PyPI release is planned for v1.1.0 (under the package name
-> `ztc-tui`). See [`doc/ROADMAP.md`](doc/ROADMAP.md).
+> A PyPI release is on the roadmap (under the package name `ztc-tui`,
+> since `ztc` is already taken). Will ship in some future minor
+> release. See [`doc/ROADMAP.md`](doc/ROADMAP.md).
 
 ### Requirements
 
