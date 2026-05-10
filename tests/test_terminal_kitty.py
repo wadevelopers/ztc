@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from ztc.services.terminals.kitty import (
     KittyBackend,
+    is_listen_on_set,
+    is_remote_control_disabled,
+    read_listen_on,
+    read_remote_control,
+    read_ztc_pref,
+    write_listen_on_default,
+    write_remote_control_yes,
+    write_ztc_pref,
 )
 
 FIX = Path(__file__).parent / "fixtures" / "kitty"
@@ -606,3 +615,172 @@ def test_import_theme_file_returns_zero_when_no_color_slots(tmp_path: Path) -> N
 
     assert count == 0
     assert backend.read_slot(doc, ("primary", "foreground")) == fg_before
+
+
+# ---------- remote control / listen_on helpers ----------
+
+
+def test_read_remote_control_values(tmp_path: Path) -> None:
+    backend = KittyBackend()
+    for value in ("yes", "no", "password", "socket", "socket-only"):
+        path = tmp_path / f"{value}.conf"
+        path.write_text(f"allow_remote_control {value}\n", encoding="utf-8")
+        assert read_remote_control(backend.load(path)) == value
+    assert read_remote_control(backend.load(tmp_path / "absent.conf")) is None
+
+
+def test_read_remote_control_from_include(tmp_path: Path) -> None:
+    inc = tmp_path / "remote.conf"
+    inc.write_text("allow_remote_control socket-only\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text("include remote.conf\n", encoding="utf-8")
+    assert read_remote_control(KittyBackend().load(main)) == "socket-only"
+
+
+def test_is_remote_control_disabled_truth_table() -> None:
+    assert is_remote_control_disabled(None) is True
+    assert is_remote_control_disabled("no") is True
+    for value in ("yes", "password", "socket", "socket-only", "None"):
+        assert is_remote_control_disabled(value) is False
+
+
+def test_write_remote_control_yes_appends(tmp_path: Path) -> None:
+    doc = KittyBackend().load(tmp_path / "kitty.conf")
+    write_remote_control_yes(doc)
+    assert doc.lines[-1] == "allow_remote_control yes"
+
+
+def test_read_listen_on_values_and_include(tmp_path: Path) -> None:
+    inc = tmp_path / "listen.conf"
+    inc.write_text("listen_on unix:@from-include\n", encoding="utf-8")
+    main = tmp_path / "kitty.conf"
+    main.write_text(
+        "listen_on none\ninclude listen.conf\n", encoding="utf-8"
+    )
+    assert read_listen_on(KittyBackend().load(main)) == "unix:@from-include"
+
+
+def test_read_listen_on_absent_and_none_literal(tmp_path: Path) -> None:
+    backend = KittyBackend()
+    absent = tmp_path / "absent.conf"
+    assert read_listen_on(backend.load(absent)) is None
+    none_path = tmp_path / "none.conf"
+    none_path.write_text("listen_on none\n", encoding="utf-8")
+    assert read_listen_on(backend.load(none_path)) == "none"
+
+
+def test_is_listen_on_set_truth_table() -> None:
+    assert is_listen_on_set(None) is False
+    assert is_listen_on_set("") is False
+    assert is_listen_on_set("   ") is False
+    assert is_listen_on_set("none") is False
+    assert is_listen_on_set("None") is True
+    assert is_listen_on_set("unix:@ztc-1234") is True
+    assert is_listen_on_set("unix:/tmp/sock") is True
+
+
+def test_write_listen_on_default_appends(tmp_path: Path) -> None:
+    doc = KittyBackend().load(tmp_path / "kitty.conf")
+    write_listen_on_default(doc)
+    assert doc.lines[-1] == "listen_on unix:@ztc-{kitty_pid}"
+
+
+# ---------- # ztc prefs ----------
+
+
+def test_ztc_pref_roundtrip_and_missing(tmp_path: Path) -> None:
+    doc = KittyBackend().load(tmp_path / "kitty.conf")
+    assert read_ztc_pref(doc, "remote_control_modal") is None
+    write_ztc_pref(doc, "remote_control_modal", "dismissed")
+    assert read_ztc_pref(doc, "remote_control_modal") == "dismissed"
+
+
+def test_read_ztc_pref_ignores_malformed_and_non_object_json(tmp_path: Path) -> None:
+    path = tmp_path / "kitty.conf"
+    path.write_text(
+        "# ztc:{bad\n"
+        "# ztc:[1, 2]\n"
+        "# ztc:42\n"
+        '# ztc:{"ok": true}\n',
+        encoding="utf-8",
+    )
+    assert read_ztc_pref(KittyBackend().load(path), "ok") is True
+
+
+def test_multiple_ztc_lines_merge_last_wins_and_write_collapses(tmp_path: Path) -> None:
+    path = tmp_path / "kitty.conf"
+    path.write_text(
+        "font_size 12.0\n"
+        '# ztc:{"a": 1, "b": 1}\n'
+        "foreground #ffffff\n"
+        '# ztc:{"b": 2}\n',
+        encoding="utf-8",
+    )
+    doc = KittyBackend().load(path)
+    assert read_ztc_pref(doc, "a") == 1
+    assert read_ztc_pref(doc, "b") == 2
+    write_ztc_pref(doc, "c", 3)
+    assert doc.lines == [
+        "font_size 12.0",
+        "foreground #ffffff",
+        '# ztc:{"a": 1, "b": 2, "c": 3}',
+    ]
+
+
+# ---------- reload_after_save ----------
+
+
+def test_reload_after_save_uses_env_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setenv("KITTY_LISTEN_ON", "unix:@ztc-1")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert KittyBackend().reload_after_save() is True
+    assert calls == [["kitty", "@", "--to", "unix:@ztc-1", "load-config"]]
+
+
+def test_reload_after_save_falls_back_to_kitten(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 1 if cmd[0] == "kitty" else 0)
+
+    monkeypatch.delenv("KITTY_LISTEN_ON", raising=False)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert KittyBackend().reload_after_save() is True
+    assert calls == [["kitty", "@", "load-config"], ["kitten", "@", "load-config"]]
+
+
+def test_reload_after_save_returns_false_on_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(cmd, 1)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert KittyBackend().reload_after_save() is False
+
+
+def test_reload_after_save_catches_exceptions(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(cmd, timeout=2)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert KittyBackend().reload_after_save() is False
+
+
+def test_reload_after_save_catches_file_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise FileNotFoundError(cmd[0])
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert KittyBackend().reload_after_save() is False

@@ -31,8 +31,10 @@ ganadora si es del main; si es de un include, appendea al main.
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -91,6 +93,7 @@ _LINE_RE = re.compile(r"^\s*(\S+)\s+(.*?)\s*$")
 
 # Hex con o sin # de 3 o 6 digitos. Lo usamos para normalizar al leer.
 _HEX_RE = re.compile(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+_ZTC_PREF_RE = re.compile(r"^# ztc:(.*)$")
 
 
 class KittyDoc:
@@ -209,6 +212,77 @@ def _last_index_of_key_in_main(lines: list[str], key: str) -> int | None:
     return None
 
 
+def read_remote_control(doc: KittyDoc) -> str | None:
+    last = _last_entry_for_key(
+        _linearize(doc.path, doc.lines, in_main=True),
+        "allow_remote_control",
+    )
+    return last.value if last is not None else None
+
+
+def is_remote_control_disabled(value: str | None) -> bool:
+    return value is None or value == "no"
+
+
+def write_remote_control_yes(doc: KittyDoc) -> None:
+    doc.lines.append("allow_remote_control yes")
+
+
+def read_listen_on(doc: KittyDoc) -> str | None:
+    last = _last_entry_for_key(
+        _linearize(doc.path, doc.lines, in_main=True),
+        "listen_on",
+    )
+    return last.value if last is not None else None
+
+
+def is_listen_on_set(value: str | None) -> bool:
+    if value is None:
+        return False
+    stripped = value.strip()
+    return bool(stripped) and stripped != "none"
+
+
+def write_listen_on_default(doc: KittyDoc) -> None:
+    doc.lines.append("listen_on unix:@ztc-{kitty_pid}")
+
+
+def _parse_ztc_line(line: str) -> dict[str, object] | None:
+    match = _ZTC_PREF_RE.match(line)
+    if match is None:
+        return None
+    try:
+        parsed = json.loads(match.group(1).strip())
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _ztc_line_indices(lines: list[str]) -> list[int]:
+    return [i for i, line in enumerate(lines) if _ZTC_PREF_RE.match(line)]
+
+
+def _read_ztc_dict(doc: KittyDoc) -> dict[str, object]:
+    out: dict[str, object] = {}
+    for line in doc.lines:
+        parsed = _parse_ztc_line(line)
+        if parsed is not None:
+            out.update(parsed)
+    return out
+
+
+def read_ztc_pref(doc: KittyDoc, key: str) -> object | None:
+    return _read_ztc_dict(doc).get(key)
+
+
+def write_ztc_pref(doc: KittyDoc, key: str, value: object) -> None:
+    prefs = _read_ztc_dict(doc)
+    prefs[key] = value
+    ztc_indices = set(_ztc_line_indices(doc.lines))
+    doc.lines = [line for i, line in enumerate(doc.lines) if i not in ztc_indices]
+    doc.lines.append("# ztc:" + json.dumps(prefs, sort_keys=True))
+
+
 def _normalize_value_if_hex(value: str) -> str:
     """Si el valor parsea como hex (`#fff`, `#abc123`, `abc123`),
     devuelve `#rrggbb` lowercase. Si no, lo deja tal cual (named color,
@@ -250,6 +324,28 @@ class KittyBackend:
         backup = make_backup(path) if path.exists() else None
         write_atomic(path, doc.to_text())
         return backup
+
+    def reload_after_save(self) -> bool:
+        target = os.environ.get("KITTY_LISTEN_ON")
+        for binary in ("kitty", "kitten"):
+            cmd = [binary, "@"]
+            if target:
+                cmd.extend(["--to", target])
+            cmd.append("load-config")
+            try:
+                result = subprocess.run(
+                    cmd,
+                    timeout=2,
+                    capture_output=True,
+                )
+            except Exception:  # noqa: BLE001
+                continue
+            if result.returncode == 0:
+                return True
+        return False
+
+    def manual_reload_hint(self) -> str:
+        return "Press Ctrl+Shift+F5 in Kitty to reload."
 
     def _effective_entries(self, doc: KittyDoc) -> list[_Entry]:
         return _linearize(doc.path, doc.lines, in_main=True)

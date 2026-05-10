@@ -16,6 +16,7 @@ from ztc.services.colors import (
     is_valid_hex,
     normalize_hex,
 )
+from ztc.services.save_helper import save_with_reload
 from ztc.services.terminals import TerminalBackend
 from ztc.zellij import theme_assets as zta
 from ztc.zellij.user_themes import list_user_themes
@@ -56,6 +57,8 @@ class SyncResult:
     backup: Path | None
     updated: dict[CanonicalSlot, str]
     skipped_reason: str | None = None
+    reload_ok: bool = True
+    manual_reload_hint: str | None = None
 
 
 def _resolve_zellij_slots(
@@ -164,5 +167,10 @@ def sync_terminal_with_zellij_theme(
     if not updated:
         return SyncResult(backup=None, updated={}, skipped_reason="No changes")
 
-    backup = backend.save(doc, backend_path)
-    return SyncResult(backup=backup, updated=updated)
+    save_result = save_with_reload(backend, doc, backend_path)
+    return SyncResult(
+        backup=save_result.backup_path,
+        updated=updated,
+        reload_ok=save_result.reload_ok,
+        manual_reload_hint=save_result.manual_reload_hint,
+    )

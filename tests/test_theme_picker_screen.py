@@ -8,6 +8,7 @@ from textual.widgets import OptionList
 from ztc.app import TermConfigApp
 from ztc.models.config import Paths
 from ztc.screens.theme_editor import ThemePickerScreen
+from ztc.services import theme_sync
 from ztc.services.runtime_detect import TerminalDetection
 from ztc.services.terminals.alacritty import AlacrittyBackend
 
@@ -126,3 +127,39 @@ async def test_theme_picker_apply_writes_config(tmp_path: Path) -> None:
         # Backup creado.
         backups = list(paths.zellij_config.parent.glob("config.kdl.bak.*"))
         assert backups
+
+
+async def test_theme_sync_toast_includes_manual_reload_hint(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    paths = _make_paths(tmp_path, FIX / "config_with_user_themes.kdl")
+    app = _make_app(tmp_path, paths)
+    notifications: list[str] = []
+
+    def fake_sync_terminal_with_zellij_theme(**kwargs):  # noqa: ANN003
+        return theme_sync.SyncResult(
+            backup=None,
+            updated={("primary", "background"): "#000000"},
+            reload_ok=False,
+            manual_reload_hint="Press Ctrl+Shift+F5 in Kitty to reload.",
+        )
+
+    monkeypatch.setattr(
+        theme_sync,
+        "sync_terminal_with_zellij_theme",
+        fake_sync_terminal_with_zellij_theme,
+    )
+    async with app.run_test() as pilot:
+        await pilot.press("enter")
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ThemePickerScreen)
+        app.notify = lambda message, **kwargs: notifications.append(message)  # type: ignore[method-assign]
+        screen._sync_alacritty("dracula")
+        await pilot.pause()
+
+    assert notifications == [
+        "Alacritty updated: 1 slot(s)\n"
+        "Press Ctrl+Shift+F5 in Kitty to reload."
+    ]

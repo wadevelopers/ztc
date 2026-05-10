@@ -28,6 +28,7 @@ from ztc.services.terminals.registry import (
 )
 from ztc.sessions.screens.picker import PickerScreen
 from ztc.sessions.types import LaunchTarget
+from ztc.startup_checks import build_startup_check
 from ztc.widgets.confirm import BUTTON_CSS
 from ztc.widgets.header import StaticHeader
 from ztc.zellij import TEXTUAL_FALLBACK
@@ -264,6 +265,10 @@ class TermConfigApp(App[None]):
         self.register_zellij_themes()
         self.sync_theme_with_zellij()
         self.query_one("#main-menu", OptionList).focus()
+        if self.backend is not None and self.backend_path is not None:
+            check = build_startup_check(self.backend, self.backend_path, self)
+            if check is not None:
+                self.push_screen(check.modal, check.on_result)
 
     def _notify_detection(self) -> None:
         d = self.detected_terminal

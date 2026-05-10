@@ -18,10 +18,11 @@ BackendDoc = Any
 class TerminalBackend(Protocol):
     """Interfaz comun a todos los backends de terminal.
 
-    Un backend lee/escribe slots canonicos `(group, name)` mapeandolos
-    a la nomenclatura propia de su archivo de config. Tambien soporta
-    `import_theme_file` para copiar slots desde otro archivo del mismo
-    formato.
+    Un backend lee/escribe slots canonicos `(group, name)` y settings
+    canonicos mapeandolos a la nomenclatura propia de su archivo de
+    config. Tambien soporta `import_theme_file` para copiar slots desde
+    otro archivo del mismo formato, y expone capacidades runtime para
+    aplicar o explicar la recarga post-save.
     """
 
     kind: str
@@ -86,6 +87,24 @@ class TerminalBackend(Protocol):
 
     def supported_settings(self) -> list[CanonicalSetting]:
         """Lista de settings que este backend soporta."""
+        ...
+
+    # ---------- runtime post-save ----------
+
+    def reload_after_save(self) -> bool:
+        """Intenta aplicar al terminal en ejecucion el archivo recien
+        guardado.
+
+        Devuelve True si la recarga funciono o si el backend recarga
+        nativamente sin accion extra. Devuelve False si no se pudo
+        recargar de forma programatica; el caller puede mostrar
+        `manual_reload_hint()`.
+        """
+        ...
+
+    def manual_reload_hint(self) -> str | None:
+        """Instruccion visible al usuario cuando `reload_after_save()`
+        devuelve False. None si el backend no requiere hint manual."""
         ...
 
 

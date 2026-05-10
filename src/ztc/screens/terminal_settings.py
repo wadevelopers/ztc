@@ -16,6 +16,7 @@ from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.services.fonts import list_monospace_fonts
+from ztc.services.save_helper import compose_save_toast, save_with_reload
 from ztc.services.terminals import TerminalBackend
 from ztc.services.terminals.settings import (
     CanonicalSetting,
@@ -329,16 +330,17 @@ class TerminalSettingsScreen(Screen[None]):
 
     def action_save(self) -> None:
         try:
-            backup = self.backend.save(self.doc, self.backend_path)
+            result = save_with_reload(self.backend, self.doc, self.backend_path)
         except Exception as exc:  # noqa: BLE001
             self.app.notify(f"Save error: {exc}", severity="error", timeout=10)
             return
         self.dirty = False
         self._refresh_header()
-        msg = f"Saved: {self.backend_path.name}"
-        if backup is not None:
-            msg += f"  (backup: {backup.name})"
-        self.app.notify(msg, severity="information", timeout=6)
+        self.app.notify(
+            compose_save_toast(self.backend_path.name, result),
+            severity="information",
+            timeout=6,
+        )
 
     def action_back(self) -> None:
         if not self.dirty:

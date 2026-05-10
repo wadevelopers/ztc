@@ -103,9 +103,14 @@ async def test_kitty_detection_resolves_kitty_backend(tmp_path: Path) -> None:
     """Con Fase C aterrizada, kitty detectada -> habilitada y backend KittyBackend."""
     from ztc.services.terminals.kitty import KittyBackend
 
+    kitty_conf = tmp_path / "kitty.conf"
+    kitty_conf.write_text(
+        "allow_remote_control yes\nlisten_on unix:@ztc-{kitty_pid}\n",
+        encoding="utf-8",
+    )
     app = TermConfigApp(
         paths=_paths(tmp_path),
-        backend_path=tmp_path / "kitty.conf",
+        backend_path=kitty_conf,
         detection=TerminalDetection(
             kind="kitty", via_ssh=False, raw_marker="env:KITTY_PID"
         ),
@@ -299,7 +304,11 @@ async def test_e2e_kitty_detection_writes_to_real_kitty_conf(tmp_path: Path) -> 
     )
     main = tmp_path / "kitty.conf"
     main.write_text(
-        "include tokyo.conf\nfont_size 12.0\n", encoding="utf-8"
+        "include tokyo.conf\n"
+        "font_size 12.0\n"
+        "allow_remote_control yes\n"
+        "listen_on unix:@ztc-{kitty_pid}\n",
+        encoding="utf-8",
     )
 
     app = TermConfigApp(
@@ -342,9 +351,64 @@ async def test_e2e_kitty_detection_writes_to_real_kitty_conf(tmp_path: Path) -> 
         # No-colors del main preservados.
         assert "include tokyo.conf" in text
         assert "font_size 12.0" in text
+        assert "allow_remote_control yes" in text
+        assert "listen_on unix:@ztc-{kitty_pid}" in text
         # El backup se creo (porque el archivo existia).
         backups = list(tmp_path.glob("kitty.conf.bak.*"))
         assert backups
+
+
+async def test_startup_check_is_requested_and_pushed(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from ztc.startup_checks import StartupCheck
+    from ztc.widgets.confirm import UnsavedChangesModal
+
+    calls: list[tuple[object, Path, object]] = []
+    modal = UnsavedChangesModal()
+
+    def fake_build_startup_check(backend, backend_path, app):  # noqa: ANN001
+        calls.append((backend, backend_path, app))
+        return StartupCheck(modal=modal, on_result=lambda result: None)
+
+    monkeypatch.setattr("ztc.app.build_startup_check", fake_build_startup_check)
+    backend_path = tmp_path / "alacritty.toml"
+    app = TermConfigApp(
+        paths=_paths(tmp_path),
+        backend_path=backend_path,
+        detection=TerminalDetection(
+            kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
+        ),
+        zellij_installed=True,
+    )
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert calls == [(app.backend, backend_path, app)]
+        assert app.screen is modal
+
+
+async def test_startup_check_not_requested_without_backend(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[object] = []
+
+    def fake_build_startup_check(*args, **kwargs):  # noqa: ANN001
+        calls.append(args)
+        raise AssertionError("startup check should not be requested")
+
+    monkeypatch.setattr("ztc.app.build_startup_check", fake_build_startup_check)
+    app = TermConfigApp(
+        paths=_paths(tmp_path),
+        detection=TerminalDetection(
+            kind="unsupported", via_ssh=False, raw_marker=None
+        ),
+        zellij_installed=True,
+    )
+    async with app.run_test() as pilot:
+        await pilot.pause()
+    assert calls == []
 
 
 # ---------- item "Zellij sessions": PickerScreen embebida ----------

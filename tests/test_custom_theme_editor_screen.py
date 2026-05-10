@@ -8,6 +8,7 @@ from ztc.app import TermConfigApp
 from ztc.models.config import Paths
 from ztc.screens.custom_theme_editor import CustomThemeEditorScreen
 from ztc.screens.theme_editor import ThemePickerScreen
+from ztc.services import theme_sync
 from ztc.services.runtime_detect import TerminalDetection
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.widgets.confirm import (
@@ -131,3 +132,41 @@ async def test_custom_theme_editor_save_writes_block(tmp_path: Path) -> None:
         await pilot.pause()
         themes = {t.name: t for t in list_user_themes(paths.zellij_config)}
         assert themes["custom_dark"].colors[0].value == "#deadbe"
+
+
+async def test_custom_theme_editor_active_theme_sync_shows_manual_hint(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    paths = _paths_with_user_themes(tmp_path)
+    app = _make_app(tmp_path, paths)
+    notifications: list[str] = []
+
+    def fake_sync_terminal_with_zellij_theme(**kwargs):  # noqa: ANN003
+        return theme_sync.SyncResult(
+            backup=None,
+            updated={("primary", "background"): "#000000"},
+            reload_ok=False,
+            manual_reload_hint="Press Ctrl+Shift+F5 in Kitty to reload.",
+        )
+
+    monkeypatch.setattr(
+        theme_sync,
+        "sync_terminal_with_zellij_theme",
+        fake_sync_terminal_with_zellij_theme,
+    )
+    async with app.run_test() as pilot:
+        await pilot.press("enter")
+        await pilot.pause()
+        picker = app.screen
+        assert isinstance(picker, ThemePickerScreen)
+        picker.action_edit_theme()
+        await pilot.pause()
+        editor = app.screen
+        assert isinstance(editor, CustomThemeEditorScreen)
+        app.notify = lambda message, **kwargs: notifications.append(message)  # type: ignore[method-assign]
+        editor.dirty = True
+        editor.action_save()
+        await pilot.pause()
+
+    assert "Press Ctrl+Shift+F5 in Kitty to reload." in notifications

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shlex
+from dataclasses import dataclass
 from typing import Literal
 
 from textual import on
@@ -8,11 +9,17 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, RadioButton, RadioSet, Static, Switch
+from textual.widgets import Button, Checkbox, Input, RadioButton, RadioSet, Static, Switch
 
 from ztc.models.layout import Pane, SplitDirection
 
 UnsavedChangesChoice = Literal["cancel", "discard", "save"]
+
+
+@dataclass(frozen=True)
+class KittyRemoteControlChoice:
+    action: Literal["enable", "skip"]
+    dont_show_again: bool = False
 
 
 # Estilo "chip" plano para todos los Buttons de la app: sin el shadow de
@@ -753,6 +760,74 @@ class UnsavedChangesModal(ModalScreen["UnsavedChangesChoice"]):
 
     def action_cancel(self) -> None:
         self.dismiss("cancel")
+
+
+class KittyRemoteControlModal(ModalScreen[KittyRemoteControlChoice | None]):
+    """Modal para habilitar auto-reload de Kitty."""
+
+    BINDINGS = [Binding("escape", "dismiss_none", "Cancel")]
+
+    DEFAULT_CSS = """
+    KittyRemoteControlModal {
+        align: center middle;
+    }
+    #dialog {
+        width: 72;
+        height: auto;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #title {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+    #message {
+        margin-bottom: 1;
+    }
+    #remember {
+        margin-bottom: 1;
+    }
+    #buttons {
+        align-horizontal: right;
+        height: 3;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Static("Enable Kitty auto-reload?", id="title")
+            yield Static(
+                "Auto-reload from inside Zellij needs Kitty remote control "
+                "enabled and a listen socket configured. ZTC will add only "
+                "the missing directive(s) to kitty.conf.",
+                id="message",
+            )
+            yield Checkbox("Don't show this again", id="remember")
+            with Horizontal(id="buttons"):
+                yield Button("Enable", id="enable", variant="success")
+                yield Button("Skip", id="skip")
+
+    def on_mount(self) -> None:
+        self.query_one("#skip", Button).focus()
+
+    @on(Button.Pressed, "#enable")
+    def _on_enable(self) -> None:
+        self.dismiss(KittyRemoteControlChoice(action="enable"))
+
+    @on(Button.Pressed, "#skip")
+    def _on_skip(self) -> None:
+        remember = self.query_one("#remember", Checkbox).value
+        self.dismiss(
+            KittyRemoteControlChoice(
+                action="skip",
+                dont_show_again=remember,
+            )
+        )
+
+    def action_dismiss_none(self) -> None:
+        self.dismiss(None)
 
 
 class KdlPreviewModal(ModalScreen[None]):

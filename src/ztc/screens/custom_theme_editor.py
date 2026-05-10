@@ -325,7 +325,7 @@ class CustomThemeEditorScreen(Screen[None]):
             backend_path = getattr(self.app, "backend_path", None)
             if backend is not None and backend_path is not None:
                 try:
-                    theme_sync.sync_terminal_with_zellij_theme(
+                    result = theme_sync.sync_terminal_with_zellij_theme(
                         zellij_theme_name=self.theme.name,
                         backend=backend,
                         backend_path=backend_path,
@@ -336,6 +336,13 @@ class CustomThemeEditorScreen(Screen[None]):
                         f"Error syncing terminal: {exc}",
                         severity="error",
                         timeout=8,
+                    )
+                    return
+                if not result.reload_ok and result.manual_reload_hint:
+                    self.app.notify(
+                        result.manual_reload_hint,
+                        severity="information",
+                        timeout=6,
                     )
 
         register = getattr(self.app, "register_zellij_themes", None)

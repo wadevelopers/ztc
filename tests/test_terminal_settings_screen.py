@@ -13,6 +13,7 @@ import pytest
 from textual.app import App, ComposeResult
 
 from ztc.screens.terminal_settings import TerminalSettingsScreen
+from ztc.services.save_helper import SaveResult
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.services.terminals.kitty import KittyBackend
 from ztc.services.terminals.settings import SETTINGS
@@ -93,6 +94,44 @@ async def test_save_writes_to_disk_and_creates_backup(tmp_path: Path) -> None:
         # Backup creado.
         backups = list(tmp_path.glob("alacritty.toml.bak.*"))
         assert backups
+
+
+async def test_action_save_uses_save_helper(tmp_path: Path, monkeypatch) -> None:
+    backend = KittyBackend()
+    path = _kitty_doc(tmp_path, "font_size 12.0\n")
+    screen = TerminalSettingsScreen(backend=backend, backend_path=path)
+    app = _Harness(screen)
+    result = SaveResult(tmp_path / "kitty.conf.bak", False, "manual hint")
+    calls: list[tuple[object, object, Path]] = []
+    notifications: list[str] = []
+
+    def fake_save_with_reload(backend_arg, doc_arg, path_arg):  # noqa: ANN001
+        calls.append((backend_arg, doc_arg, path_arg))
+        return result
+
+    def fake_compose_save_toast(file_name: str, result_arg: SaveResult) -> str:
+        assert file_name == "kitty.conf"
+        assert result_arg is result
+        return "settings toast"
+
+    monkeypatch.setattr(
+        "ztc.screens.terminal_settings.save_with_reload",
+        fake_save_with_reload,
+    )
+    monkeypatch.setattr(
+        "ztc.screens.terminal_settings.compose_save_toast",
+        fake_compose_save_toast,
+    )
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.notify = lambda message, **kwargs: notifications.append(message)  # type: ignore[method-assign]
+        screen.dirty = True
+        screen.action_save()
+        await pilot.pause()
+
+    assert calls == [(backend, screen.doc, path)]
+    assert screen.dirty is False
+    assert notifications == ["settings toast"]
 
 
 # ---------- reset ----------

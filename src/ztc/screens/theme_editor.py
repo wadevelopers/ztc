@@ -285,6 +285,8 @@ class ThemePickerScreen(Screen[None]):
         msg = f"{backend.display_name} updated: {n} slot(s)"
         if result.backup is not None:
             msg += f" (backup: {result.backup.name})"
+        if not result.reload_ok and result.manual_reload_hint:
+            msg += f"\n{result.manual_reload_hint}"
         self.app.notify(msg, severity="information", timeout=6)
 
     def _sync_app_theme(self, name: str) -> None:

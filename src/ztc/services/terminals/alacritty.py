@@ -66,6 +66,12 @@ class AlacrittyBackend:
     def save(self, doc: TOMLDocument, path: Path) -> Path | None:
         return toml_io.dump_toml(doc, path)
 
+    def reload_after_save(self) -> bool:
+        return True
+
+    def manual_reload_hint(self) -> str | None:
+        return None
+
     def read_slot(self, doc: TOMLDocument, slot: CanonicalSlot) -> str | None:
         group, name = slot
         colors = doc.get("colors")

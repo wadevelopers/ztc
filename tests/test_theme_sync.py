@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 from ztc.services import theme_sync
+from ztc.services.save_helper import SaveResult
 from ztc.services.terminals.alacritty import AlacrittyBackend
 
 ALA_FIX = Path(__file__).parent / "fixtures" / "alacritty"
@@ -211,3 +212,33 @@ def test_sync_preserves_other_alacritty_sections(tmp_path: Path) -> None:
     assert "[window]" in text
     assert "padding" in text
     assert "opacity" in text
+
+
+def test_sync_result_includes_reload_result(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    ala = _make_alacritty(tmp_path)
+    cfg = _empty_zellij_config(tmp_path)
+    backend = AlacrittyBackend()
+    calls: list[tuple[object, object, Path]] = []
+
+    def fake_save_with_reload(backend_arg, doc_arg, path_arg):  # noqa: ANN001
+        calls.append((backend_arg, doc_arg, path_arg))
+        return SaveResult(
+            backup_path=tmp_path / "alacritty.toml.bak",
+            reload_ok=False,
+            manual_reload_hint="manual hint",
+        )
+
+    monkeypatch.setattr(theme_sync, "save_with_reload", fake_save_with_reload)
+    result = theme_sync.sync_terminal_with_zellij_theme(
+        zellij_theme_name="dracula",
+        backend=backend,
+        backend_path=ala,
+        zellij_config_path=cfg,
+    )
+    assert len(calls) == 1
+    assert result.backup == tmp_path / "alacritty.toml.bak"
+    assert result.reload_ok is False
+    assert result.manual_reload_hint == "manual hint"
