@@ -802,20 +802,40 @@ class KittyRemoteControlModal(ModalScreen[KittyRemoteControlChoice | None]):
     }
     """
 
+    def __init__(self, *, inside_zellij: bool = False) -> None:
+        super().__init__()
+        self._inside_zellij = inside_zellij
+
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static("Enable Kitty auto-reload?", id="title")
-            yield Static(
-                "Auto-reload from inside Zellij needs Kitty remote control "
-                "enabled and a listen socket configured. ZTC will add only "
-                "the missing directive(s) to kitty.conf.",
-                id="message",
-            )
+            yield Static("Auto-reload not configured in Kitty", id="title")
+            yield Static(self._message(), id="message")
             with Horizontal(id="footer"):
-                yield Checkbox("Don't show this again", id="remember")
+                yield Checkbox("Don't ask again", id="remember")
                 with Horizontal(id="buttons"):
-                    yield Button("Enable", id="enable", variant="success")
-                    yield Button("Skip", id="skip")
+                    yield Button("Yes", id="enable", variant="success")
+                    yield Button("No", id="skip")
+
+    def _message(self) -> str:
+        base = (
+            "ZTC can automatically refresh your terminal whenever you "
+            "change colors, settings, or Zellij themes. "
+        )
+        if self._inside_zellij:
+            requirement = (
+                "Because ZTC is running inside Zellij, Kitty needs remote "
+                "control enabled and a listener socket so the reload command "
+                "can reach the parent Kitty process. "
+            )
+        else:
+            requirement = ""
+        fallback = (
+            "Without auto-reload enabled, you will need to manually reload "
+            "Kitty using Ctrl + Shift + F5 to see the changes. Would you "
+            "like ZTC to add the necessary settings to kitty.conf to enable "
+            "auto-reload?"
+        )
+        return base + requirement + fallback
 
     def on_mount(self) -> None:
         self.query_one("#skip", Button).focus()

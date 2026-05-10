@@ -37,6 +37,27 @@ def test_build_startup_check_returns_none_when_already_reachable(
     assert build_startup_check(KittyBackend(), path, _App()) is None
 
 
+def test_build_startup_check_returns_none_outside_zellij_when_remote_control_enabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("ZELLIJ", raising=False)
+    monkeypatch.delenv("ZELLIJ_SESSION_NAME", raising=False)
+    path = _kitty_path(tmp_path, "allow_remote_control yes\n")
+    assert build_startup_check(KittyBackend(), path, _App()) is None
+
+
+def test_build_startup_check_requires_listen_on_inside_zellij(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ZELLIJ", "1")
+    path = _kitty_path(tmp_path, "allow_remote_control yes\n")
+    check = build_startup_check(KittyBackend(), path, _App())
+    assert isinstance(check, StartupCheck)
+    assert isinstance(check.modal, KittyRemoteControlModal)
+
+
 def test_build_startup_check_returns_none_for_password_choice(
     tmp_path: Path,
 ) -> None:
@@ -57,14 +78,44 @@ def test_build_startup_check_returns_none_when_dismissed(
 
 def test_build_startup_check_returns_modal_when_missing_directives(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    monkeypatch.delenv("ZELLIJ", raising=False)
+    monkeypatch.delenv("ZELLIJ_SESSION_NAME", raising=False)
     path = _kitty_path(tmp_path, "")
     check = build_startup_check(KittyBackend(), path, _App())
     assert isinstance(check, StartupCheck)
     assert isinstance(check.modal, KittyRemoteControlModal)
 
 
-def test_enable_adds_only_missing_directives(tmp_path: Path) -> None:
+def test_enable_outside_zellij_adds_only_remote_control(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("ZELLIJ", raising=False)
+    monkeypatch.delenv("ZELLIJ_SESSION_NAME", raising=False)
+    path = _kitty_path(tmp_path, "")
+    app = _App()
+    check = build_startup_check(KittyBackend(), path, app)
+    assert check is not None
+    check.on_result(KittyRemoteControlChoice(action="enable"))
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        "allow_remote_control yes",
+    ]
+    assert app.notifications == [
+        (
+            "Added 1 line(s) to kitty.conf. "
+            "Restart Kitty for auto-reload to take effect.",
+            "information",
+        )
+    ]
+
+
+def test_enable_inside_zellij_adds_only_missing_listen_on(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ZELLIJ", "1")
     path = _kitty_path(tmp_path, "allow_remote_control yes\n")
     app = _App()
     check = build_startup_check(KittyBackend(), path, app)
@@ -83,7 +134,11 @@ def test_enable_adds_only_missing_directives(tmp_path: Path) -> None:
     ]
 
 
-def test_enable_adds_both_directives_when_both_missing(tmp_path: Path) -> None:
+def test_enable_inside_zellij_adds_both_directives_when_both_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ZELLIJ", "1")
     path = _kitty_path(tmp_path, "")
     app = _App()
     check = build_startup_check(KittyBackend(), path, app)

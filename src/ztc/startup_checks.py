@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,8 +54,9 @@ def build_kitty_remote_control_check(
     remote_control = read_remote_control(doc)
     if remote_control == "password":
         return None
+    inside_zellij = _is_inside_zellij()
     remote_disabled = is_remote_control_disabled(remote_control)
-    listen_missing = not is_listen_on_set(read_listen_on(doc))
+    listen_missing = inside_zellij and not is_listen_on_set(read_listen_on(doc))
     if not remote_disabled and not listen_missing:
         return None
 
@@ -67,7 +69,7 @@ def build_kitty_remote_control_check(
             if is_remote_control_disabled(read_remote_control(current_doc)):
                 write_remote_control_yes(current_doc)
                 added += 1
-            if not is_listen_on_set(read_listen_on(current_doc)):
+            if inside_zellij and not is_listen_on_set(read_listen_on(current_doc)):
                 write_listen_on_default(current_doc)
                 added += 1
             try:
@@ -105,9 +107,13 @@ def build_kitty_remote_control_check(
             )
 
     return StartupCheck(
-        modal=KittyRemoteControlModal(),
+        modal=KittyRemoteControlModal(inside_zellij=inside_zellij),
         on_result=on_result,
     )
+
+
+def _is_inside_zellij() -> bool:
+    return bool(os.environ.get("ZELLIJ") or os.environ.get("ZELLIJ_SESSION_NAME"))
 
 
 STARTUP_CHECKS: dict[
