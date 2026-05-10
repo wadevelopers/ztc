@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from ztc.services.colors import CanonicalSlot
+from ztc.services.colors import CanonicalSlot, is_valid_hex, normalize_hex
 from ztc.services.terminals.settings import CanonicalSetting
 
 # Doc opaco que cada backend tipa internamente (TOMLDocument para
@@ -100,10 +100,44 @@ IMPORT_EXTENSIONS_BY_KIND: dict[str, list[str]] = {
 }
 
 
+def default_import_theme_file(
+    backend: TerminalBackend, doc: BackendDoc, source_path: Path
+) -> int:
+    """Implementacion comun de `import_theme_file` para cualquier backend
+    que se ajuste al patron canonico: leer otro archivo del mismo formato
+    y copiar slots conocidos al doc actual.
+
+    Cada backend concreto delega aca a menos que necesite logica propia
+    (hoy ninguno la necesita). Centralizar previene divergencia silenciosa
+    cuando se sume Ghostty u otro backend.
+
+    Reglas:
+    - `FileNotFoundError` si `source_path` no existe.
+    - Itera sobre `backend.supported_slots()` (cada backend declara cuales).
+    - Lee con `backend.read_slot`; ignora valores que no sean hex validos
+      (named colors, oklch(...), etc. no se importan — `normalize_hex`
+      tirarian sino).
+    - Escribe con `backend.write_slot(doc, slot, normalize_hex(value))`.
+    - Devuelve la cantidad de slots sobrescritos.
+    """
+    if not source_path.exists():
+        raise FileNotFoundError(source_path)
+    other = backend.load(source_path)
+    count = 0
+    for slot in backend.supported_slots():
+        value = backend.read_slot(other, slot)
+        if value is None or not is_valid_hex(value):
+            continue
+        backend.write_slot(doc, slot, normalize_hex(value))
+        count += 1
+    return count
+
+
 __all__ = [
     "IMPORT_EXTENSIONS_BY_KIND",
     "BackendDoc",
     "CanonicalSetting",
     "CanonicalSlot",
     "TerminalBackend",
+    "default_import_theme_file",
 ]

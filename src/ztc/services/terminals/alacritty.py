@@ -14,11 +14,8 @@ from tomlkit.items import Array
 from tomlkit.toml_document import TOMLDocument
 
 from ztc.services import toml_io
-from ztc.services.colors import (
-    CanonicalSlot,
-    is_valid_hex,
-    normalize_hex,
-)
+from ztc.services.colors import CanonicalSlot
+from ztc.services.terminals import default_import_theme_file
 from ztc.services.terminals.settings import (
     SETTINGS,
     CanonicalSetting,
@@ -119,23 +116,7 @@ class AlacrittyBackend:
         return out
 
     def import_theme_file(self, doc: TOMLDocument, source_path: Path) -> int:
-        """Copia los slots conocidos desde otro alacritty.toml al doc actual.
-
-        Devuelve cuantos slots se sobrescribieron. No toca otras secciones.
-        Ignora valores que no sean hex validos. Capability solo de
-        Alacritty (no esta en la Protocol comun).
-        """
-        if not source_path.exists():
-            raise FileNotFoundError(source_path)
-        other = toml_io.load_toml(source_path)
-        count = 0
-        for slot in KNOWN_SLOTS:
-            value = self.read_slot(other, slot)
-            if value is None or not is_valid_hex(value):
-                continue
-            self.write_slot(doc, slot, normalize_hex(value))
-            count += 1
-        return count
+        return default_import_theme_file(self, doc, source_path)
 
     def get_imports(self, doc: TOMLDocument) -> list[str]:
         raw = doc.get("import")
