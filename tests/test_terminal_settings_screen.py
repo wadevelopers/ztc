@@ -330,3 +330,66 @@ async def test_unsaved_modal_save_failure_keeps_screen(tmp_path: Path) -> None:
             assert screen.dirty is True
         finally:
             backend.save = original_save  # type: ignore[method-assign]
+
+
+# ---------- Stage A: import flow para Kitty ----------
+
+
+async def test_action_import_works_with_kitty_backend(tmp_path: Path) -> None:
+    """Antes: `action_import` salia early con toast "not supported" para
+    Kitty. Stage A removio el guard, ahora ambos backends pueden importar.
+
+    Verificamos que el callback que `action_import` pasa a `push_screen`,
+    al ser invocado con un path source valido, copia settings al doc."""
+    backend = KittyBackend()
+
+    # Source `.conf` con valores distintos al destino.
+    source = tmp_path / "source.conf"
+    source.write_text(
+        "window_padding_width 20\nfont_size 14.0\n",
+        encoding="utf-8",
+    )
+
+    # Doc destino con valores diferentes.
+    dst = _kitty_doc(
+        tmp_path, "window_padding_width 8\nfont_size 12.0\n"
+    )
+    screen = TerminalSettingsScreen(backend=backend, backend_path=dst)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        # Monkey-patch ANTES de action_import: el callback se pasa
+        # durante esa llamada via push_screen(modal, callback). Capturamos
+        # ese callback sin que el modal real se levante.
+        captured: list[object] = []
+
+        def fake_push_screen(modal, callback=None, *args, **kwargs):  # noqa: ANN001
+            captured.append(callback)
+
+        original = app.push_screen
+        app.push_screen = fake_push_screen  # type: ignore[assignment]
+        try:
+            screen.action_import()
+            await pilot.pause()
+        finally:
+            app.push_screen = original  # type: ignore[assignment]
+
+        assert len(captured) == 1, "action_import should push exactly one modal"
+        callback = captured[0]
+        assert callback is not None
+
+        # Invocar el callback directamente con el path del source.
+        callback(str(source))
+        await pilot.pause()
+
+        # Settings importados quedaron en el doc + screen marcado dirty.
+        new_padding = backend.read_setting(
+            screen.doc, SETTINGS["window.padding.x"]
+        )
+        new_font_size = backend.read_setting(
+            screen.doc, SETTINGS["font.size"]
+        )
+        assert new_padding == 20
+        assert new_font_size == 14.0
+        assert screen.dirty is True

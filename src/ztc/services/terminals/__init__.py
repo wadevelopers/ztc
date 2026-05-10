@@ -19,10 +19,9 @@ class TerminalBackend(Protocol):
     """Interfaz comun a todos los backends de terminal.
 
     Un backend lee/escribe slots canonicos `(group, name)` mapeandolos
-    a la nomenclatura propia de su archivo de config.
-    `import_theme_file` no esta en la Protocol — es capability de
-    Alacritty (importar otro `alacritty.toml`); el editor lo invoca
-    via `isinstance(backend, AlacrittyBackend)` cuando aplica.
+    a la nomenclatura propia de su archivo de config. Tambien soporta
+    `import_theme_file` para copiar slots desde otro archivo del mismo
+    formato.
     """
 
     kind: str
@@ -48,6 +47,14 @@ class TerminalBackend(Protocol):
     def delete_slot(self, doc: BackendDoc, slot: CanonicalSlot) -> bool: ...
 
     def supported_slots(self) -> list[CanonicalSlot]: ...
+
+    def import_theme_file(self, doc: BackendDoc, source_path: Path) -> int:
+        """Copia los slots conocidos desde otro archivo del mismo formato
+        (mismo backend) al doc actual. Devuelve cuantos slots se
+        sobrescribieron. No toca otras secciones del archivo. Ignora
+        valores que no sean hex validos. Levanta `FileNotFoundError`
+        si `source_path` no existe."""
+        ...
 
     # ---------- settings (padding, opacity, font, cursor shape, ...) ----------
 
@@ -82,7 +89,19 @@ class TerminalBackend(Protocol):
         ...
 
 
+# Filtro de extensiones que el FilePickerModal aplica al import de
+# theme/settings, indexado por `backend.kind`. Single source of truth
+# usado por color_editor y terminal_settings — sin duplicacion entre
+# screens y sin meter el dato en el Protocol. Agregar un backend nuevo
+# es una entrada acá.
+IMPORT_EXTENSIONS_BY_KIND: dict[str, list[str]] = {
+    "alacritty": [".toml"],
+    "kitty": [".conf"],
+}
+
+
 __all__ = [
+    "IMPORT_EXTENSIONS_BY_KIND",
     "BackendDoc",
     "CanonicalSetting",
     "CanonicalSlot",

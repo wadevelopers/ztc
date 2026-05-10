@@ -17,7 +17,6 @@ from textual.widgets.option_list import Option
 
 from ztc.services.fonts import list_monospace_fonts
 from ztc.services.terminals import TerminalBackend
-from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.services.terminals.settings import (
     CanonicalSetting,
     SettingKind,
@@ -268,15 +267,9 @@ class TerminalSettingsScreen(Screen[None]):
             )
 
     def action_import(self) -> None:
-        # Capability solo de Alacritty: import de settings desde otro
-        # alacritty.toml. Mismo backend, no cross-backend.
-        if not isinstance(self.backend, AlacrittyBackend):
-            self.app.notify(
-                f"Settings import not supported on {self.backend.display_name}.",
-                severity="warning",
-                timeout=6,
-            )
-            return
+        # Settings import via load + read_setting/write_setting (todo
+        # protocol, agnostico de backend). Mismo backend, no cross-backend
+        # — la lectura solo entiende el formato propio.
         backend = self.backend
 
         def after(path_str: str | None) -> None:

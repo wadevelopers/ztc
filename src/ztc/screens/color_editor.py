@@ -12,7 +12,6 @@ from textual.widgets.option_list import Option
 
 from ztc.services import colors
 from ztc.services.terminals import TerminalBackend
-from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.widgets.confirm import EditColorModal, PromptModal
 from ztc.widgets.header import StaticHeader
 from ztc.zellij.config import read_active_theme
@@ -253,15 +252,10 @@ class ColorEditorScreen(Screen[None]):
         )
 
     def action_import(self) -> None:
-        # Capability solo de Alacritty: import desde otro alacritty.toml.
-        if not isinstance(self.backend, AlacrittyBackend):
-            self.app.notify(
-                f"Theme import not supported on {self.backend.display_name}.",
-                severity="warning",
-                timeout=6,
-            )
-            return
-        backend = self.backend  # narrowing para el closure
+        # `import_theme_file` esta en la TerminalBackend Protocol; cada
+        # backend lo implementa para su propio formato (`.toml` para
+        # Alacritty, `.conf` para Kitty). No hay cross-backend.
+        backend = self.backend
 
         def after(path_str: str | None) -> None:
             if not path_str:

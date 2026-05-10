@@ -38,7 +38,7 @@ from pathlib import Path
 
 from ztc.services.atomic import write_atomic
 from ztc.services.backups import make_backup
-from ztc.services.colors import CanonicalSlot
+from ztc.services.colors import CanonicalSlot, is_valid_hex, normalize_hex
 from ztc.services.terminals.settings import (
     SETTINGS,
     CanonicalSetting,
@@ -297,6 +297,23 @@ class KittyBackend:
             return False
         del doc.lines[idx]
         return True
+
+    def import_theme_file(self, doc: KittyDoc, source_path: Path) -> int:
+        """Copia los slots conocidos desde otro archivo `.conf` al doc
+        actual. Devuelve cuantos slots se sobrescribieron. No toca
+        otras secciones. Ignora valores que no sean hex validos.
+        Espejo de `AlacrittyBackend.import_theme_file`."""
+        if not source_path.exists():
+            raise FileNotFoundError(source_path)
+        other = self.load(source_path)
+        count = 0
+        for slot in KNOWN_SLOTS:
+            value = self.read_slot(other, slot)
+            if value is None or not is_valid_hex(value):
+                continue
+            self.write_slot(doc, slot, normalize_hex(value))
+            count += 1
+        return count
 
     # ---------- settings (window, font, cursor) ----------
 

@@ -526,3 +526,83 @@ def test_registry_resolves_kitty_backend() -> None:
     ).available_kinds()
     backend = get_backend("kitty")
     assert isinstance(backend, KittyBackend)
+
+
+# ---------- import_theme_file ----------
+
+
+def test_import_theme_file_copies_color_slots(tmp_path: Path) -> None:
+    """Crea un .conf source con colores distintos a los del fixture y
+    los mergea sobre el doc destino. Los slots quedan con los valores
+    del source."""
+    backend = KittyBackend()
+    dst = _copy_fixture(tmp_path)
+    doc = backend.load(dst)
+
+    source = tmp_path / "theme.conf"
+    source.write_text(
+        "background #112233\n"
+        "foreground #aabbcc\n"
+        "color1 #ff0000\n",
+        encoding="utf-8",
+    )
+
+    count = backend.import_theme_file(doc, source)
+
+    assert count == 3
+    assert backend.read_slot(doc, ("primary", "background")) == "#112233"
+    assert backend.read_slot(doc, ("primary", "foreground")) == "#aabbcc"
+    assert backend.read_slot(doc, ("normal", "red")) == "#ff0000"
+
+
+def test_import_theme_file_skips_invalid_hex(tmp_path: Path) -> None:
+    """Source con valores invalidos (texto basura, hex incompleto):
+    esos slots se ignoran, los validos se aplican."""
+    backend = KittyBackend()
+    dst = _copy_fixture(tmp_path)
+    doc = backend.load(dst)
+
+    bg_before = backend.read_slot(doc, ("primary", "background"))
+
+    source = tmp_path / "theme.conf"
+    source.write_text(
+        "background not-a-color\n"
+        "foreground #abcabc\n"
+        "color1 #zzz\n",
+        encoding="utf-8",
+    )
+
+    count = backend.import_theme_file(doc, source)
+
+    assert count == 1
+    # Solo foreground se importa.
+    assert backend.read_slot(doc, ("primary", "foreground")) == "#abcabc"
+    # background se preserva (no fue sobreescrito por valor invalido).
+    assert backend.read_slot(doc, ("primary", "background")) == bg_before
+
+
+def test_import_theme_file_raises_on_missing_source(tmp_path: Path) -> None:
+    """Source que no existe: FileNotFoundError. Espejo de Alacritty."""
+    backend = KittyBackend()
+    dst = _copy_fixture(tmp_path)
+    doc = backend.load(dst)
+
+    missing = tmp_path / "nonexistent.conf"
+    with pytest.raises(FileNotFoundError):
+        backend.import_theme_file(doc, missing)
+
+
+def test_import_theme_file_returns_zero_when_no_color_slots(tmp_path: Path) -> None:
+    """Source sin entradas reconocibles: count = 0, doc intacto."""
+    backend = KittyBackend()
+    dst = _copy_fixture(tmp_path)
+    doc = backend.load(dst)
+    fg_before = backend.read_slot(doc, ("primary", "foreground"))
+
+    source = tmp_path / "theme.conf"
+    source.write_text("# nothing useful\nfont_family Arial\n", encoding="utf-8")
+
+    count = backend.import_theme_file(doc, source)
+
+    assert count == 0
+    assert backend.read_slot(doc, ("primary", "foreground")) == fg_before
