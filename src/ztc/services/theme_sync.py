@@ -22,7 +22,7 @@ from ztc.zellij.user_themes import list_user_themes
 
 # Mapping 1:1 entre los 10 slots de la Paleta ANSI y los slots
 # canonicos. fg/bg -> primary, los 8 ANSI -> normal.
-_LEGACY_TO_CANONICAL: dict[str, list[CanonicalSlot]] = {
+LEGACY_TO_CANONICAL: dict[str, list[CanonicalSlot]] = {
     "fg": [("primary", "foreground")],
     "bg": [("primary", "background")],
     "black": [("normal", "black")],
@@ -151,7 +151,7 @@ def sync_terminal_with_zellij_theme(
             backend.write_slot(doc, slot, normalized)
             updated[slot] = normalized
 
-    for legacy_name, destinations in _LEGACY_TO_CANONICAL.items():
+    for legacy_name, destinations in LEGACY_TO_CANONICAL.items():
         value = slots.get(legacy_name)
         if value is not None:
             _apply(value, destinations)

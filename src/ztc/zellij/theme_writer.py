@@ -382,11 +382,11 @@ def _read_terminal_legacy_slots(
     """Devuelve {legacy_slot: hex} con los valores actuales del archivo
     de la terminal, invirtiendo el mapping de theme_sync."""
     from ztc.services.colors import is_valid_hex, normalize_hex
-    from ztc.services.theme_sync import _LEGACY_TO_CANONICAL
+    from ztc.services.theme_sync import LEGACY_TO_CANONICAL
 
     doc = backend.load(backend_path)
     out: dict[str, str] = {}
-    for legacy_name, destinations in _LEGACY_TO_CANONICAL.items():
+    for legacy_name, destinations in LEGACY_TO_CANONICAL.items():
         # Tomamos el primer destino que tenga valor en el doc.
         for slot in destinations:
             value = backend.read_slot(doc, slot)
