@@ -17,6 +17,8 @@ class Pane:
     focus: bool = False
     name: str | None = None
     borderless: bool = False
+    default_bg: str | None = None
+    default_fg: str | None = None
     children: list[Pane] = field(default_factory=list)
     split_direction: SplitDirection | None = None
     raw_unknown_nodes: list[Any] = field(default_factory=list)

@@ -15,6 +15,19 @@ CanonicalSlot = tuple[str, str]
 
 _HEX = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 
+# Formatos de color que Zellij acepta para `default_bg` / `default_fg`
+# en layouts. Verificado empiricamente: los cuatro renderizan con el
+# color declarado. El alpha en `#rrggbbaa` se acepta sintacticamente
+# pero Zellij lo ignora al renderizar (terminales no hacen blending).
+_ZELLIJ_PANE_COLOR = re.compile(
+    r"^(?:"
+    r"#[0-9a-fA-F]{3}"           # #rgb
+    r"|#[0-9a-fA-F]{6}"          # #rrggbb
+    r"|#[0-9a-fA-F]{8}"          # #rrggbbaa (alpha ignorado visualmente)
+    r"|rgb:[0-9a-fA-F]{2}/[0-9a-fA-F]{2}/[0-9a-fA-F]{2}"  # rgb:rr/gg/bb
+    r")$"
+)
+
 
 @dataclass(frozen=True)
 class Warning:
@@ -24,6 +37,14 @@ class Warning:
 
 def is_valid_hex(value: str) -> bool:
     return bool(_HEX.match(value.strip()))
+
+
+def is_valid_zellij_pane_color(value: str) -> bool:
+    """Valida formatos aceptados por Zellij para `default_bg` /
+    `default_fg`. Acepta `#rgb`, `#rrggbb`, `#rrggbbaa` (alpha
+    ignorado) y `rgb:rr/gg/bb`. Mas permisivo que `is_valid_hex`,
+    que rechaza la sintaxis `rgb:...`."""
+    return bool(_ZELLIJ_PANE_COLOR.match(value.strip()))
 
 
 def normalize_hex(value: str) -> str:

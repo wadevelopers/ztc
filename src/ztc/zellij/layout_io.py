@@ -103,6 +103,8 @@ _PANE_CHILD_FIELDS = {
     "name",
     "borderless",
     "split_direction",
+    "default_bg",
+    "default_fg",
 }
 
 
@@ -116,6 +118,8 @@ def _parse_pane(node: kdl.Node) -> Pane:
         name=_str_prop(node, "name"),
         borderless=_bool_prop(node, "borderless", False),
         split_direction=_split_dir_prop(node, "split_direction"),
+        default_bg=_str_prop(node, "default_bg"),
+        default_fg=_str_prop(node, "default_fg"),
     )
     for child in node.nodes:
         if child.name == "pane":
@@ -158,6 +162,10 @@ def _apply_child_field(pane: Pane, child: kdl.Node) -> None:
         and value in ("vertical", "horizontal")
     ):
         pane.split_direction = value  # type: ignore[assignment]
+    elif name == "default_bg" and pane.default_bg is None:
+        pane.default_bg = str(value)
+    elif name == "default_fg" and pane.default_fg is None:
+        pane.default_fg = str(value)
 
 
 def _str_prop(node: kdl.Node, key: str) -> str | None:
@@ -231,13 +239,23 @@ def _emit_pane(pane: Pane, *, indent: int) -> list[str]:
         ("split_direction", pane.split_direction, _emit_str),
     )
     header = f"{pad}pane" + (f" {props}" if props else "")
-    has_block = bool(pane.children) or bool(pane.args) or bool(pane.raw_unknown_nodes)
+    has_block = (
+        bool(pane.children)
+        or bool(pane.args)
+        or bool(pane.raw_unknown_nodes)
+        or pane.default_bg is not None
+        or pane.default_fg is not None
+    )
     if not has_block:
         return [header]
     lines = [f"{header} {{"]
     if pane.args:
         args_quoted = " ".join(f'"{_escape(a)}"' for a in pane.args)
         lines.append(f"{pad}    args {args_quoted}")
+    if pane.default_bg is not None:
+        lines.append(f'{pad}    default_bg "{_escape(pane.default_bg)}"')
+    if pane.default_fg is not None:
+        lines.append(f'{pad}    default_fg "{_escape(pane.default_fg)}"')
     for raw in pane.raw_unknown_nodes:
         lines.extend(_emit_raw_kdl_node(raw, indent=indent + 1))
     for child in pane.children:

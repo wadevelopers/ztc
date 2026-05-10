@@ -349,3 +349,65 @@ def test_default_bg_child_node_form(tmp_cache: Path) -> None:
     panes = details.tabs[0].panes
     assert len(panes) == 1
     assert panes[0].default_bg == "#aabbcc"
+
+
+def test_default_fg_property_form(tmp_cache: Path) -> None:
+    """`pane default_fg="#hex"` (forma propiedad). Paralelo a `default_bg`."""
+    _write_layout(
+        tmp_cache,
+        "colors",
+        '''layout {
+    tab name="t" {
+        pane command="btop" default_fg="#f8f8f2"
+    }
+}
+''',
+    )
+    details = session_info.read_session_details("colors")
+    assert details is not None
+    panes = details.tabs[0].panes
+    assert len(panes) == 1
+    assert panes[0].default_fg == "#f8f8f2"
+
+
+def test_default_fg_child_node_form(tmp_cache: Path) -> None:
+    """`pane { default_fg "#hex" }` (forma nodo hijo). Paralelo a `default_bg`."""
+    _write_layout(
+        tmp_cache,
+        "colors",
+        '''layout {
+    tab name="t" {
+        pane command="btop" {
+            default_fg "#f8f8f2"
+        }
+    }
+}
+''',
+    )
+    details = session_info.read_session_details("colors")
+    assert details is not None
+    panes = details.tabs[0].panes
+    assert len(panes) == 1
+    assert panes[0].default_fg == "#f8f8f2"
+
+
+def test_default_bg_and_fg_combined(tmp_cache: Path) -> None:
+    """Ambos en el mismo pane, combinando ambas formas (property + child)."""
+    _write_layout(
+        tmp_cache,
+        "colors",
+        '''layout {
+    tab name="t" {
+        pane default_bg="#282a36" {
+            default_fg "#f8f8f2"
+        }
+    }
+}
+''',
+    )
+    details = session_info.read_session_details("colors")
+    assert details is not None
+    panes = details.tabs[0].panes
+    assert len(panes) == 1
+    assert panes[0].default_bg == "#282a36"
+    assert panes[0].default_fg == "#f8f8f2"

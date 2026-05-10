@@ -140,3 +140,34 @@ def test_tab_lifecycle() -> None:
     assert layout_ops.delete_tab(layout, 1) is True
     assert [tab.name for tab in layout.tabs] == ["primero"]
     assert layout_ops.delete_tab(layout, 99) is False
+
+
+def test_split_pane_preserves_default_bg_and_fg() -> None:
+    """Cuando se splittea un pane con `default_bg`/`default_fg`, el
+    `inner_existing` recreado debe heredar los colores. Sin esto, el
+    color "se pierde" visualmente al primer split (queda en el target
+    viejo que ya no esta en el arbol)."""
+    layout = Layout(
+        name="x",
+        path=Path("/tmp/x.kdl"),
+        tabs=[
+            Tab(
+                name="t",
+                children=[
+                    Pane(name="colorful", default_bg="#6272a4", default_fg="#f8f8f2"),
+                ],
+            )
+        ],
+    )
+    target = layout.tabs[0].children[0]
+    new_pane = layout_ops.split_pane(layout, 0, target, direction="vertical")
+    assert new_pane is not None
+
+    container = layout.tabs[0].children[0]
+    inner_existing = container.children[0]
+    assert inner_existing.name == "colorful"
+    assert inner_existing.default_bg == "#6272a4"
+    assert inner_existing.default_fg == "#f8f8f2"
+    # El nuevo pane inserto sin colores propios.
+    assert new_pane.default_bg is None
+    assert new_pane.default_fg is None

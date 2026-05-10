@@ -88,6 +88,8 @@ def split_pane(
         focus=target.focus,
         name=target.name,
         borderless=target.borderless,
+        default_bg=target.default_bg,
+        default_fg=target.default_fg,
         raw_unknown_nodes=list(target.raw_unknown_nodes),
     )
     inner_new = Pane()

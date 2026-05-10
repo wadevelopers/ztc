@@ -365,6 +365,21 @@ class PaneEditModal(ModalScreen[Pane | None]):
                     yield Static("Focus", classes="label")
                     yield Switch(value=self._pane.focus, id="focus")
 
+                with Horizontal(classes="row"):
+                    yield Static("Default bg", classes="label")
+                    yield Input(
+                        value=self._pane.default_bg or "",
+                        id="default_bg",
+                        placeholder="#rrggbb / rgb:rr/gg/bb",
+                    )
+                with Horizontal(classes="row"):
+                    yield Static("Default fg", classes="label")
+                    yield Input(
+                        value=self._pane.default_fg or "",
+                        id="default_fg",
+                        placeholder="#rrggbb / rgb:rr/gg/bb",
+                    )
+
                 if self._is_container:
                     with Horizontal(classes="row"):
                         yield Static("Split direction", classes="label")
@@ -431,6 +446,31 @@ class PaneEditModal(ModalScreen[Pane | None]):
         self.dismiss(None)
 
     def _submit(self) -> None:
+        from ztc.services.colors import is_valid_zellij_pane_color
+
+        bg_input = self.query_one("#default_bg", Input).value.strip()
+        fg_input = self.query_one("#default_fg", Input).value.strip()
+
+        # Validacion estricta: campo vacio = unset; valor no vacio
+        # debe matchear los formatos aceptados por Zellij. Si invalido,
+        # notify y mantener modal abierto.
+        if bg_input and not is_valid_zellij_pane_color(bg_input):
+            self.app.notify(
+                f"Invalid Default bg: {bg_input!r}. "
+                "Expected #rgb, #rrggbb, #rrggbbaa, or rgb:rr/gg/bb.",
+                severity="error",
+                timeout=6,
+            )
+            return
+        if fg_input and not is_valid_zellij_pane_color(fg_input):
+            self.app.notify(
+                f"Invalid Default fg: {fg_input!r}. "
+                "Expected #rgb, #rrggbb, #rrggbbaa, or rgb:rr/gg/bb.",
+                severity="error",
+                timeout=6,
+            )
+            return
+
         new_pane = Pane(
             children=list(self._pane.children),
             raw_unknown_nodes=list(self._pane.raw_unknown_nodes),
@@ -438,6 +478,8 @@ class PaneEditModal(ModalScreen[Pane | None]):
         new_pane.name = _none_if_empty(self.query_one("#name", Input).value)
         new_pane.size = _none_if_empty(self.query_one("#size", Input).value)
         new_pane.focus = self.query_one("#focus", Switch).value
+        new_pane.default_bg = bg_input or None
+        new_pane.default_fg = fg_input or None
 
         if self._is_container:
             split_set = self.query_one("#split", RadioSet)

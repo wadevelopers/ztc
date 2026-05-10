@@ -176,3 +176,68 @@ async def test_layout_list_new_creates_file(tmp_path: Path) -> None:
         # Tras crear deberia haber empujado el editor.
         assert isinstance(app.screen, LayoutEditorScreen)
         assert (paths.zellij_layouts_dir / "trabajo.kdl").exists()
+
+
+# ---------- PaneEditModal: validacion de default_bg / default_fg ----------
+
+
+async def test_pane_edit_modal_accepts_valid_default_bg_fg(tmp_path: Path) -> None:
+    """Hex valido en bg y fg pasa la validacion y se aplica al modelo."""
+    from textual.widgets import Input
+
+    paths = _paths_with_layout(tmp_path)
+    app = _make_app(tmp_path, paths)
+    async with app.run_test() as pilot:
+        await pilot.press("down", "enter", "enter")  # menu -> layouts -> dev
+        await pilot.pause()
+        editor = app.screen
+        assert isinstance(editor, LayoutEditorScreen)
+        # Mismo patron que test_pane_edit_modal_returns_changes: seleccionar
+        # el primer pane via tree y abrir el modal.
+        tree = editor.query_one("#pane-tree", Tree)
+        first_pane_node = tree.root.children[0]
+        tree.select_node(first_pane_node)
+        await pilot.pause()
+        await pilot.press("e")
+        await pilot.pause()
+        modal = app.screen
+        assert isinstance(modal, PaneEditModal)
+
+        modal.query_one("#default_bg", Input).value = "#6272a4"
+        modal.query_one("#default_fg", Input).value = "rgb:f8/f8/f2"
+        modal._submit()
+        await pilot.pause()
+
+        # Modal debe haber cerrado y el pane del modelo tiene los colores.
+        assert isinstance(app.screen, LayoutEditorScreen)
+        edited_pane = app.screen.layout_model.tabs[0].children[0]
+        assert edited_pane.default_bg == "#6272a4"
+        assert edited_pane.default_fg == "rgb:f8/f8/f2"
+
+
+async def test_pane_edit_modal_rejects_invalid_default_bg(tmp_path: Path) -> None:
+    """Hex invalido bloquea el dismiss y el modal sigue abierto."""
+    from textual.widgets import Input
+
+    paths = _paths_with_layout(tmp_path)
+    app = _make_app(tmp_path, paths)
+    async with app.run_test() as pilot:
+        await pilot.press("down", "enter", "enter")
+        await pilot.pause()
+        editor = app.screen
+        assert isinstance(editor, LayoutEditorScreen)
+        tree = editor.query_one("#pane-tree", Tree)
+        first_pane_node = tree.root.children[0]
+        tree.select_node(first_pane_node)
+        await pilot.pause()
+        await pilot.press("e")
+        await pilot.pause()
+        modal = app.screen
+        assert isinstance(modal, PaneEditModal)
+
+        modal.query_one("#default_bg", Input).value = "not-a-color"
+        modal._submit()
+        await pilot.pause()
+
+        # Modal SIGUE abierto (no dismiss en flujo de error).
+        assert isinstance(app.screen, PaneEditModal)

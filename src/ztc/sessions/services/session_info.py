@@ -43,6 +43,10 @@ class PaneInfo:
     default_bg: str | None = None
     """Color de fondo (`default_bg="#1a2030"`) si el layout lo
     declara. Util como pista visual de qué pane se está mirando."""
+    default_fg: str | None = None
+    """Color de texto (`default_fg="#f8f8f2"`) si el layout lo
+    declara. Junto con `default_bg`, da control visual completo
+    del pane sin tocar colores de la terminal."""
     split_direction: str | None = None
     """`"horizontal"` (children apilados en filas) o `"vertical"`
     (children side-by-side en columnas), si el pane es un container
@@ -244,7 +248,8 @@ def _collect_layout_panes(
             command=cmd if isinstance(cmd, str) else None,
             cwd=effective_cwd,
             size=size,
-            default_bg=_read_default_bg(child),
+            default_bg=_read_color_attr(child, "default_bg"),
+            default_fg=_read_color_attr(child, "default_fg"),
             split_direction=split if isinstance(split, str) else None,
             children=_collect_layout_panes(child, parent_cwd=effective_cwd),
         )
@@ -252,16 +257,16 @@ def _collect_layout_panes(
     return out
 
 
-def _read_default_bg(node) -> str | None:
-    """`default_bg` can be a property (`default_bg="#hex"`) or a child
-    node (`default_bg "#hex"`). Layouts dumped by Zellij itself tend
-    to use the property form; hand-written ones tend to use the child
-    node form. Accept both."""
-    prop = node.props.get("default_bg")
+def _read_color_attr(node, attr_name: str) -> str | None:
+    """`default_bg` y `default_fg` pueden venir como propiedad
+    (`default_bg="#hex"`) o como nodo hijo (`default_bg "#hex"`).
+    Layouts dumpeados por Zellij tienden a usar property; los hechos
+    a mano, child node. Aceptamos ambos."""
+    prop = node.props.get(attr_name)
     if isinstance(prop, str):
         return prop
     for sub in node.nodes:
-        if sub.name == "default_bg" and sub.args:
+        if sub.name == attr_name and sub.args:
             val = sub.args[0]
             if isinstance(val, str):
                 return val

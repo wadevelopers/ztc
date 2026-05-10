@@ -140,3 +140,143 @@ def test_dump_layout_emits_no_default_props() -> None:
     assert "focus=" not in text
     assert "borderless=" not in text
     assert "start_suspended=" not in text
+
+
+# ---------- default_bg / default_fg ----------
+
+
+def _write_layout(tmp_path: Path, content: str) -> Path:
+    p = tmp_path / "test.kdl"
+    p.write_text(content, encoding="utf-8")
+    return p
+
+
+def test_default_bg_fg_property_form_parsed(tmp_path: Path) -> None:
+    """Forma propiedad: `pane default_bg="..." default_fg="..."`."""
+    p = _write_layout(
+        tmp_path,
+        '''layout {
+    tab name="t" {
+        pane default_bg="#6272a4" default_fg="#f8f8f2"
+    }
+}
+''',
+    )
+    layout = kdl_io.load_layout(p)
+    pane = layout.tabs[0].children[0]
+    assert pane.default_bg == "#6272a4"
+    assert pane.default_fg == "#f8f8f2"
+
+
+def test_default_bg_fg_child_node_form_parsed(tmp_path: Path) -> None:
+    """Forma nodo hijo: `pane { default_bg "..." ; default_fg "..." }`."""
+    p = _write_layout(
+        tmp_path,
+        '''layout {
+    tab name="t" {
+        pane {
+            default_bg "rgb:6c/72/a4"
+            default_fg "rgb:f8/f8/f2"
+        }
+    }
+}
+''',
+    )
+    layout = kdl_io.load_layout(p)
+    pane = layout.tabs[0].children[0]
+    assert pane.default_bg == "rgb:6c/72/a4"
+    assert pane.default_fg == "rgb:f8/f8/f2"
+
+
+def test_default_bg_fg_property_wins_over_child_node(tmp_path: Path) -> None:
+    """Cuando ambas formas aparecen, gana la propiedad (espeja el patron
+    de command/cwd/size/name en `_apply_child_field`)."""
+    p = _write_layout(
+        tmp_path,
+        '''layout {
+    tab name="t" {
+        pane default_bg="#aabbcc" default_fg="#001122" {
+            default_bg "#999999"
+            default_fg "#888888"
+        }
+    }
+}
+''',
+    )
+    layout = kdl_io.load_layout(p)
+    pane = layout.tabs[0].children[0]
+    assert pane.default_bg == "#aabbcc"
+    assert pane.default_fg == "#001122"
+
+
+def test_dump_emits_default_bg_fg_as_child_nodes(tmp_path: Path) -> None:
+    """Forma de emision canonica: child node, no propiedad, tanto si
+    el source venia como property como si venia como child node."""
+    p = _write_layout(
+        tmp_path,
+        '''layout {
+    tab name="t" {
+        pane default_bg="#6272a4" default_fg="#f8f8f2"
+    }
+}
+''',
+    )
+    layout = kdl_io.load_layout(p)
+    text = kdl_io.dump_layout(layout)
+    # Emitido como child nodes, NO como propiedades.
+    assert 'default_bg "#6272a4"' in text
+    assert 'default_fg "#f8f8f2"' in text
+    assert 'default_bg=' not in text
+    assert 'default_fg=' not in text
+
+
+def test_dump_pane_with_only_default_bg_keeps_block(tmp_path: Path) -> None:
+    """Bug evitado: si un pane tiene SOLO default_bg (sin children/args),
+    `has_block` debe seguir abriendo `{...}` para que la directiva no se
+    pierda al emitir."""
+    layout = Layout(
+        name="t",
+        path=Path("/tmp/t.kdl"),
+        tabs=[Tab(name="t", children=[Pane(default_bg="#6272a4")])],
+    )
+    text = kdl_io.dump_layout(layout)
+    assert '{' in text  # bloque abierto
+    assert 'default_bg "#6272a4"' in text
+
+
+def test_dump_pane_with_only_default_fg_keeps_block(tmp_path: Path) -> None:
+    """Mismo bug evitado para el caso de solo default_fg."""
+    layout = Layout(
+        name="t",
+        path=Path("/tmp/t.kdl"),
+        tabs=[Tab(name="t", children=[Pane(default_fg="#f8f8f2")])],
+    )
+    text = kdl_io.dump_layout(layout)
+    assert '{' in text
+    assert 'default_fg "#f8f8f2"' in text
+
+
+def test_default_bg_fg_roundtrip_idempotent(tmp_path: Path) -> None:
+    """Parse + emit + parse-de-nuevo da el mismo modelo."""
+    p = _write_layout(
+        tmp_path,
+        '''layout {
+    tab name="t" {
+        pane {
+            default_bg "#6272a4"
+            default_fg "#f8f8f2"
+        }
+    }
+}
+''',
+    )
+    layout1 = kdl_io.load_layout(p)
+    text = kdl_io.dump_layout(layout1)
+    p2 = _write_layout(tmp_path / "two", text) if False else None  # noqa
+    p2 = tmp_path / "out.kdl"
+    p2.write_text(text, encoding="utf-8")
+    layout2 = kdl_io.load_layout(p2)
+    pane1 = layout1.tabs[0].children[0]
+    pane2 = layout2.tabs[0].children[0]
+    assert pane1.default_bg == pane2.default_bg == "#6272a4"
+    assert pane1.default_fg == pane2.default_fg == "#f8f8f2"
