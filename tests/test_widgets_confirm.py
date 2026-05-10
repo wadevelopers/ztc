@@ -80,6 +80,7 @@ async def test_kitty_remote_control_modal_copy_outside_zellij() -> None:
         assert "listener socket" not in message
         assert "Ctrl + Shift + F5" in message
         assert "necessary settings to kitty.conf" in message
+        assert "restart Kitty once" in message
         assert app.modal.query_one("#enable", Button).label.plain == "Yes"
         assert app.modal.query_one("#skip", Button).label.plain == "No"
 

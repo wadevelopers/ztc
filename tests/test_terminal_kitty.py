@@ -767,6 +767,54 @@ def test_reload_after_save_falls_back_to_kitten(
     ]
 
 
+def test_reload_after_save_skips_plain_command_for_pending_current_instance(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[list[str]] = []
+    path = tmp_path / "kitty.conf"
+    path.write_text(
+        "allow_remote_control yes\n"
+        '# ztc:{"remote_control_pending_instance": "pid:1234"}\n',
+        encoding="utf-8",
+    )
+    doc = KittyBackend().load(path)
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.delenv("KITTY_LISTEN_ON", raising=False)
+    monkeypatch.setenv("KITTY_PID", "1234")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert KittyBackend().reload_after_save(doc, path) is False
+    assert calls == []
+
+
+def test_reload_after_save_plain_command_allowed_for_different_kitty_instance(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[list[str]] = []
+    path = tmp_path / "kitty.conf"
+    path.write_text(
+        "allow_remote_control yes\n"
+        '# ztc:{"remote_control_pending_instance": "pid:1234"}\n',
+        encoding="utf-8",
+    )
+    doc = KittyBackend().load(path)
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.delenv("KITTY_LISTEN_ON", raising=False)
+    monkeypatch.setenv("KITTY_PID", "5678")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert KittyBackend().reload_after_save(doc, path) is True
+    assert calls == [["kitty", "@", "load-config", "--no-response"]]
+
+
 def test_reload_after_save_skips_plain_command_when_remote_control_disabled(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

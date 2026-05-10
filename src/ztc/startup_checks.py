@@ -72,6 +72,14 @@ def build_kitty_remote_control_check(
             if inside_zellij and not is_listen_on_set(read_listen_on(current_doc)):
                 write_listen_on_default(current_doc)
                 added += 1
+            if added:
+                pending_instance = _current_kitty_instance_marker()
+                if pending_instance is not None:
+                    write_ztc_pref(
+                        current_doc,
+                        "remote_control_pending_instance",
+                        pending_instance,
+                    )
             try:
                 backend.save(current_doc, backend_path)
             except Exception as exc:  # noqa: BLE001
@@ -114,6 +122,14 @@ def build_kitty_remote_control_check(
 
 def _is_inside_zellij() -> bool:
     return bool(os.environ.get("ZELLIJ") or os.environ.get("ZELLIJ_SESSION_NAME"))
+
+
+def _current_kitty_instance_marker() -> str | None:
+    if pid := os.environ.get("KITTY_PID"):
+        return f"pid:{pid}"
+    if window_id := os.environ.get("KITTY_WINDOW_ID"):
+        return f"window:{window_id}"
+    return None
 
 
 STARTUP_CHECKS: dict[

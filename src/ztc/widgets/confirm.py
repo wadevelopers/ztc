@@ -833,7 +833,8 @@ class KittyRemoteControlModal(ModalScreen[KittyRemoteControlChoice | None]):
             "Without auto-reload enabled, you will need to manually reload "
             "Kitty using Ctrl + Shift + F5 to see the changes. Would you "
             "like ZTC to add the necessary settings to kitty.conf to enable "
-            "auto-reload?"
+            "auto-reload? If you choose Yes, restart Kitty once for the new "
+            "settings to take effect."
         )
         return base + requirement + fallback
 

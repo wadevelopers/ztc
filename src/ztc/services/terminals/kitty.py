@@ -327,6 +327,14 @@ class KittyBackend:
 
     def reload_after_save(self, doc: KittyDoc, path: Path) -> bool:
         target = os.environ.get("KITTY_LISTEN_ON")
+        current_instance = _current_kitty_instance_marker()
+        pending_instance = read_ztc_pref(doc, "remote_control_pending_instance")
+        if (
+            not target
+            and current_instance is not None
+            and pending_instance == current_instance
+        ):
+            return False
         if not target and is_remote_control_disabled(read_remote_control(doc)):
             return False
         for binary in ("kitty", "kitten"):
@@ -579,3 +587,11 @@ def _write_kitty_padding(doc: KittyDoc, setting_name: str, value: int) -> None:
         doc.lines[last.main_line_idx] = new_line
     else:
         doc.lines.append(new_line)
+
+
+def _current_kitty_instance_marker() -> str | None:
+    if pid := os.environ.get("KITTY_PID"):
+        return f"pid:{pid}"
+    if window_id := os.environ.get("KITTY_WINDOW_ID"):
+        return f"window:{window_id}"
+    return None

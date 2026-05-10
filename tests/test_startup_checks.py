@@ -94,6 +94,8 @@ def test_enable_outside_zellij_adds_only_remote_control(
 ) -> None:
     monkeypatch.delenv("ZELLIJ", raising=False)
     monkeypatch.delenv("ZELLIJ_SESSION_NAME", raising=False)
+    monkeypatch.delenv("KITTY_PID", raising=False)
+    monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     path = _kitty_path(tmp_path, "")
     app = _App()
     check = build_startup_check(KittyBackend(), path, app)
@@ -111,11 +113,30 @@ def test_enable_outside_zellij_adds_only_remote_control(
     ]
 
 
+def test_enable_marks_current_kitty_instance_as_pending(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("ZELLIJ", raising=False)
+    monkeypatch.delenv("ZELLIJ_SESSION_NAME", raising=False)
+    monkeypatch.setenv("KITTY_PID", "1234")
+    path = _kitty_path(tmp_path, "")
+    check = build_startup_check(KittyBackend(), path, _App())
+    assert check is not None
+    check.on_result(KittyRemoteControlChoice(action="enable"))
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        "allow_remote_control yes",
+        '# ztc:{"remote_control_pending_instance": "pid:1234"}',
+    ]
+
+
 def test_enable_inside_zellij_adds_only_missing_listen_on(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("ZELLIJ", "1")
+    monkeypatch.delenv("KITTY_PID", raising=False)
+    monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     path = _kitty_path(tmp_path, "allow_remote_control yes\n")
     app = _App()
     check = build_startup_check(KittyBackend(), path, app)
@@ -139,6 +160,8 @@ def test_enable_inside_zellij_adds_both_directives_when_both_missing(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("ZELLIJ", "1")
+    monkeypatch.delenv("KITTY_PID", raising=False)
+    monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     path = _kitty_path(tmp_path, "")
     app = _App()
     check = build_startup_check(KittyBackend(), path, app)
