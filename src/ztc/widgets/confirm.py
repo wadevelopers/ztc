@@ -786,10 +786,17 @@ class KittyRemoteControlModal(ModalScreen[KittyRemoteControlChoice | None]):
     #message {
         margin-bottom: 1;
     }
+    #footer {
+        width: 100%;
+        height: 3;
+        layout: horizontal;
+    }
     #remember {
-        margin-bottom: 1;
+        width: 1fr;
+        height: 3;
     }
     #buttons {
+        width: auto;
         align-horizontal: right;
         height: 3;
     }
@@ -804,10 +811,11 @@ class KittyRemoteControlModal(ModalScreen[KittyRemoteControlChoice | None]):
                 "the missing directive(s) to kitty.conf.",
                 id="message",
             )
-            yield Checkbox("Don't show this again", id="remember")
-            with Horizontal(id="buttons"):
-                yield Button("Enable", id="enable", variant="success")
-                yield Button("Skip", id="skip")
+            with Horizontal(id="footer"):
+                yield Checkbox("Don't show this again", id="remember")
+                with Horizontal(id="buttons"):
+                    yield Button("Enable", id="enable", variant="success")
+                    yield Button("Skip", id="skip")
 
     def on_mount(self) -> None:
         self.query_one("#skip", Button).focus()
