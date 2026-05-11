@@ -32,7 +32,9 @@ def test_build_startup_check_returns_none_when_already_reachable(
 ) -> None:
     path = _kitty_path(
         tmp_path,
-        "allow_remote_control yes\nlisten_on unix:@ztc-{kitty_pid}\n",
+        "allow_remote_control yes\n"
+        "listen_on unix:@ztc-{kitty_pid}\n"
+        "dynamic_background_opacity yes\n",
     )
     assert build_startup_check(KittyBackend(), path, _App()) is None
 
@@ -43,7 +45,11 @@ def test_build_startup_check_returns_none_outside_zellij_when_remote_control_ena
 ) -> None:
     monkeypatch.delenv("ZELLIJ", raising=False)
     monkeypatch.delenv("ZELLIJ_SESSION_NAME", raising=False)
-    path = _kitty_path(tmp_path, "allow_remote_control yes\n")
+    path = _kitty_path(
+        tmp_path,
+        "allow_remote_control yes\n"
+        "dynamic_background_opacity yes\n",
+    )
     assert build_startup_check(KittyBackend(), path, _App()) is None
 
 
@@ -52,7 +58,11 @@ def test_build_startup_check_requires_listen_on_inside_zellij(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("ZELLIJ", "1")
-    path = _kitty_path(tmp_path, "allow_remote_control yes\n")
+    path = _kitty_path(
+        tmp_path,
+        "allow_remote_control yes\n"
+        "dynamic_background_opacity yes\n",
+    )
     check = build_startup_check(KittyBackend(), path, _App())
     assert isinstance(check, StartupCheck)
     assert isinstance(check.modal, KittyRemoteControlModal)
@@ -61,8 +71,21 @@ def test_build_startup_check_requires_listen_on_inside_zellij(
 def test_build_startup_check_returns_none_for_password_choice(
     tmp_path: Path,
 ) -> None:
-    path = _kitty_path(tmp_path, "allow_remote_control password\n")
+    path = _kitty_path(
+        tmp_path,
+        "allow_remote_control password\n"
+        "dynamic_background_opacity yes\n",
+    )
     assert build_startup_check(KittyBackend(), path, _App()) is None
+
+
+def test_build_startup_check_with_password_still_checks_dynamic_opacity(
+    tmp_path: Path,
+) -> None:
+    path = _kitty_path(tmp_path, "allow_remote_control password\n")
+    check = build_startup_check(KittyBackend(), path, _App())
+    assert isinstance(check, StartupCheck)
+    assert isinstance(check.modal, KittyRemoteControlModal)
 
 
 def test_build_startup_check_returns_none_when_dismissed(
@@ -88,6 +111,18 @@ def test_build_startup_check_returns_modal_when_missing_directives(
     assert isinstance(check.modal, KittyRemoteControlModal)
 
 
+def test_build_startup_check_returns_modal_when_only_dynamic_opacity_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("ZELLIJ", raising=False)
+    monkeypatch.delenv("ZELLIJ_SESSION_NAME", raising=False)
+    path = _kitty_path(tmp_path, "allow_remote_control yes\n")
+    check = build_startup_check(KittyBackend(), path, _App())
+    assert isinstance(check, StartupCheck)
+    assert isinstance(check.modal, KittyRemoteControlModal)
+
+
 def test_enable_outside_zellij_adds_only_remote_control(
     tmp_path: Path,
     monkeypatch,
@@ -103,10 +138,11 @@ def test_enable_outside_zellij_adds_only_remote_control(
     check.on_result(KittyRemoteControlChoice(action="enable"))
     assert path.read_text(encoding="utf-8").splitlines() == [
         "allow_remote_control yes",
+        "dynamic_background_opacity yes",
     ]
     assert app.notifications == [
         (
-            "Added 1 line(s) to kitty.conf. "
+            "Added 2 line(s) to kitty.conf. "
             "Restart Kitty for auto-reload to take effect.",
             "information",
         )
@@ -126,6 +162,7 @@ def test_enable_marks_current_kitty_instance_as_pending(
     check.on_result(KittyRemoteControlChoice(action="enable"))
     assert path.read_text(encoding="utf-8").splitlines() == [
         "allow_remote_control yes",
+        "dynamic_background_opacity yes",
         '# ztc:{"remote_control_pending_instance": "pid:1234"}',
     ]
 
@@ -137,7 +174,11 @@ def test_enable_inside_zellij_adds_only_missing_listen_on(
     monkeypatch.setenv("ZELLIJ", "1")
     monkeypatch.delenv("KITTY_PID", raising=False)
     monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
-    path = _kitty_path(tmp_path, "allow_remote_control yes\n")
+    path = _kitty_path(
+        tmp_path,
+        "allow_remote_control yes\n"
+        "dynamic_background_opacity yes\n",
+    )
     app = _App()
     check = build_startup_check(KittyBackend(), path, app)
     assert check is not None
@@ -170,8 +211,27 @@ def test_enable_inside_zellij_adds_both_directives_when_both_missing(
     assert path.read_text(encoding="utf-8").splitlines() == [
         "allow_remote_control yes",
         "listen_on unix:@ztc-{kitty_pid}",
+        "dynamic_background_opacity yes",
     ]
-    assert app.notifications[0][0].startswith("Added 2 line(s)")
+    assert app.notifications[0][0].startswith("Added 3 line(s)")
+
+
+def test_enable_adds_only_dynamic_opacity_when_remote_control_ready(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("ZELLIJ", raising=False)
+    monkeypatch.delenv("ZELLIJ_SESSION_NAME", raising=False)
+    path = _kitty_path(tmp_path, "allow_remote_control yes\n")
+    app = _App()
+    check = build_startup_check(KittyBackend(), path, app)
+    assert check is not None
+    check.on_result(KittyRemoteControlChoice(action="enable"))
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        "allow_remote_control yes",
+        "dynamic_background_opacity yes",
+    ]
+    assert app.notifications[0][0].startswith("Added 1 line(s)")
 
 
 def test_skip_with_remember_writes_dismissal_pref(tmp_path: Path) -> None:

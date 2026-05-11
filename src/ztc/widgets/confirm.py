@@ -9,7 +9,16 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, Input, RadioButton, RadioSet, Static, Switch
+from textual.widgets import (
+    Button,
+    Checkbox,
+    Input,
+    OptionList,
+    RadioButton,
+    RadioSet,
+    Static,
+    Switch,
+)
 
 from ztc.models.layout import Pane, SplitDirection
 
@@ -802,9 +811,23 @@ class KittyRemoteControlModal(ModalScreen[KittyRemoteControlChoice | None]):
     }
     """
 
-    def __init__(self, *, inside_zellij: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        inside_zellij: bool = False,
+        remote_control_missing: bool = True,
+        listen_on_missing: bool | None = None,
+        dynamic_background_opacity_missing: bool = False,
+    ) -> None:
         super().__init__()
         self._inside_zellij = inside_zellij
+        self._remote_control_missing = remote_control_missing
+        self._listen_on_missing = (
+            inside_zellij if listen_on_missing is None else listen_on_missing
+        )
+        self._dynamic_background_opacity_missing = (
+            dynamic_background_opacity_missing
+        )
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
@@ -817,26 +840,38 @@ class KittyRemoteControlModal(ModalScreen[KittyRemoteControlChoice | None]):
                     yield Button("No", id="skip")
 
     def _message(self) -> str:
-        base = (
+        parts = [
             "ZTC can automatically refresh your terminal whenever you "
             "change colors, settings, or Zellij themes. "
-        )
-        if self._inside_zellij:
-            requirement = (
-                "Because ZTC is running inside Zellij, Kitty needs remote "
-                "control enabled and a listener socket so the reload command "
-                "can reach the parent Kitty process. "
+        ]
+        missing: list[str] = []
+        if self._remote_control_missing:
+            missing.append("allow_remote_control yes")
+        if self._listen_on_missing:
+            missing.append("listen_on unix:@ztc-{kitty_pid}")
+        if self._dynamic_background_opacity_missing:
+            missing.append("dynamic_background_opacity yes")
+
+        if self._inside_zellij and self._listen_on_missing:
+            parts.append(
+                "Because ZTC is running inside Zellij, Kitty also needs a "
+                "listener socket so the reload command can reach the parent "
+                "Kitty process. "
             )
-        else:
-            requirement = ""
-        fallback = (
-            "Without auto-reload enabled, you will need to manually reload "
-            "Kitty using Ctrl + Shift + F5 to see the changes. Would you "
-            "like ZTC to add the necessary settings to kitty.conf to enable "
-            "auto-reload? If you choose Yes, restart Kitty once for the new "
-            "settings to take effect."
+        if self._dynamic_background_opacity_missing:
+            parts.append(
+                "Live background opacity changes require Kitty to start with "
+                "dynamic background opacity enabled. "
+            )
+        parts.append(
+            "Missing setting(s): "
+            + ", ".join(missing)
+            + ". Without them, some changes will require a manual reload "
+            "with Ctrl + Shift + F5 or a Kitty restart. Would you like ZTC "
+            "to add only the missing setting(s) to kitty.conf? If you choose "
+            "Yes, restart Kitty once for the new settings to take effect."
         )
-        return base + requirement + fallback
+        return "".join(parts)
 
     def on_mount(self) -> None:
         self.query_one("#skip", Button).focus()
@@ -936,7 +971,7 @@ class FontPickerModal(ModalScreen[str | None]):
 
     BINDINGS = [
         Binding("escape", "dismiss_none", "Cancel"),
-        Binding("enter", "confirm", "OK", show=False),
+        Binding("enter", "confirm", "OK", show=False, priority=True),
     ]
 
     DEFAULT_CSS = """
@@ -979,7 +1014,6 @@ class FontPickerModal(ModalScreen[str | None]):
         self._initial = initial
 
     def compose(self) -> ComposeResult:
-        from textual.widgets import OptionList
         from textual.widgets.option_list import Option
 
         with Vertical(id="dialog"):
@@ -994,8 +1028,6 @@ class FontPickerModal(ModalScreen[str | None]):
                 yield Button("OK", id="confirm", variant="primary")
 
     def on_mount(self) -> None:
-        from textual.widgets import OptionList
-
         ol = self.query_one("#font-list", OptionList)
         ol.focus()
         if self._initial is not None:
@@ -1006,12 +1038,17 @@ class FontPickerModal(ModalScreen[str | None]):
                     break
 
     def _selected(self) -> str | None:
-        from textual.widgets import OptionList
-
         ol = self.query_one("#font-list", OptionList)
         if ol.highlighted is None:
             return None
         return ol.get_option_at_index(ol.highlighted).id
+
+    def _confirm_selected(self) -> None:
+        self.dismiss(self._selected())
+
+    @on(OptionList.OptionSelected, "#font-list")
+    def _on_font_selected(self) -> None:
+        self._confirm_selected()
 
     @on(Button.Pressed, "#cancel")
     def _on_cancel(self) -> None:
@@ -1019,10 +1056,10 @@ class FontPickerModal(ModalScreen[str | None]):
 
     @on(Button.Pressed, "#confirm")
     def _on_confirm(self) -> None:
-        self.dismiss(self._selected())
+        self._confirm_selected()
 
     def action_confirm(self) -> None:
-        self.dismiss(self._selected())
+        self._confirm_selected()
 
     def action_dismiss_none(self) -> None:
         self.dismiss(None)
@@ -1033,7 +1070,10 @@ class EnumPickerModal(ModalScreen[str | None]):
     Devuelve el string elegido o None si cancela.
     """
 
-    BINDINGS = [Binding("escape", "dismiss_none", "Cancel")]
+    BINDINGS = [
+        Binding("escape", "dismiss_none", "Cancel"),
+        Binding("enter", "confirm", "OK", show=False, priority=True),
+    ]
 
     DEFAULT_CSS = """
     EnumPickerModal {
@@ -1088,6 +1128,8 @@ class EnumPickerModal(ModalScreen[str | None]):
 
     def on_mount(self) -> None:
         rs = self.query_one("#enum-choices", RadioSet)
+        if rs.pressed_index >= 0:
+            rs._selected = rs.pressed_index
         rs.focus()
 
     @on(Button.Pressed, "#cancel")
@@ -1096,16 +1138,27 @@ class EnumPickerModal(ModalScreen[str | None]):
 
     @on(Button.Pressed, "#confirm")
     def _on_confirm(self) -> None:
+        self.action_confirm()
+
+    def action_confirm(self) -> None:
         rs = self.query_one("#enum-choices", RadioSet)
-        if rs.pressed_button is None:
+        button = self._selected_button(rs) or rs.pressed_button
+        if button is None:
             return
         # El id del RadioButton es "choice-<value>"; extraemos value.
         prefix = "choice-"
-        button_id = rs.pressed_button.id or ""
+        button_id = button.id or ""
         if button_id.startswith(prefix):
             self.dismiss(button_id[len(prefix):])
         else:
             self.dismiss(None)
+
+    def _selected_button(self, rs: RadioSet) -> RadioButton | None:
+        selected = getattr(rs, "_selected", None)
+        buttons = list(rs.query(RadioButton))
+        if isinstance(selected, int) and 0 <= selected < len(buttons):
+            return buttons[selected]
+        return None
 
     def action_dismiss_none(self) -> None:
         self.dismiss(None)

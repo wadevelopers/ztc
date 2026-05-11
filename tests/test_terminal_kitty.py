@@ -8,15 +8,22 @@ import pytest
 
 from ztc.services.terminals.kitty import (
     KittyBackend,
+    is_dynamic_background_opacity_enabled,
     is_listen_on_set,
     is_remote_control_disabled,
+    is_shell_integration_cursor_disabled,
+    read_dynamic_background_opacity,
     read_listen_on,
     read_remote_control,
+    read_shell_integration,
     read_ztc_pref,
+    write_dynamic_background_opacity_yes,
     write_listen_on_default,
     write_remote_control_yes,
+    write_shell_integration_no_cursor,
     write_ztc_pref,
 )
+from ztc.services.terminals.settings import SETTINGS
 
 FIX = Path(__file__).parent / "fixtures" / "kitty"
 
@@ -685,6 +692,32 @@ def test_write_listen_on_default_appends(tmp_path: Path) -> None:
     assert doc.lines[-1] == "listen_on unix:@ztc-{kitty_pid}"
 
 
+def test_dynamic_background_opacity_helpers(tmp_path: Path) -> None:
+    path = tmp_path / "kitty.conf"
+    path.write_text("dynamic_background_opacity no\n", encoding="utf-8")
+    doc = KittyBackend().load(path)
+    assert read_dynamic_background_opacity(doc) == "no"
+    assert is_dynamic_background_opacity_enabled(None) is False
+    assert is_dynamic_background_opacity_enabled("no") is False
+    assert is_dynamic_background_opacity_enabled("yes") is True
+    assert is_dynamic_background_opacity_enabled("YES") is True
+    write_dynamic_background_opacity_yes(doc)
+    assert doc.lines == ["dynamic_background_opacity yes"]
+
+
+def test_shell_integration_no_cursor_helpers(tmp_path: Path) -> None:
+    path = tmp_path / "kitty.conf"
+    path.write_text("shell_integration no-title\n", encoding="utf-8")
+    doc = KittyBackend().load(path)
+    assert read_shell_integration(doc) == "no-title"
+    assert is_shell_integration_cursor_disabled(None) is False
+    assert is_shell_integration_cursor_disabled("enabled") is False
+    assert is_shell_integration_cursor_disabled("no-title no-cursor") is True
+    assert is_shell_integration_cursor_disabled("disabled") is True
+    write_shell_integration_no_cursor(doc)
+    assert doc.lines == ["shell_integration no-title no-cursor"]
+
+
 # ---------- # ztc prefs ----------
 
 
@@ -743,6 +776,59 @@ def test_reload_after_save_uses_env_target(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(subprocess, "run", fake_run)
     assert KittyBackend().reload_after_save(doc, path) is True
     assert calls == [["kitty", "@", "--to", "unix:@ztc-1", "load-config"]]
+
+
+def test_reload_after_save_sets_background_opacity_when_changed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[list[str]] = []
+    path = tmp_path / "kitty.conf"
+    path.write_text(
+        "allow_remote_control yes\n"
+        "dynamic_background_opacity yes\n"
+        "background_opacity 0.8\n",
+        encoding="utf-8",
+    )
+    backend = KittyBackend()
+    doc = backend.load(path)
+    backend.write_setting(doc, SETTINGS["window.opacity"], 0.6)
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setenv("KITTY_LISTEN_ON", "unix:@ztc-1")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert backend.reload_after_save(doc, path) is True
+    assert calls == [
+        ["kitty", "@", "--to", "unix:@ztc-1", "load-config"],
+        ["kitty", "@", "--to", "unix:@ztc-1", "set-background-opacity", "0.6"],
+    ]
+
+
+def test_reload_after_save_reports_failed_opacity_live_apply(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "kitty.conf"
+    path.write_text(
+        "allow_remote_control yes\nbackground_opacity 0.8\n",
+        encoding="utf-8",
+    )
+    backend = KittyBackend()
+    doc = backend.load(path)
+    backend.write_setting(doc, SETTINGS["window.opacity"], 0.6)
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            cmd,
+            1 if "set-background-opacity" in cmd else 0,
+        )
+
+    monkeypatch.setenv("KITTY_LISTEN_ON", "unix:@ztc-1")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert backend.reload_after_save(doc, path) is False
 
 
 def test_reload_after_save_falls_back_to_kitten(

@@ -174,6 +174,70 @@ def test_write_then_read_opacity(backend: KittyBackend, tmp_path: Path) -> None:
     doc = _doc_from(tmp_path, [])
     backend.write_setting(doc, SETTINGS["window.opacity"], 0.7)
     assert backend.read_setting(doc, SETTINGS["window.opacity"]) == 0.7
+    assert doc.lines == [
+        "background_opacity 0.7",
+        "dynamic_background_opacity yes",
+    ]
+    assert doc.changed_settings == {"window.opacity"}
+
+
+def test_write_opacity_forces_existing_dynamic_background_opacity(
+    backend: KittyBackend, tmp_path: Path
+) -> None:
+    doc = _doc_from(tmp_path, ["dynamic_background_opacity no"])
+    backend.write_setting(doc, SETTINGS["window.opacity"], 0.7)
+    assert doc.lines == [
+        "dynamic_background_opacity yes",
+        "background_opacity 0.7",
+    ]
+
+
+def test_write_cursor_shape_emits_lowercase_for_kitty(
+    backend: KittyBackend, tmp_path: Path
+) -> None:
+    doc = _doc_from(tmp_path, [])
+    backend.write_setting(doc, SETTINGS["cursor.shape"], "Beam")
+    assert backend.read_setting(doc, SETTINGS["cursor.shape"]) == "Beam"
+    assert doc.lines == [
+        "cursor_shape beam",
+        "shell_integration no-cursor",
+    ]
+
+
+def test_write_cursor_shape_preserves_shell_integration_options(
+    backend: KittyBackend, tmp_path: Path
+) -> None:
+    doc = _doc_from(tmp_path, ["shell_integration no-title no-cwd"])
+    backend.write_setting(doc, SETTINGS["cursor.shape"], "Block")
+    assert doc.lines == [
+        "shell_integration no-title no-cwd no-cursor",
+        "cursor_shape block",
+    ]
+
+
+def test_write_cursor_shape_leaves_disabled_shell_integration(
+    backend: KittyBackend, tmp_path: Path
+) -> None:
+    doc = _doc_from(tmp_path, ["shell_integration disabled"])
+    backend.write_setting(doc, SETTINGS["cursor.shape"], "Underline")
+    assert doc.lines == [
+        "shell_integration disabled",
+        "cursor_shape underline",
+    ]
+
+
+def test_write_cursor_shape_overrides_shell_integration_from_include(
+    backend: KittyBackend, tmp_path: Path
+) -> None:
+    inc = tmp_path / "shell.conf"
+    inc.write_text("shell_integration enabled\n", encoding="utf-8")
+    doc = _doc_from(tmp_path, ["include shell.conf"])
+    backend.write_setting(doc, SETTINGS["cursor.shape"], "Block")
+    assert doc.lines == [
+        "include shell.conf",
+        "cursor_shape block",
+        "shell_integration no-cursor",
+    ]
 
 
 def test_write_overwrites_existing_entry(

@@ -11,11 +11,14 @@ from textual.screen import ModalScreen
 from ztc.services.terminals import TerminalBackend
 from ztc.services.terminals.kitty import (
     KittyBackend,
+    is_dynamic_background_opacity_enabled,
     is_listen_on_set,
     is_remote_control_disabled,
+    read_dynamic_background_opacity,
     read_listen_on,
     read_remote_control,
     read_ztc_pref,
+    write_dynamic_background_opacity_yes,
     write_listen_on_default,
     write_remote_control_yes,
     write_ztc_pref,
@@ -52,12 +55,13 @@ def build_kitty_remote_control_check(
         return None
 
     remote_control = read_remote_control(doc)
-    if remote_control == "password":
-        return None
     inside_zellij = _is_inside_zellij()
     remote_disabled = is_remote_control_disabled(remote_control)
     listen_missing = inside_zellij and not is_listen_on_set(read_listen_on(doc))
-    if not remote_disabled and not listen_missing:
+    dynamic_opacity_missing = not is_dynamic_background_opacity_enabled(
+        read_dynamic_background_opacity(doc)
+    )
+    if not remote_disabled and not listen_missing and not dynamic_opacity_missing:
         return None
 
     def on_result(choice: KittyRemoteControlChoice | None) -> None:
@@ -71,6 +75,11 @@ def build_kitty_remote_control_check(
                 added += 1
             if inside_zellij and not is_listen_on_set(read_listen_on(current_doc)):
                 write_listen_on_default(current_doc)
+                added += 1
+            if not is_dynamic_background_opacity_enabled(
+                read_dynamic_background_opacity(current_doc)
+            ):
+                write_dynamic_background_opacity_yes(current_doc)
                 added += 1
             if added:
                 pending_instance = _current_kitty_instance_marker()
@@ -115,7 +124,12 @@ def build_kitty_remote_control_check(
             )
 
     return StartupCheck(
-        modal=KittyRemoteControlModal(inside_zellij=inside_zellij),
+        modal=KittyRemoteControlModal(
+            inside_zellij=inside_zellij,
+            remote_control_missing=remote_disabled,
+            listen_on_missing=listen_missing,
+            dynamic_background_opacity_missing=dynamic_opacity_missing,
+        ),
         on_result=on_result,
     )
 

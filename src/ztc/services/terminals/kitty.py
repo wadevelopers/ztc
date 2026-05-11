@@ -105,9 +105,15 @@ class KittyDoc:
     efectivo (last-wins en orden de procesamiento).
     """
 
-    def __init__(self, path: Path, lines: list[str]) -> None:
+    def __init__(
+        self,
+        path: Path,
+        lines: list[str],
+        changed_settings: set[str] | None = None,
+    ) -> None:
         self.path = path
         self.lines = lines
+        self.changed_settings = changed_settings or set()
 
     def to_text(self) -> str:
         # Re-emite como en el original: una linea por elemento + LF final.
@@ -247,6 +253,47 @@ def write_listen_on_default(doc: KittyDoc) -> None:
     doc.lines.append("listen_on unix:@ztc-{kitty_pid}")
 
 
+def read_dynamic_background_opacity(doc: KittyDoc) -> str | None:
+    last = _last_entry_for_key(
+        _linearize(doc.path, doc.lines, in_main=True),
+        "dynamic_background_opacity",
+    )
+    return last.value if last is not None else None
+
+
+def is_dynamic_background_opacity_enabled(value: str | None) -> bool:
+    return value is not None and value.strip().lower() == "yes"
+
+
+def write_dynamic_background_opacity_yes(doc: KittyDoc) -> None:
+    _write_main_key_last_wins(doc, "dynamic_background_opacity", "yes")
+
+
+def read_shell_integration(doc: KittyDoc) -> str | None:
+    last = _last_entry_for_key(
+        _linearize(doc.path, doc.lines, in_main=True),
+        "shell_integration",
+    )
+    return last.value if last is not None else None
+
+
+def is_shell_integration_cursor_disabled(value: str | None) -> bool:
+    if value is None:
+        return False
+    tokens = value.strip().split()
+    return "disabled" in tokens or "no-cursor" in tokens
+
+
+def write_shell_integration_no_cursor(doc: KittyDoc) -> None:
+    current = read_shell_integration(doc)
+    if is_shell_integration_cursor_disabled(current):
+        return
+    tokens = [] if current is None else current.strip().split()
+    tokens = [token for token in tokens if token != "enabled"]
+    tokens.append("no-cursor")
+    _write_main_key_last_wins(doc, "shell_integration", " ".join(tokens))
+
+
 def _parse_ztc_line(line: str) -> dict[str, object] | None:
     match = _ZTC_PREF_RE.match(line)
     if match is None:
@@ -337,27 +384,28 @@ class KittyBackend:
             return False
         if not target and is_remote_control_disabled(read_remote_control(doc)):
             return False
+        opacity_changed = "window.opacity" in doc.changed_settings
+        opacity = self.read_setting(doc, SETTINGS["window.opacity"])
         for binary in ("kitty", "kitten"):
-            cmd = [binary, "@"]
-            if target:
-                cmd.extend(["--to", target])
-            cmd.append("load-config")
-            if not target:
-                cmd.append("--no-response")
-            try:
-                result = subprocess.run(
-                    cmd,
-                    timeout=2,
-                    capture_output=True,
-                )
-            except Exception:  # noqa: BLE001
+            if not _run_kitty_remote_command(
+                binary,
+                target,
+                ["load-config"],
+                no_response_without_target=True,
+            ):
                 continue
-            if result.returncode == 0:
+            if not opacity_changed or not isinstance(opacity, float):
+                return True
+            if _run_kitty_remote_command(
+                binary,
+                target,
+                ["set-background-opacity", str(opacity)],
+            ):
                 return True
         return False
 
     def manual_reload_hint(self) -> str:
-        return "Press Ctrl+Shift+F5 in Kitty to reload."
+        return "Restart Kitty, or press Ctrl+Shift+F5 for settings that support live reload."
 
     def _effective_entries(self, doc: KittyDoc) -> list[_Entry]:
         return _linearize(doc.path, doc.lines, in_main=True)
@@ -441,17 +489,24 @@ class KittyBackend:
 
         if setting.name in ("window.padding.x", "window.padding.y"):
             _write_kitty_padding(doc, setting.name, value)  # type: ignore[arg-type]
+            doc.changed_settings.add(setting.name)
             return
 
         key = _CANONICAL_TO_KITTY_SETTING.get(setting.name)
         if key is None:
             raise KeyError(f"Setting {setting.name!r} not supported by Kitty")
-        new_line = f"{key} {value}"
+        conf_value = _format_kitty_setting_value(setting, value)
+        new_line = f"{key} {conf_value}"
         last = _last_entry_for_key(self._effective_entries(doc), key)
         if last is not None and last.main_line_idx is not None:
             doc.lines[last.main_line_idx] = new_line
         else:
             doc.lines.append(new_line)
+        if setting.name == "window.opacity":
+            write_dynamic_background_opacity_yes(doc)
+        elif setting.name == "cursor.shape":
+            write_shell_integration_no_cursor(doc)
+        doc.changed_settings.add(setting.name)
 
     def delete_setting(
         self, doc: KittyDoc, setting: CanonicalSetting
@@ -466,6 +521,7 @@ class KittyBackend:
             if idx is None:
                 return False
             del doc.lines[idx]
+            doc.changed_settings.add(setting.name)
             return True
 
         key = _CANONICAL_TO_KITTY_SETTING.get(setting.name)
@@ -475,6 +531,7 @@ class KittyBackend:
         if idx is None:
             return False
         del doc.lines[idx]
+        doc.changed_settings.add(setting.name)
         return True
 
 
@@ -587,6 +644,48 @@ def _write_kitty_padding(doc: KittyDoc, setting_name: str, value: int) -> None:
         doc.lines[last.main_line_idx] = new_line
     else:
         doc.lines.append(new_line)
+
+
+def _format_kitty_setting_value(
+    setting: CanonicalSetting,
+    value: object,
+) -> object:
+    if setting.name == "cursor.shape" and isinstance(value, str):
+        return value.lower()
+    return value
+
+
+def _write_main_key_last_wins(doc: KittyDoc, key: str, value: str) -> None:
+    new_line = f"{key} {value}"
+    last = _last_entry_for_key(_linearize(doc.path, doc.lines, in_main=True), key)
+    if last is not None and last.main_line_idx is not None:
+        doc.lines[last.main_line_idx] = new_line
+    else:
+        doc.lines.append(new_line)
+
+
+def _run_kitty_remote_command(
+    binary: str,
+    target: str | None,
+    args: list[str],
+    *,
+    no_response_without_target: bool = False,
+) -> bool:
+    cmd = [binary, "@"]
+    if target:
+        cmd.extend(["--to", target])
+    cmd.extend(args)
+    if no_response_without_target and not target:
+        cmd.append("--no-response")
+    try:
+        result = subprocess.run(
+            cmd,
+            timeout=2,
+            capture_output=True,
+        )
+    except Exception:  # noqa: BLE001
+        return False
+    return result.returncode == 0
 
 
 def _current_kitty_instance_marker() -> str | None:

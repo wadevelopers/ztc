@@ -307,7 +307,8 @@ async def test_e2e_kitty_detection_writes_to_real_kitty_conf(tmp_path: Path) -> 
         "include tokyo.conf\n"
         "font_size 12.0\n"
         "allow_remote_control yes\n"
-        "listen_on unix:@ztc-{kitty_pid}\n",
+        "listen_on unix:@ztc-{kitty_pid}\n"
+        "dynamic_background_opacity yes\n",
         encoding="utf-8",
     )
 
