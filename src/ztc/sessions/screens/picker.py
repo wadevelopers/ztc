@@ -10,7 +10,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, OptionList, Static
+from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.sessions.models.session import ZellijSession
@@ -76,6 +76,19 @@ class PickerScreen(Screen[None]):
     #empty-hint {
         padding: 1 2;
         color: $text-muted;
+    }
+    .keys-row-split {
+        height: 1;
+        background: $panel;
+        color: $text-muted;
+    }
+    .keys-row-split > .keys-left {
+        width: 1fr;
+        padding: 0 1;
+    }
+    .keys-row-split > .keys-right {
+        width: auto;
+        padding: 0 1;
     }
     """
 
@@ -146,10 +159,47 @@ class PickerScreen(Screen[None]):
                 yield Static("", id="detail-meta")
                 yield Static("", id="detail-tabs")
                 yield Static("", id="detail-extra")
-        yield Footer()
+        with Horizontal(id="launch-keys", classes="keys-row-split"):
+            yield Static(self._launch_keys_label(), classes="keys-left")
+            yield Static(self._back_keys_label(), classes="keys-right")
+        with Horizontal(id="manage-keys", classes="keys-row-split"):
+            yield Static(self._manage_keys_label(), classes="keys-left")
+            yield Static(self._palette_keys_label(), classes="keys-right")
 
     def on_mount(self) -> None:
         self.action_refresh()
+
+    @staticmethod
+    def _key_chip(key: str, label: str, *, width: int | None = None) -> str:
+        if width is not None:
+            label = label.ljust(width)
+        return f"[$footer-key-foreground b]{key}[/] {label}"
+
+    def _launch_keys_label(self) -> str:
+        keys = [
+            self._key_chip("n", "New", width=6),
+            self._key_chip("l", "Layout", width=6),
+            self._key_chip("b", "Bash"),
+        ]
+        return "Start:  " + "  ".join(keys)
+
+    def _manage_keys_label(self) -> str:
+        keys = [
+            self._key_chip("r", "Reload", width=6),
+            self._key_chip("R", "Rename", width=6),
+            self._key_chip("k", "Kill", width=4),
+            self._key_chip("d", "Delete", width=6),
+            self._key_chip("D", "--force"),
+        ]
+        return "Manage: " + "  ".join(keys)
+
+    @staticmethod
+    def _back_keys_label() -> str:
+        return "[$footer-key-foreground b]Esc[/]  Back"
+
+    @staticmethod
+    def _palette_keys_label() -> str:
+        return "[$footer-key-foreground b]P[/] Palette"
 
     # ---------- listado y detalles ----------
 
