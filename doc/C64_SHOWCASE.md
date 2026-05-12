@@ -1,12 +1,9 @@
-# C-64-Inspired Terminal Showcase
+# Retro-style terminal showcase
 
 This walkthrough recreates a classic 8-bit boot-screen feel using only
 ZTC-managed terminal settings and a Zellij pane layout. It is a usage
 example, not a new feature: the goal is to show how terminal color,
 padding, pane background and a startup command compose into one look.
-
-No proprietary logos, fonts or ROM assets are used. The style is only
-inspired by the familiar blue/purple 8-bit terminal palette.
 
 ## Result
 
@@ -17,56 +14,63 @@ inspired by the familiar blue/purple 8-bit terminal palette.
 - A tiny shell script prints a boot-style banner with terminal name,
   terminal version, Bash version and memory information.
 
-## Terminal Settings
+## Font
 
-Open `ztc`, then go to **Terminal settings** and set:
+The look works with any monospaced font. Two options:
 
-| Setting | Value |
-|---|---|
-| `window.padding.x` | `10` |
-| `window.padding.y` | `4` |
-| `window.columns` | `80` |
-| `window.lines` | `25` |
-| `window.opacity` | `1.0` |
-| `cursor.shape` | `Block` |
+- **A Nerd Font you already have** (for example
+  `JetBrainsMono Nerd Font`) — nothing to install.
+- **`C64 Pro Mono`** — closer to the real thing, but its glyphs are
+  quite wide, so it needs a smaller `font.size` (and, to compensate,
+  more `window.lines`) to keep the window a reasonable size. Install it:
+
+  1. Download the `C64 TrueType` package from
+     <https://style64.org/c64-truetype>.
+  2. Install the monospaced TTF locally:
+
+     ```bash
+     mkdir -p ~/.local/share/fonts
+     cp C64_Pro_Mono-STYLE.ttf ~/.local/share/fonts/
+     fc-cache -fv
+     fc-match "C64 Pro Mono"
+     ```
+
+  3. If `fc-match` prints a different family name, use that name as
+     `font.family` in **Terminal settings** below.
+
+## Terminal settings
+
+In **Terminal settings**, apply the column for the font you picked.
+Both columns end up with a terminal window of roughly the same size:
+
+| Setting | JetBrainsMono Nerd Font | C64 Pro Mono |
+|---|---|---|
+| `font.family` | `JetBrainsMono Nerd Font` | `C64 Pro Mono` |
+| `font.size` | `12.0` | `9.0` |
+| `window.columns` | `80` | `80` |
+| `window.lines` | `25` | `47` |
+| `window.padding.x` | `40` | `40` |
+| `window.padding.y` | `40` | `40` |
+| `window.opacity` | `1.0` | `1.0` |
+| `cursor.shape` | `Block` | `Block` |
 
 > **Note:** changes to `window.columns` and `window.lines` require
 > restarting the terminal to take effect.
 
-Optional font setup:
+## Terminal colors
 
-1. Download the `C64 TrueType` package from
-   <https://style64.org/c64-truetype>.
-2. Install the monospaced TTF locally:
-
-   ```bash
-   mkdir -p ~/.local/share/fonts
-   cp C64_Pro_Mono-STYLE.ttf ~/.local/share/fonts/
-   fc-cache -fv
-   fc-match "C64 Pro Mono"
-   ```
-
-3. In **Terminal settings**, set:
-
-   | Setting | Value |
-   |---|---|
-   | `font.family` | `C64 Pro Mono` |
-   | `font.size` | `16` |
-
-If `fc-match` prints a different family name, use that exact name in
-`font.family`.
-
-Then go to **Terminal colors** and set the terminal background to:
+In **Terminal colors**, set the terminal background to:
 
 ```text
 #4040e0
 ```
 
 This becomes the outer frame color. On Kitty, ZTC may offer to add
-the reload settings needed for live updates. Accepting them is optional
-for the showcase; restarting the terminal after saving always works.
+the reload settings needed for live updates — accepting them is
+optional for the showcase; restarting the terminal after saving always
+works.
 
-## Banner Script
+## Banner script
 
 Create this file:
 
@@ -137,7 +141,7 @@ This file lives under `~/.config/ztc`, not under `~/.bashrc.d`, so it
 is not loaded by normal interactive shells that source every script in
 `~/.bashrc.d`.
 
-## Zellij Layout
+## Zellij layouts
 
 Create or edit a Zellij layout in `ztc`, then configure the main pane:
 

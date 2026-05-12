@@ -41,7 +41,7 @@ See [`PLAN_FILE_PICKER.md`](PLAN_FILE_PICKER.md).
   `kitty.conf`. When remote control isn't reachable, the save still
   happens and the toast reminds the user to press `Ctrl+Shift+F5`.
   Also includes the
-  [C-64-inspired terminal showcase](C64_SHOWCASE.md), a descriptive
+  [retro-style terminal showcase](C64_SHOWCASE.md), a descriptive
   walkthrough that combines existing terminal settings, Zellij pane
   colors and a local banner script. The showcase is documentation only,
   not a new feature.
