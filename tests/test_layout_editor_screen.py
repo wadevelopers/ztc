@@ -243,6 +243,41 @@ async def test_pane_edit_modal_rejects_invalid_default_bg(tmp_path: Path) -> Non
         assert isinstance(app.screen, PaneEditModal)
 
 
+async def test_pane_edit_modal_validates_size(tmp_path: Path) -> None:
+    """Size acepta porcentajes sin comillas."""
+    from textual.widgets import Input
+
+    paths = _paths_with_layout(tmp_path)
+    app = _make_app(tmp_path, paths)
+    async with app.run_test() as pilot:
+        await pilot.press("down", "enter", "enter")
+        await pilot.pause()
+        editor = app.screen
+        assert isinstance(editor, LayoutEditorScreen)
+        tree = editor.query_one("#pane-tree", Tree)
+        first_pane_node = tree.root.children[0]
+        tree.select_node(first_pane_node)
+        await pilot.pause()
+        await pilot.press("e")
+        await pilot.pause()
+        modal = app.screen
+        assert isinstance(modal, PaneEditModal)
+
+        size_input = modal.query_one("#size", Input)
+        for bad in ('"60%"', "ab", "0.5", "0", "1", "101%"):
+            size_input.value = bad
+            modal._submit()
+            await pilot.pause()
+            assert isinstance(app.screen, PaneEditModal)
+
+        size_input.value = "60%"
+        modal._submit()
+        await pilot.pause()
+
+        assert isinstance(app.screen, LayoutEditorScreen)
+        assert app.screen.layout_model.tabs[0].children[0].size == "60%"
+
+
 # ---------- Stage 2: tree expand-to-attributes + pane label coloreado ----------
 
 

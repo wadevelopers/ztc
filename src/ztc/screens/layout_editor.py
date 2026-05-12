@@ -540,6 +540,10 @@ class LayoutEditorScreen(Screen[None]):
             if layout_ops.replace_pane(
                 self.layout_model, self._selected_tab_index, target, replacement
             ):
+                if replacement.focus:
+                    layout_ops.enforce_single_pane_focus(
+                        self.layout_model, self._selected_tab_index, replacement
+                    )
                 self._after_mutation(replacement)
 
         self.app.push_screen(PaneEditModal(target), after)

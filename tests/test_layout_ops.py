@@ -23,6 +23,21 @@ def test_is_valid_layout_name() -> None:
     assert not layout_ops.is_valid_layout_name("")
 
 
+def test_is_valid_pane_size() -> None:
+    assert layout_ops.is_valid_pane_size("")
+    assert layout_ops.is_valid_pane_size("60%")
+    assert layout_ops.is_valid_pane_size("100%")
+
+    assert not layout_ops.is_valid_pane_size("1")
+    assert not layout_ops.is_valid_pane_size("42")
+    assert not layout_ops.is_valid_pane_size("0")
+    assert not layout_ops.is_valid_pane_size("0%")
+    assert not layout_ops.is_valid_pane_size("101%")
+    assert not layout_ops.is_valid_pane_size("0.5")
+    assert not layout_ops.is_valid_pane_size("ab")
+    assert not layout_ops.is_valid_pane_size('"60%"')
+
+
 def test_new_blank_layout(tmp_path: Path) -> None:
     layout = layout_ops.new_blank_layout(tmp_path, "dev")
     assert layout.name == "dev"
@@ -129,6 +144,44 @@ def test_replace_pane_keeps_position() -> None:
     assert layout_ops.replace_pane(layout, 0, target, replacement)
     assert layout.tabs[0].children[0] is replacement
     assert layout.tabs[0].children[1].name == "b"
+
+
+def test_enforce_single_pane_focus_clears_siblings_and_nested_panes() -> None:
+    focused = Pane(name="focused", focus=True)
+    nested = Pane(name="nested", focus=True)
+    other_tab_pane = Pane(name="other-tab", focus=True)
+    layout = Layout(
+        name="x",
+        path=Path("/tmp/x.kdl"),
+        tabs=[
+            Tab(
+                name="main",
+                children=[
+                    Pane(name="old", focus=True),
+                    Pane(name="container", focus=True, children=[nested, focused]),
+                ],
+            ),
+            Tab(name="other", children=[other_tab_pane]),
+        ],
+    )
+
+    assert layout_ops.enforce_single_pane_focus(layout, 0, focused)
+
+    assert focused.focus is True
+    assert layout.tabs[0].children[0].focus is False
+    assert layout.tabs[0].children[1].focus is False
+    assert nested.focus is False
+    # La exclusividad es por tab: otros tabs no se tocan.
+    assert other_tab_pane.focus is True
+
+
+def test_enforce_single_pane_focus_returns_false_for_foreign_pane() -> None:
+    layout = _layout_with_two_panes()
+    foreign = Pane(name="foreign", focus=True)
+
+    assert layout_ops.enforce_single_pane_focus(layout, 0, foreign) is False
+    assert foreign.focus is True
+    assert [pane.focus for pane in layout.tabs[0].children] == [False, False]
 
 
 def test_tab_lifecycle() -> None:

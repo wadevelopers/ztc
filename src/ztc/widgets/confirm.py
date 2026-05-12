@@ -389,7 +389,7 @@ class PaneEditModal(ModalScreen[Pane | None]):
                         yield Input(
                             value=self._pane.size or "",
                             id="size",
-                            placeholder="e.g. 60% or 1",
+                            placeholder="e.g. 60%",
                         )
 
                 with Horizontal(classes="row"):
@@ -524,10 +524,21 @@ class PaneEditModal(ModalScreen[Pane | None]):
 
         bg_input = self.query_one("#default_bg", Input).value.strip()
         fg_input = self.query_one("#default_fg", Input).value.strip()
+        size_input = self.query_one("#size", Input).value.strip()
 
         # Validacion estricta: campo vacio = unset; valor no vacio
         # debe matchear los formatos aceptados por Zellij. Si invalido,
         # notify y mantener modal abierto.
+        from ztc.zellij.layout_ops import is_valid_pane_size
+
+        if size_input and not is_valid_pane_size(size_input):
+            self.app.notify(
+                f"Invalid Size: {size_input!r}. Expected a percentage "
+                "from 1% to 100% without quotes.",
+                severity="error",
+                timeout=6,
+            )
+            return
         if bg_input and not is_valid_zellij_pane_color(bg_input):
             self.app.notify(
                 f"Invalid Default bg: {bg_input!r}. "
@@ -550,7 +561,7 @@ class PaneEditModal(ModalScreen[Pane | None]):
             raw_unknown_nodes=list(self._pane.raw_unknown_nodes),
         )
         new_pane.name = _none_if_empty(self.query_one("#name", Input).value)
-        new_pane.size = _none_if_empty(self.query_one("#size", Input).value)
+        new_pane.size = size_input or None
         new_pane.focus = self.query_one("#focus", Switch).value
         new_pane.default_bg = bg_input or None
         new_pane.default_fg = fg_input or None

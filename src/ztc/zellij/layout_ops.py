@@ -8,10 +8,24 @@ from pathlib import Path
 from ztc.models.layout import Layout, Pane, SplitDirection, Tab
 
 _VALID_NAME = re.compile(r"^[A-Za-z0-9_\-]+$")
+_PERCENT_SIZE = re.compile(r"^([1-9][0-9]?|100)%$")
 
 
 def is_valid_layout_name(name: str) -> bool:
     return bool(_VALID_NAME.match(name))
+
+
+def is_valid_pane_size(value: str) -> bool:
+    """Valida el subset estable de `size` para panes editables.
+
+    El editor espera el valor sin sintaxis KDL: `60%`, no `"60%"`.
+    Los tamanos fijos (`1`, `2`, etc.) se reservan para plugins/barras
+    y no se exponen en el editor de panes normales.
+    """
+    value = value.strip()
+    if not value:
+        return True
+    return bool(_PERCENT_SIZE.match(value))
 
 
 def new_blank_layout(layouts_dir: Path, name: str) -> Layout:
@@ -158,6 +172,29 @@ def replace_pane(
     siblings, idx = found
     siblings[idx] = replacement
     return True
+
+
+def enforce_single_pane_focus(layout: Layout, tab_index: int, focused: Pane) -> bool:
+    """Deja `focused` como unico pane con focus=True dentro del tab.
+
+    Devuelve False si `focused` no pertenece al tab indicado.
+    """
+    if not 0 <= tab_index < len(layout.tabs):
+        return False
+    panes = list(_walk_panes(layout.tabs[tab_index].children))
+    if focused not in panes:
+        return False
+    for pane in panes:
+        if pane is not focused:
+            pane.focus = False
+    focused.focus = True
+    return True
+
+
+def _walk_panes(panes: list[Pane]):
+    for pane in panes:
+        yield pane
+        yield from _walk_panes(pane.children)
 
 
 def add_tab(layout: Layout, name: str) -> Tab:
