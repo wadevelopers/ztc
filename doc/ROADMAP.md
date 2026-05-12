@@ -4,27 +4,7 @@ ZTC follows [SemVer](https://semver.org/). Minor versions ship one
 focused feature each — small, atomic releases instead of large
 batches. Patch versions are bug-fix-only.
 
-## v1.2.0 (next) — Kitty parity
-
-### Features
-
-- **Kitty theme + settings import** (Stage A, ✅ already in
-  `main` at commit `f363beb`). Reaches feature parity with
-  Alacritty: both color editor and terminal-settings editor accept
-  `i` for import on Kitty backend. `import_theme_file` is now part
-  of the `TerminalBackend` Protocol; both backends implement it.
-- **Kitty auto-reload after save** (Stage B, pending). When ZTC
-  saves changes to `kitty.conf`, it tries `kitty @ load-config` so
-  the change is reflected instantly. If Kitty's `allow_remote_control`
-  is not enabled, the toast falls back to "Press Ctrl+Shift+F5 to
-  reload". On startup, ZTC detects this state and offers an
-  educational modal letting the user enable remote control or
-  dismiss the prompt — the dismissal preference is stored as a
-  comment line in `kitty.conf` (`# ztc:{...}`).
-
-See [`PLAN_KITTY_PARITY.md`](PLAN_KITTY_PARITY.md).
-
-## v1.3.0
+## v1.3.0 (next)
 
 ### Feature
 
@@ -44,24 +24,27 @@ See [`PLAN_KITTY_PARITY.md`](PLAN_KITTY_PARITY.md).
 
 See [`PLAN_FILE_PICKER.md`](PLAN_FILE_PICKER.md).
 
-### Showcase doc (not a feature)
-
-- **Retro boot-screen walkthrough.** A use-case example, not a new
-  ZTC feature. Combines features that already exist or land in
-  v1.3.0 to recreate the visual style of a classic 8-bit boot screen
-  (purple frame around a darker terminal area, a banner script that
-  prints terminal identity — name, versions, memory, etc.). Pieces:
-  - Terminal bg color + padding from v1.0.0
-  - Pane `default_bg` / `default_fg` from v1.1.0
-  - File picker (v1.3.0) for selecting the banner script in the
-    pane's command field
-  - A bash banner script (shown inline in the doc) that the user
-    saves locally; no bundled assets in ZTC
-  The walkthrough is purely descriptive — its purpose is to show
-  how ZTC's existing features compose into a complete custom look.
-
 ## Released
 
+- **v1.2.0** — Kitty parity. Two things: (1) **Kitty theme + settings
+  import** — the color editor and the terminal-settings editor accept
+  `i` for import on the Kitty backend, matching Alacritty;
+  `import_theme_file` is part of the `TerminalBackend` Protocol and
+  both backends implement it. (2) **Kitty auto-reload after save** —
+  when ZTC writes to `kitty.conf` it runs `kitty @ load-config` so the
+  change shows up instantly. This needs Kitty's remote control
+  reachable; inside Zellij that requires `allow_remote_control yes` and
+  `listen_on unix:@ztc-{kitty_pid}` in `kitty.conf`. On startup ZTC
+  detects when this isn't set and shows a one-time educational modal
+  offering to add the directives (user then restarts Kitty) or dismiss
+  the prompt — the dismissal is stored as a `# ztc:` comment line in
+  `kitty.conf`. When remote control isn't reachable, the save still
+  happens and the toast reminds the user to press `Ctrl+Shift+F5`.
+  Also includes the
+  [C-64-inspired terminal showcase](C64_SHOWCASE.md), a descriptive
+  walkthrough that combines existing terminal settings, Zellij pane
+  colors and a local banner script. The showcase is documentation only,
+  not a new feature.
 - **v1.1.0** — Editable pane `default_bg` / `default_fg` in the layout
   editor. Both directives are now first-class `Pane` fields, editable
   from `PaneEditModal` with strict format validation. The tree

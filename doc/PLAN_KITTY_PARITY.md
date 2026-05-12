@@ -4,7 +4,7 @@ Target version: **v1.2.0**. Two stages:
 
 - **Stage A** (✅ done in commit `f363beb`): theme + settings import
   reach feature parity with Alacritty.
-- **Stage B** (next): saving from ZTC actually applies in Kitty —
+- **Stage B** (✅ done in commits `29f6a43`..`66991d1`): saving from ZTC actually applies in Kitty —
   socket-based auto-reload via
   `kitty @ --to "$KITTY_LISTEN_ON" load-config` with educational
   modal explaining the `allow_remote_control` + `listen_on`
@@ -450,7 +450,7 @@ Modal results:
   a future feature really needs cross-config-file state, that's
   a separate plan.
 
-## Stage B acceptance criteria
+## Stage B acceptance criteria (verified — committed across `29f6a43`..`66991d1`)
 
 - `uv run pytest -q` passes including new tests.
 - `uv run ruff check` clean.

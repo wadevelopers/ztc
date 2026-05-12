@@ -1,10 +1,6 @@
 # Plan: reusable file picker (`FilePickerModal`)
 
-Target version: **v1.3.0**. Originally scoped for v1.2.0, repackaged
-when v1.2.0 expanded to cover the full Kitty parity story (import +
-auto-reload). Stage A of v1.2.0 (Kitty import) is the only hard
-prerequisite for this plan and is already shipped in commit
-`f363beb`.
+Target version: **v1.3.0**.
 
 ## Context
 
@@ -67,7 +63,7 @@ extension filter — both must be implemented in the subclass.
 | # | Path | Change |
 |---|---|---|
 | 1 | `src/ztc/widgets/file_picker.py` (new) | `FilePickerModal[str \| None]` (the modal) + `FilteredDirectoryTree(DirectoryTree)` subclass with the `filter_paths()` override. Composes: `Input` (editable, pre-filled with `initial_value`) + `FilteredDirectoryTree` (rooted at `initial_dir`) + Cancel/Confirm. Tree-selecting a file updates the Input. Confirm is enabled per `allow_empty`; on Confirm the modal dismisses with `Input.value` (which may be empty if `allow_empty=True`). Cancel dismisses with `None`. |
-| 2 | `src/ztc/screens/color_editor.py` (`action_import`) | Replace the `PromptModal` push with `FilePickerModal(title="Import theme from file", initial_dir=self.backend_path.parent, initial_value="", allow_empty=False, extensions=IMPORT_EXTENSIONS_BY_KIND.get(self.backend.kind, []), show_hidden=False)`. Stage A of v1.2.0 (`PLAN_KITTY_PARITY.md`, commit `f363beb`) already removed the `isinstance(AlacrittyBackend)` guard, so this path runs for both backends. |
+| 2 | `src/ztc/screens/color_editor.py` (`action_import`) | Replace the `PromptModal` push with `FilePickerModal(title="Import theme from file", initial_dir=self.backend_path.parent, initial_value="", allow_empty=False, extensions=IMPORT_EXTENSIONS_BY_KIND.get(self.backend.kind, []), show_hidden=False)`. Both Alacritty and Kitty are supported through the shared `TerminalBackend.import_theme_file` contract. |
 | 3 | `src/ztc/screens/terminal_settings.py` (`action_import`, **confirmed exists** at line ~270) | Same change as #2, with the same shared `IMPORT_EXTENSIONS_BY_KIND` mapping. |
 | 3.5 | `src/ztc/services/terminals/__init__.py` | Add a module-level constant `IMPORT_EXTENSIONS_BY_KIND: dict[str, list[str]] = {"alacritty": [".toml"], "kitty": [".conf"]}`. Single source of truth used by both screens. Adding a new backend later means adding one entry here, not editing each screen. |
 | 4 | `src/ztc/widgets/confirm.py` (`PaneEditModal`) | Add a "Find" Button to the right of the Command Input. **Use the same `.field` sub-container pattern that landed in v1.1.0** — embed Input + Button inside `Horizontal(classes="field")` with `dock: right` on the Button so the Input keeps its visible right border. On click, open picker with `initial_dir=Path.cwd()`, `initial_value=current_command`, `allow_empty=True`, `extensions=None`, `show_hidden=True`. Existing free-text behavior in the Input stays untouched. |
@@ -133,10 +129,8 @@ extension filter — both must be implemented in the subclass.
    if the button feels insufficient.
 
 2. **Extension filter for import**: **hardcoded per backend** —
-   `.toml` for Alacritty, `.conf` for Kitty. Both backends are
-   supported because Stage A of v1.2.0 (`PLAN_KITTY_PARITY.md`,
-   commit `f363beb`) already landed the Kitty import capability.
-   **Resolution pinned**: a single module-level constant
+   `.toml` for Alacritty, `.conf` for Kitty. **Resolution pinned**:
+   a single module-level constant
    `IMPORT_EXTENSIONS_BY_KIND` in `src/ztc/services/terminals/__init__.py`
    (`{"alacritty": [".toml"], "kitty": [".conf"]}`), looked up via
    `backend.kind` at the call site. No protocol method, no per-screen
@@ -167,10 +161,10 @@ extension filter — both must be implemented in the subclass.
      (`~/.config/alacritty/`) don't typically have hidden subdirs
      worth navigating; their visible contents are themes.
    - **Pane command**: `show_hidden=True`. Common script locations
-     are hidden: `~/.local/bin/`, `~/.bashrc.d/`, etc. The user's
-     own retro boot-screen walkthrough wants
-     `~/.bashrc.d/welcome-c64.sh` — hiding `~/.bashrc.d/` would
-     break the very use case that motivates this feature.
+     are hidden: `~/.local/bin/`, `~/.config/ztc/`, etc. The
+     existing C-64 showcase script lives at
+     `~/.config/ztc/welcome-c64.sh` — hiding `~/.config/` would
+     break a real use case for the picker.
 
    Hiding requires a `FilteredDirectoryTree(DirectoryTree)` subclass
    that overrides `filter_paths()` — Textual's stock `DirectoryTree`
@@ -211,10 +205,3 @@ Cancel always dismisses with `None`. Confirm dismisses with
 - Single commit at the end of execution. Per the project rule, the
   bump to `1.3.0`, the `v1.3.0` tag and the GitHub Release are
   user-triggered after the work is committed and verified.
-
-## Walkthrough doc
-
-The retro 8-bit boot-screen walkthrough also targets v1.3.0 but is
-**not** part of this plan — it lives in `doc/WALKTHROUGH_*.md` (TBD)
-and uses the file picker (among other features) as one of the steps.
-Will be planned and authored separately once the picker lands.

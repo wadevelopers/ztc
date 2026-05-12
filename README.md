@@ -102,6 +102,26 @@ by expanding the include. When you modify a color from the editor:
 Limitation: only direct `include` is expanded. `globinclude` and
 `envinclude` are not. Nested includes are supported up to depth 5.
 
+## Kitty: instant reload after save
+
+When ZTC writes to `kitty.conf` (a color, a setting, an imported
+file), it runs `kitty @ load-config` so the change shows up
+immediately — the same way Alacritty reloads on its own when its
+config file changes.
+
+This needs Kitty's remote control reachable. Inside Zellij the
+TTY-based channel does not work, so ZTC uses a socket: `kitty.conf`
+must have both `allow_remote_control yes` and
+`listen_on unix:@ztc-{kitty_pid}` (Kitty expands `{kitty_pid}`
+itself). On startup, if that is not set, ZTC shows a one-time modal
+explaining the trade-off and offering to append the directives for
+you — you then restart Kitty. If you dismiss it with the checkbox
+marked, the prompt does not appear again; the preference is stored as
+a `# ztc:` comment line in `kitty.conf`.
+
+If remote control is not reachable, ZTC still saves your change and
+the toast reminds you to press `Ctrl+Shift+F5` in Kitty to reload.
+
 ## How `zsm` launches Zellij
 
 `zsm` (and the embedded launcher inside `ztc`) use `os.execvp` to
@@ -140,8 +160,7 @@ contributions are welcome — see [`doc/ROADMAP.md`](doc/ROADMAP.md).
 ```bash
 git clone https://github.com/wadevelopers/ztc
 cd ztc
-uv venv
-uv pip install -e ".[dev]"
+uv sync          # creates .venv with the project + dev tools
 uv run ztc       # full app
 uv run zsm       # session launcher
 uv run pytest
