@@ -42,7 +42,6 @@ from pathlib import Path
 from ztc.services.atomic import write_atomic
 from ztc.services.backups import make_backup
 from ztc.services.colors import CanonicalSlot
-from ztc.services.fonts import resolve_font_faces
 from ztc.services.terminals import default_import_theme_file
 from ztc.services.terminals.settings import (
     SETTINGS,
@@ -738,24 +737,10 @@ def _parse_kitty_font_family(value: str) -> str:
 
 
 def _write_kitty_font_family(doc: KittyDoc, family: str) -> None:
-    faces = resolve_font_faces(family)
-    by_key = {
-        "font_family": faces.normal,
-        "bold_font": faces.bold,
-        "italic_font": faces.italic,
-        "bold_italic_font": faces.bold_italic,
-    }
-    for key, face in by_key.items():
-        _write_main_key_last_wins(
-            doc,
-            key,
-            f'family="{_escape_kitty_font_value(face.family)}" '
-            f'style="{_escape_kitty_font_value(face.style)}"',
-        )
-
-
-def _escape_kitty_font_value(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    _write_main_key_last_wins(doc, "font_family", family)
+    _write_main_key_last_wins(doc, "bold_font", "auto")
+    _write_main_key_last_wins(doc, "italic_font", "auto")
+    _write_main_key_last_wins(doc, "bold_italic_font", "auto")
 
 
 def _format_kitty_setting_value(

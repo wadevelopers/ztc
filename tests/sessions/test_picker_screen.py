@@ -51,7 +51,7 @@ def test_detail_tree_renderer_keeps_tabs_and_panes_separate() -> None:
 
     assert "main" in tree
     assert "bash" in tree
-    assert PickerScreen._DETAIL_SEPARATOR.startswith("[dim]")
+    assert "────────" not in tree
 
 
 def test_footer_hotkeys_are_split_by_launch_and_manage_actions() -> None:

@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from ztc.services.fonts import FontFace, FontFaceSet
 from ztc.services.terminals.kitty import KittyBackend, KittyDoc
 from ztc.services.terminals.settings import SETTINGS
 
@@ -244,26 +243,15 @@ def test_write_dimensions_emit_cells_and_disable_remembered_size(
 def test_write_font_family_emits_all_faces(
     backend: KittyBackend,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    faces = FontFaceSet(
-        normal=FontFace("C64 Pro Mono", "Regular"),
-        bold=FontFace("C64 Pro Mono", "Regular", fallback=True),
-        italic=FontFace("C64 Pro Mono", "Regular", fallback=True),
-        bold_italic=FontFace("C64 Pro Mono", "Regular", fallback=True),
-    )
-    monkeypatch.setattr(
-        "ztc.services.terminals.kitty.resolve_font_faces",
-        lambda family: faces,
-    )
     doc = _doc_from(tmp_path, [])
     backend.write_setting(doc, SETTINGS["font.family"], "C64 Pro Mono")
     assert backend.read_setting(doc, SETTINGS["font.family"]) == "C64 Pro Mono"
     assert doc.lines == [
-        'font_family family="C64 Pro Mono" style="Regular"',
-        'bold_font family="C64 Pro Mono" style="Regular"',
-        'italic_font family="C64 Pro Mono" style="Regular"',
-        'bold_italic_font family="C64 Pro Mono" style="Regular"',
+        "font_family C64 Pro Mono",
+        "bold_font auto",
+        "italic_font auto",
+        "bold_italic_font auto",
     ]
 
 
@@ -391,10 +379,10 @@ def test_delete_font_family_removes_all_faces(
     doc = _doc_from(
         tmp_path,
         [
-            'font_family family="C64 Pro Mono" style="Regular"',
-            'bold_font family="C64 Pro Mono" style="Regular"',
-            'italic_font family="C64 Pro Mono" style="Regular"',
-            'bold_italic_font family="C64 Pro Mono" style="Regular"',
+            "font_family C64 Pro Mono",
+            "bold_font auto",
+            "italic_font auto",
+            "bold_italic_font auto",
         ],
     )
     assert backend.delete_setting(doc, SETTINGS["font.family"]) is True

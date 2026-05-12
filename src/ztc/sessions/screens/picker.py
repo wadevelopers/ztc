@@ -73,6 +73,10 @@ class PickerScreen(Screen[None]):
     #detail-meta, #detail-tabs, #detail-extra {
         margin-top: 1;
     }
+    #detail-tabs {
+        border-top: solid $panel;
+        padding-top: 1;
+    }
     #empty-hint {
         padding: 1 2;
         color: $text-muted;
@@ -229,8 +233,6 @@ class PickerScreen(Screen[None]):
         "running": "white",
         "unknown": "dim",
     }
-    _DETAIL_SEPARATOR = "[dim]" + ("─" * 56) + "[/]"
-
     # Anchos de columna del listado: nombre fijo a 24, estado a 10.
     _NAME_COL = 24
     _STATE_COL = 10
@@ -272,6 +274,7 @@ class PickerScreen(Screen[None]):
                 "Create one with [b]n[/b] (default: 'main') or with layout: [b]l[/b].\n"
                 "Launch bash without Zellij with [b]b[/b]."
             )
+            tabs_w.display = False
             tabs_w.update("")
             extra_w.update("")
             return
@@ -291,10 +294,10 @@ class PickerScreen(Screen[None]):
 
         # Tabs + panes (arbol indentado).
         if details and details.tabs:
-            tabs_w.update(
-                self._DETAIL_SEPARATOR + "\n\n" + self._render_tabs_tree(details.tabs)
-            )
+            tabs_w.display = True
+            tabs_w.update(self._render_tabs_tree(details.tabs))
         else:
+            tabs_w.display = False
             tabs_w.update("")
 
         extra_w.update("")
