@@ -40,6 +40,29 @@ def test_parse_just_name() -> None:
     assert s.state == "running"
 
 
+def test_parse_running_name_with_spaces() -> None:
+    s = _parse_line("commodore 3 [Created 2h 47m 36s ago]")
+    assert s is not None
+    assert s.name == "commodore 3"
+    assert s.state == "running"
+
+
+def test_parse_exited_name_with_spaces() -> None:
+    s = _parse_line(
+        "commodore 3 [Created 2h 47m 36s ago] (EXITED - attach to resurrect)"
+    )
+    assert s is not None
+    assert s.name == "commodore 3"
+    assert s.state == "exited"
+
+
+def test_parse_exited_legacy_prefix_name_with_spaces() -> None:
+    s = _parse_line("EXITED - my session [Created 1d ago]")
+    assert s is not None
+    assert s.name == "my session"
+    assert s.state == "exited"
+
+
 def test_next_default_name_empty() -> None:
     assert next_default_name(set()) == "main"
 

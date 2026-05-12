@@ -241,16 +241,34 @@ def _extract_client_session_name(cmdline: str) -> str | None:
 
 
 def _parse_line(line: str) -> ZellijSession | None:
-    """Saca nombre y estado de una linea de `list-sessions`."""
-    m = re.match(r"^EXITED\s*-\s*(?P<name>\S+)(?:\s+(?P<rest>.*))?$", line)
-    if m:
-        return ZellijSession(name=m.group("name"), state="exited", raw_line=line)
-    m = re.match(r"^(?P<name>\S+)(?:\s+(?P<rest>.*))?$", line)
-    if m:
-        rest = m.group("rest") or ""
-        state = "exited" if _EXITED_SUFFIX.search(rest) else "running"
-        return ZellijSession(name=m.group("name"), state=state, raw_line=line)
-    return None
+    """Saca nombre y estado de una linea de `zellij list-sessions -n`.
+
+    Formato actual: `<name> [Created <dur> ago]<sufijo>`, donde el
+    sufijo opcional es ` (current)` o ` (EXITED - attach to resurrect)`.
+    El nombre puede contener espacios (Zellij los permite), asi que se
+    corta en ` [Created `, no en el primer whitespace.
+
+    Tambien se tolera el formato legacy `EXITED - <name> [Created ...]`.
+    """
+    rest = line
+    forced_exited = False
+    legacy = re.match(r"^EXITED\s*-\s*(?P<rest>.+)$", line)
+    if legacy:
+        rest = legacy.group("rest")
+        forced_exited = True
+
+    marker = rest.find(" [Created ")
+    if marker >= 0:
+        name, tail = rest[:marker].strip(), rest[marker:]
+    else:
+        name, tail = rest.strip(), ""
+    if not name:
+        return None
+
+    state = (
+        "exited" if forced_exited or _EXITED_SUFFIX.search(tail) else "running"
+    )
+    return ZellijSession(name=name, state=state, raw_line=line)
 
 
 def kill_session(name: str, *, timeout: float = 10.0) -> tuple[bool, str]:
