@@ -392,34 +392,6 @@ class PaneEditModal(ModalScreen[Pane | None]):
                             placeholder="e.g. 60%",
                         )
 
-                with Horizontal(classes="row"):
-                    yield Static("Focus", classes="label")
-                    with Horizontal(classes="field"):
-                        yield Switch(value=self._pane.focus, id="focus")
-
-                with Horizontal(classes="row"):
-                    yield Static("Default bg", classes="label")
-                    with Horizontal(classes="field color-field"):
-                        yield Input(
-                            value=self._pane.default_bg or "",
-                            id="default_bg",
-                            placeholder="#rrggbb / rgb:rr/gg/bb",
-                        )
-                        yield Static(
-                            "  ", id="default_bg-preview", classes="color-preview"
-                        )
-                with Horizontal(classes="row"):
-                    yield Static("Default fg", classes="label")
-                    with Horizontal(classes="field color-field"):
-                        yield Input(
-                            value=self._pane.default_fg or "",
-                            id="default_fg",
-                            placeholder="#rrggbb / rgb:rr/gg/bb",
-                        )
-                        yield Static(
-                            "  ", id="default_fg-preview", classes="color-preview"
-                        )
-
                 if self._is_container:
                     with Horizontal(classes="row"):
                         yield Static("Split direction", classes="label")
@@ -437,6 +409,38 @@ class PaneEditModal(ModalScreen[Pane | None]):
                                 value=self._pane.split_direction is None,
                             )
                 else:
+                    with Horizontal(classes="row"):
+                        yield Static("Focus", classes="label")
+                        with Horizontal(classes="field"):
+                            yield Switch(value=self._pane.focus, id="focus")
+
+                    with Horizontal(classes="row"):
+                        yield Static("Default bg", classes="label")
+                        with Horizontal(classes="field color-field"):
+                            yield Input(
+                                value=self._pane.default_bg or "",
+                                id="default_bg",
+                                placeholder="#rrggbb / rgb:rr/gg/bb",
+                            )
+                            yield Static(
+                                "  ",
+                                id="default_bg-preview",
+                                classes="color-preview",
+                            )
+                    with Horizontal(classes="row"):
+                        yield Static("Default fg", classes="label")
+                        with Horizontal(classes="field color-field"):
+                            yield Input(
+                                value=self._pane.default_fg or "",
+                                id="default_fg",
+                                placeholder="#rrggbb / rgb:rr/gg/bb",
+                            )
+                            yield Static(
+                                "  ",
+                                id="default_fg-preview",
+                                classes="color-preview",
+                            )
+
                     with Horizontal(classes="row"):
                         yield Static("Command", classes="label")
                         with Horizontal(classes="field"):
@@ -483,9 +487,10 @@ class PaneEditModal(ModalScreen[Pane | None]):
 
     def on_mount(self) -> None:
         self.query_one("#name", Input).focus()
-        # Preview inicial reflejando el valor del modelo (si trae color).
-        self._refresh_color_preview("default_bg")
-        self._refresh_color_preview("default_fg")
+        if not self._is_container:
+            # Preview inicial reflejando el valor del modelo (si trae color).
+            self._refresh_color_preview("default_bg")
+            self._refresh_color_preview("default_fg")
 
     @on(Button.Pressed, "#cancel")
     def _on_cancel(self) -> None:
@@ -522,8 +527,8 @@ class PaneEditModal(ModalScreen[Pane | None]):
     def _submit(self) -> None:
         from ztc.services.colors import is_valid_zellij_pane_color
 
-        bg_input = self.query_one("#default_bg", Input).value.strip()
-        fg_input = self.query_one("#default_fg", Input).value.strip()
+        bg_input = ""
+        fg_input = ""
         size_input = self.query_one("#size", Input).value.strip()
 
         # Validacion estricta: campo vacio = unset; valor no vacio
@@ -539,22 +544,25 @@ class PaneEditModal(ModalScreen[Pane | None]):
                 timeout=6,
             )
             return
-        if bg_input and not is_valid_zellij_pane_color(bg_input):
-            self.app.notify(
-                f"Invalid Default bg: {bg_input!r}. "
-                "Expected #rgb, #rrggbb, #rrggbbaa, or rgb:rr/gg/bb.",
-                severity="error",
-                timeout=6,
-            )
-            return
-        if fg_input and not is_valid_zellij_pane_color(fg_input):
-            self.app.notify(
-                f"Invalid Default fg: {fg_input!r}. "
-                "Expected #rgb, #rrggbb, #rrggbbaa, or rgb:rr/gg/bb.",
-                severity="error",
-                timeout=6,
-            )
-            return
+        if not self._is_container:
+            bg_input = self.query_one("#default_bg", Input).value.strip()
+            fg_input = self.query_one("#default_fg", Input).value.strip()
+            if bg_input and not is_valid_zellij_pane_color(bg_input):
+                self.app.notify(
+                    f"Invalid Default bg: {bg_input!r}. "
+                    "Expected #rgb, #rrggbb, #rrggbbaa, or rgb:rr/gg/bb.",
+                    severity="error",
+                    timeout=6,
+                )
+                return
+            if fg_input and not is_valid_zellij_pane_color(fg_input):
+                self.app.notify(
+                    f"Invalid Default fg: {fg_input!r}. "
+                    "Expected #rgb, #rrggbb, #rrggbbaa, or rgb:rr/gg/bb.",
+                    severity="error",
+                    timeout=6,
+                )
+                return
 
         new_pane = Pane(
             children=list(self._pane.children),
@@ -562,9 +570,6 @@ class PaneEditModal(ModalScreen[Pane | None]):
         )
         new_pane.name = _none_if_empty(self.query_one("#name", Input).value)
         new_pane.size = size_input or None
-        new_pane.focus = self.query_one("#focus", Switch).value
-        new_pane.default_bg = bg_input or None
-        new_pane.default_fg = fg_input or None
 
         if self._is_container:
             split_set = self.query_one("#split", RadioSet)
@@ -575,6 +580,9 @@ class PaneEditModal(ModalScreen[Pane | None]):
                     choice = label  # type: ignore[assignment]
             new_pane.split_direction = choice
         else:
+            new_pane.focus = self.query_one("#focus", Switch).value
+            new_pane.default_bg = bg_input or None
+            new_pane.default_fg = fg_input or None
             new_pane.command = _none_if_empty(self.query_one("#command", Input).value)
             args_value = self.query_one("#args", Input).value.strip()
             new_pane.args = shlex.split(args_value) if args_value else []

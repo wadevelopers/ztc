@@ -278,6 +278,55 @@ async def test_pane_edit_modal_validates_size(tmp_path: Path) -> None:
         assert app.screen.layout_model.tabs[0].children[0].size == "60%"
 
 
+async def test_container_pane_modal_exposes_only_structural_fields(
+    tmp_path: Path,
+) -> None:
+    """Containers organizan panes; no exponen foco ni colores terminal."""
+    from textual.widgets import Input
+
+    from ztc.models.layout import Pane
+
+    paths = _paths_with_layout(tmp_path)
+    app = _make_app(tmp_path, paths)
+    container = Pane(
+        name="wrap",
+        size="60%",
+        focus=True,
+        default_bg="#6272a4",
+        default_fg="#f8f8f2",
+        split_direction="vertical",
+        children=[Pane(name="a"), Pane(name="b")],
+    )
+    async with app.run_test() as pilot:
+        app.push_screen(PaneEditModal(container))
+        await pilot.pause()
+        modal = app.screen
+        assert isinstance(modal, PaneEditModal)
+
+        assert modal.query("#split")
+        for selector in ("#focus", "#default_bg", "#default_fg", "#command"):
+            assert not modal.query(selector)
+
+        captured: list[Pane | None] = []
+
+        def capture(result: Pane | None) -> None:
+            captured.append(result)
+
+        modal.dismiss = capture  # type: ignore[method-assign]
+        modal.query_one("#name", Input).value = "wrap2"
+        modal._submit()
+
+        result = captured[0]
+        assert result is not None
+        assert result.name == "wrap2"
+        assert result.size == "60%"
+        assert result.split_direction == "vertical"
+        assert result.focus is False
+        assert result.default_bg is None
+        assert result.default_fg is None
+        assert len(result.children) == 2
+
+
 # ---------- Stage 2: tree expand-to-attributes + pane label coloreado ----------
 
 
@@ -574,12 +623,20 @@ async def test_pane_edit_modal_fields_stay_inside_dialog(
         for selector in (
             "#name",
             "#size",
+            "#split",
+        ):
+            widget = container_modal.query_one(selector)
+            assert widget.region.right <= container_dialog.region.right - 1
+        for selector in (
             "#focus",
             "#default_bg",
             "#default_bg-preview",
             "#default_fg",
             "#default_fg-preview",
-            "#split",
+            "#command",
+            "#args",
+            "#cwd",
+            "#start_suspended",
+            "#borderless",
         ):
-            widget = container_modal.query_one(selector)
-            assert widget.region.right <= container_dialog.region.right - 1
+            assert not container_modal.query(selector)
