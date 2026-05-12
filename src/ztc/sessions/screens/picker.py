@@ -10,7 +10,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import OptionList, Static
+from textual.widgets import OptionList, RadioButton, RadioSet, Static
 from textual.widgets.option_list import Option
 
 from ztc.sessions.models.session import ZellijSession
@@ -24,6 +24,16 @@ from ztc.sessions.widgets.modals import (
     NewSessionResult,
 )
 from ztc.widgets.header import StaticHeader
+from ztc.zellij.config import (
+    check_serialize_pane_viewport,
+    check_session_serialization,
+    read_on_force_close,
+)
+from ztc.zellij.config_ops import (
+    set_on_force_close,
+    set_serialize_pane_viewport,
+    set_session_serialization,
+)
 
 
 class PickerScreen(Screen[None]):
@@ -43,7 +53,6 @@ class PickerScreen(Screen[None]):
         Binding("D", "delete_force", "--force"),
         Binding("b", "bash", "Bash"),
         Binding("q", "quit", "Exit"),
-        Binding("escape", "quit", "Exit", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -81,6 +90,28 @@ class PickerScreen(Screen[None]):
         padding: 1 2;
         color: $text-muted;
     }
+    #closure-section {
+        border-top: solid $panel;
+        padding: 0 2;
+        height: auto;
+    }
+    #closure-label {
+        text-style: bold;
+        color: $text-muted;
+        height: 1;
+        margin-top: 1;
+    }
+    #on-force-close {
+        height: auto;
+        border: none;
+        background: transparent;
+        margin: 0 0 1 0;
+        padding: 0;
+    }
+    #on-force-close > RadioButton {
+        background: transparent;
+        padding: 0;
+    }
     .keys-row-split {
         height: 1;
         background: $panel;
@@ -103,6 +134,7 @@ class PickerScreen(Screen[None]):
         on_cancel: Callable[[], None] | None = None,
         zellij_installed: bool = True,
         embedded: bool = False,
+        zellij_config_path: Path | None = None,
     ) -> None:
         super().__init__()
         self._sessions: list[ZellijSession] = []
@@ -110,6 +142,8 @@ class PickerScreen(Screen[None]):
         self._on_cancel = on_cancel or self._default_cancel
         self._zellij_installed = zellij_installed
         self._embedded = embedded
+        self._zellij_config_path = zellij_config_path
+        self._current_closure: str | None = None
         if embedded:
             # En modo embebido, "cancel" vuelve al menu (no cierra la app).
             # Solo `Esc` sale; `q` y `ctrl+q` quedan inertes para
@@ -163,6 +197,17 @@ class PickerScreen(Screen[None]):
                 yield Static("", id="detail-meta")
                 yield Static("", id="detail-tabs")
                 yield Static("", id="detail-extra")
+        with Vertical(id="closure-section"):
+            yield Static("On force-close behavior", id="closure-label")
+            with RadioSet(id="on-force-close"):
+                yield RadioButton(
+                    "Detach  — session stays alive as detached",
+                    id="detach",
+                )
+                yield RadioButton(
+                    "Quit    — session is killed immediately",
+                    id="quit",
+                )
         with Horizontal(id="launch-keys", classes="keys-row-split"):
             yield Static(self._launch_keys_label(), classes="keys-left")
             yield Static(self._back_keys_label(), classes="keys-right")
@@ -172,6 +217,50 @@ class PickerScreen(Screen[None]):
 
     def on_mount(self) -> None:
         self.action_refresh()
+        self._init_closure_radio()
+        self._check_zellij_config()
+
+    def _init_closure_radio(self) -> None:
+        """Inicializa el RadioSet con el valor actual de on_force_close.
+
+        Guarda el valor en _current_closure antes de activar el botón para que
+        el handler descarte el evento del init (valor == _current_closure).
+        """
+        if self._zellij_config_path is None:
+            return
+        current = read_on_force_close(self._zellij_config_path)
+        self._current_closure = current
+        btn_id = "quit" if current == "quit" else "detach"
+        rs = self.query_one("#on-force-close", RadioSet)
+        rs.query_one(f"#{btn_id}", RadioButton).value = True
+
+    def _check_zellij_config(self) -> None:
+        """Auto-corrige session_serialization y serialize_pane_viewport si no
+        están habilitados. Muestra un único toast solo si algo se cambió."""
+        if self._zellij_config_path is None:
+            return
+        fixed: list[str] = []
+        try:
+            if not check_session_serialization(self._zellij_config_path):
+                set_session_serialization(self._zellij_config_path, True)
+                fixed.append("session_serialization true")
+            if not check_serialize_pane_viewport(self._zellij_config_path):
+                set_serialize_pane_viewport(self._zellij_config_path, True)
+                fixed.append("serialize_pane_viewport true")
+        except Exception as exc:  # noqa: BLE001
+            self.app.notify(
+                f"Could not update Zellij config: {exc}",
+                severity="error",
+                timeout=8,
+            )
+            return
+        if fixed:
+            self.app.notify(
+                "Fixed Zellij config: " + ", ".join(fixed) + " — requires restart.",
+                title="Zellij config updated",
+                severity="information",
+                timeout=8,
+            )
 
     @staticmethod
     def _key_chip(key: str, label: str, *, width: int | None = None) -> str:
@@ -197,9 +286,10 @@ class PickerScreen(Screen[None]):
         ]
         return "Manage: " + "  ".join(keys)
 
-    @staticmethod
-    def _back_keys_label() -> str:
-        return "[$footer-key-foreground b]Esc[/]  Back"
+    def _back_keys_label(self) -> str:
+        if self._embedded:
+            return "[$footer-key-foreground b]Esc[/]  Back"
+        return "[$footer-key-foreground b]q[/] Exit   "
 
     @staticmethod
     def _palette_keys_label() -> str:
@@ -487,6 +577,33 @@ class PickerScreen(Screen[None]):
         if path.startswith(home + "/"):
             return "~" + path[len(home):]
         return path
+
+    @on(RadioSet.Changed, "#on-force-close")
+    def _on_closure_changed(self, event: RadioSet.Changed) -> None:
+        if self._zellij_config_path is None:
+            return
+        btn_id = event.pressed.id
+        if btn_id not in ("detach", "quit"):
+            return
+        if btn_id == self._current_closure:
+            return  # sin cambio (incluye el evento del init)
+        if self._zellij_config_path is None:
+            return
+        try:
+            set_on_force_close(self._zellij_config_path, btn_id)
+        except Exception as exc:  # noqa: BLE001
+            self.app.notify(
+                f"Could not save on_force_close: {exc}",
+                severity="error",
+                timeout=8,
+            )
+            return
+        self._current_closure = btn_id
+        self.app.notify(
+            f'on_force_close set to "{btn_id}" — requires Zellij restart.',
+            severity="information",
+            timeout=6,
+        )
 
     @on(OptionList.OptionHighlighted, "#session-list")
     def _on_highlight(self, event: OptionList.OptionHighlighted) -> None:

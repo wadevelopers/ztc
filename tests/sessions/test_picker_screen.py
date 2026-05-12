@@ -61,7 +61,8 @@ def test_footer_hotkeys_are_split_by_launch_and_manage_actions() -> None:
     manage = screen._manage_keys_label()
 
     assert launch.index("New") < launch.index("Layout") < launch.index("Bash")
-    assert screen._back_keys_label().endswith("Back")
+    assert PickerScreen(embedded=True)._back_keys_label().endswith("Back")
+    assert "Exit" in PickerScreen(embedded=False)._back_keys_label()
     assert (
         manage.index("Reload")
         < manage.index("Rename")

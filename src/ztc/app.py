@@ -377,6 +377,7 @@ class TermConfigApp(App[None]):
                     on_cancel=self.pop_screen,
                     zellij_installed=self.zellij_installed,
                     embedded=True,
+                    zellij_config_path=self.paths.zellij_config,
                 )
             )
         elif event.option.id == "colors":

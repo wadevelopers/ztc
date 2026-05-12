@@ -41,7 +41,12 @@ class SessionLauncherApp(App[None]):
     def on_mount(self) -> None:
         self._register_zellij_themes()
         self._sync_theme_with_zellij()
-        self.push_screen(PickerScreen(zellij_installed=self.zellij_installed))
+        self.push_screen(
+            PickerScreen(
+                zellij_installed=self.zellij_installed,
+                zellij_config_path=self.zellij_config_path,
+            )
+        )
         if not self.zellij_installed:
             self.notify(
                 "Zellij is not installed. Sessions cannot be listed or launched.",
