@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +42,7 @@ from pathlib import Path
 from ztc.services.atomic import write_atomic
 from ztc.services.backups import make_backup
 from ztc.services.colors import CanonicalSlot
+from ztc.services.fonts import resolve_font_faces
 from ztc.services.terminals import default_import_theme_file
 from ztc.services.terminals.settings import (
     SETTINGS,
@@ -470,6 +472,19 @@ class KittyBackend:
         # logica de 1-4 valores; manejado aparte.
         if setting.name in ("window.padding.x", "window.padding.y"):
             return _read_kitty_padding(self._effective_entries(doc), setting.name)
+        if setting.name == "window.columns":
+            return _read_kitty_cell_dimension(
+                self._effective_entries(doc), "initial_window_width"
+            )
+        if setting.name == "window.lines":
+            return _read_kitty_cell_dimension(
+                self._effective_entries(doc), "initial_window_height"
+            )
+        if setting.name == "font.family":
+            last = _last_entry_for_key(self._effective_entries(doc), "font_family")
+            if last is None:
+                return None
+            return _parse_kitty_font_family(last.value)
 
         key = _CANONICAL_TO_KITTY_SETTING.get(setting.name)
         if key is None:
@@ -489,6 +504,22 @@ class KittyBackend:
 
         if setting.name in ("window.padding.x", "window.padding.y"):
             _write_kitty_padding(doc, setting.name, value)  # type: ignore[arg-type]
+            doc.changed_settings.add(setting.name)
+            return
+        if setting.name == "window.columns":
+            _write_kitty_cell_dimension(
+                doc, "initial_window_width", value  # type: ignore[arg-type]
+            )
+            doc.changed_settings.add(setting.name)
+            return
+        if setting.name == "window.lines":
+            _write_kitty_cell_dimension(
+                doc, "initial_window_height", value  # type: ignore[arg-type]
+            )
+            doc.changed_settings.add(setting.name)
+            return
+        if setting.name == "font.family" and isinstance(value, str):
+            _write_kitty_font_family(doc, value)
             doc.changed_settings.add(setting.name)
             return
 
@@ -523,6 +554,35 @@ class KittyBackend:
             del doc.lines[idx]
             doc.changed_settings.add(setting.name)
             return True
+        if setting.name == "window.columns":
+            idx = _last_index_of_key_in_main(doc.lines, "initial_window_width")
+            if idx is None:
+                return False
+            del doc.lines[idx]
+            doc.changed_settings.add(setting.name)
+            return True
+        if setting.name == "window.lines":
+            idx = _last_index_of_key_in_main(doc.lines, "initial_window_height")
+            if idx is None:
+                return False
+            del doc.lines[idx]
+            doc.changed_settings.add(setting.name)
+            return True
+        if setting.name == "font.family":
+            deleted = False
+            for key in (
+                "font_family",
+                "bold_font",
+                "italic_font",
+                "bold_italic_font",
+            ):
+                idx = _last_index_of_key_in_main(doc.lines, key)
+                if idx is not None:
+                    del doc.lines[idx]
+                    deleted = True
+            if deleted:
+                doc.changed_settings.add(setting.name)
+            return deleted
 
         key = _CANONICAL_TO_KITTY_SETTING.get(setting.name)
         if key is None:
@@ -544,12 +604,13 @@ class KittyBackend:
 _CANONICAL_TO_KITTY_SETTING: dict[str, str] = {
     "window.opacity": "background_opacity",
     "font.size": "font_size",
-    "font.family": "font_family",
     "cursor.shape": "cursor_shape",
 }
 
 # Lista completa de settings soportadas (incluye padding x/y manejadas aparte).
 _SUPPORTED_SETTINGS_KITTY: tuple[str, ...] = (
+    "window.columns",
+    "window.lines",
     "window.padding.x",
     "window.padding.y",
     "window.opacity",
@@ -644,6 +705,57 @@ def _write_kitty_padding(doc: KittyDoc, setting_name: str, value: int) -> None:
         doc.lines[last.main_line_idx] = new_line
     else:
         doc.lines.append(new_line)
+
+
+def _read_kitty_cell_dimension(entries: list[_Entry], key: str) -> int | None:
+    last = _last_entry_for_key(entries, key)
+    if last is None:
+        return None
+    raw = last.value.strip()
+    if not raw.endswith("c"):
+        return None
+    number = raw[:-1]
+    if not number.isdigit():
+        return None
+    value = int(number)
+    return value if value > 0 else None
+
+
+def _write_kitty_cell_dimension(doc: KittyDoc, key: str, value: int) -> None:
+    _write_main_key_last_wins(doc, key, f"{value}c")
+    _write_main_key_last_wins(doc, "remember_window_size", "no")
+
+
+def _parse_kitty_font_family(value: str) -> str:
+    try:
+        parts = shlex.split(value)
+    except ValueError:
+        return value.strip()
+    for part in parts:
+        if part.startswith("family="):
+            return part.removeprefix("family=").strip()
+    return value.strip()
+
+
+def _write_kitty_font_family(doc: KittyDoc, family: str) -> None:
+    faces = resolve_font_faces(family)
+    by_key = {
+        "font_family": faces.normal,
+        "bold_font": faces.bold,
+        "italic_font": faces.italic,
+        "bold_italic_font": faces.bold_italic,
+    }
+    for key, face in by_key.items():
+        _write_main_key_last_wins(
+            doc,
+            key,
+            f'family="{_escape_kitty_font_value(face.family)}" '
+            f'style="{_escape_kitty_font_value(face.style)}"',
+        )
+
+
+def _escape_kitty_font_value(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _format_kitty_setting_value(

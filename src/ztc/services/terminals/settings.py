@@ -40,6 +40,12 @@ class CanonicalSetting:
 
 # Catalogo de settings de iteracion 1.
 SETTINGS: dict[str, CanonicalSetting] = {
+    "window.columns": CanonicalSetting(
+        "window.columns", SettingKind.INT, 80, min_value=1
+    ),
+    "window.lines": CanonicalSetting(
+        "window.lines", SettingKind.INT, 25, min_value=1
+    ),
     "window.padding.x": CanonicalSetting(
         "window.padding.x", SettingKind.INT, 0, min_value=0
     ),

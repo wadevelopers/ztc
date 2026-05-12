@@ -56,11 +56,11 @@ async def test_screen_opens_with_alacritty(tmp_path: Path) -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         assert isinstance(app.screen, TerminalSettingsScreen)
-        # Lista los 6 settings.
+        # Lista los 8 settings.
         from textual.widgets import OptionList
 
         ol = app.screen.query_one("#setting-list", OptionList)
-        assert ol.option_count == 6
+        assert ol.option_count == 8
 
 
 async def test_screen_opens_with_kitty(tmp_path: Path) -> None:
@@ -144,13 +144,14 @@ async def test_reset_removes_setting_from_doc(tmp_path: Path) -> None:
     app = _Harness(screen)
     async with app.run_test() as pilot:
         await pilot.pause()
-        # Highlight el setting de opacity (3er en supported_settings).
+        # Highlight el setting de opacity.
         # Index segun orden del catalogo:
-        # padding.x, padding.y, opacity, font.size, font.family, cursor.shape
+        # columns, lines, padding.x, padding.y, opacity, font.size,
+        # font.family, cursor.shape
         from textual.widgets import OptionList
 
         ol = app.screen.query_one("#setting-list", OptionList)
-        ol.highlighted = 2  # window.opacity
+        ol.highlighted = 4  # window.opacity
         await pilot.pause()
         screen.action_reset()
         await pilot.pause()
@@ -193,7 +194,7 @@ async def test_action_edit_rejects_invalid_value(tmp_path: Path) -> None:
         from textual.widgets import OptionList
 
         ol = app.screen.query_one("#setting-list", OptionList)
-        ol.highlighted = 0  # window.padding.x (INT)
+        ol.highlighted = 2  # window.padding.x (INT)
         await pilot.pause()
 
         # Simular el callback `after` con un raw invalido.
@@ -210,7 +211,7 @@ async def test_action_edit_rejects_invalid_value(tmp_path: Path) -> None:
 # ---------- supported settings count ----------
 
 
-async def test_lists_6_settings_for_both_backends(tmp_path: Path) -> None:
+async def test_lists_8_settings_for_both_backends(tmp_path: Path) -> None:
     for backend, path in [
         (AlacrittyBackend(), _alacritty_doc(tmp_path / "a")),
         (KittyBackend(), _kitty_doc(tmp_path / "k")),
@@ -223,7 +224,7 @@ async def test_lists_6_settings_for_both_backends(tmp_path: Path) -> None:
             from textual.widgets import OptionList
 
             ol = app.screen.query_one("#setting-list", OptionList)
-            assert ol.option_count == 6
+            assert ol.option_count == 8
 
 
 @pytest.fixture(autouse=True)

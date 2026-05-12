@@ -1,5 +1,5 @@
 """Tests del backend Kitty para settings. Cubre:
-- Roundtrip read→write→read de los 6 settings.
+- Roundtrip read→write→read de los settings soportados.
 - Caso especial `window_padding_width` (1/2/3/4 valores; simetrico vs
   asimetrico; int vs float).
 - font_family con espacios (Kitty no usa comillas).
@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from ztc.services.fonts import FontFace, FontFaceSet
 from ztc.services.terminals.kitty import KittyBackend, KittyDoc
 from ztc.services.terminals.settings import SETTINGS
 
@@ -43,6 +44,27 @@ def test_read_font_size(backend: KittyBackend, tmp_path: Path) -> None:
     assert backend.read_setting(doc, SETTINGS["font.size"]) == 14.0
 
 
+def test_read_dimensions_in_cells(backend: KittyBackend, tmp_path: Path) -> None:
+    doc = _doc_from(
+        tmp_path,
+        ["initial_window_width 80c", "initial_window_height 25c"],
+    )
+    assert backend.read_setting(doc, SETTINGS["window.columns"]) == 80
+    assert backend.read_setting(doc, SETTINGS["window.lines"]) == 25
+
+
+def test_read_pixel_dimensions_returns_none(
+    backend: KittyBackend,
+    tmp_path: Path,
+) -> None:
+    doc = _doc_from(
+        tmp_path,
+        ["initial_window_width 1200", "initial_window_height 800"],
+    )
+    assert backend.read_setting(doc, SETTINGS["window.columns"]) is None
+    assert backend.read_setting(doc, SETTINGS["window.lines"]) is None
+
+
 def test_read_font_family_with_spaces(backend: KittyBackend, tmp_path: Path) -> None:
     """Kitty no usa comillas: `font_family JetBrains Mono` debe leerse
     con los espacios incluidos."""
@@ -50,6 +72,17 @@ def test_read_font_family_with_spaces(backend: KittyBackend, tmp_path: Path) -> 
     assert (
         backend.read_setting(doc, SETTINGS["font.family"]) == "JetBrains Mono"
     )
+
+
+def test_read_font_family_from_family_style_syntax(
+    backend: KittyBackend,
+    tmp_path: Path,
+) -> None:
+    doc = _doc_from(
+        tmp_path,
+        ['font_family family="C64 Pro Mono" style="Regular"'],
+    )
+    assert backend.read_setting(doc, SETTINGS["font.family"]) == "C64 Pro Mono"
 
 
 def test_read_cursor_shape_normalized(backend: KittyBackend, tmp_path: Path) -> None:
@@ -192,6 +225,48 @@ def test_write_opacity_forces_existing_dynamic_background_opacity(
     ]
 
 
+def test_write_dimensions_emit_cells_and_disable_remembered_size(
+    backend: KittyBackend,
+    tmp_path: Path,
+) -> None:
+    doc = _doc_from(tmp_path, [])
+    backend.write_setting(doc, SETTINGS["window.columns"], 80)
+    backend.write_setting(doc, SETTINGS["window.lines"], 25)
+    assert backend.read_setting(doc, SETTINGS["window.columns"]) == 80
+    assert backend.read_setting(doc, SETTINGS["window.lines"]) == 25
+    assert doc.lines == [
+        "initial_window_width 80c",
+        "remember_window_size no",
+        "initial_window_height 25c",
+    ]
+
+
+def test_write_font_family_emits_all_faces(
+    backend: KittyBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    faces = FontFaceSet(
+        normal=FontFace("C64 Pro Mono", "Regular"),
+        bold=FontFace("C64 Pro Mono", "Regular", fallback=True),
+        italic=FontFace("C64 Pro Mono", "Regular", fallback=True),
+        bold_italic=FontFace("C64 Pro Mono", "Regular", fallback=True),
+    )
+    monkeypatch.setattr(
+        "ztc.services.terminals.kitty.resolve_font_faces",
+        lambda family: faces,
+    )
+    doc = _doc_from(tmp_path, [])
+    backend.write_setting(doc, SETTINGS["font.family"], "C64 Pro Mono")
+    assert backend.read_setting(doc, SETTINGS["font.family"]) == "C64 Pro Mono"
+    assert doc.lines == [
+        'font_family family="C64 Pro Mono" style="Regular"',
+        'bold_font family="C64 Pro Mono" style="Regular"',
+        'italic_font family="C64 Pro Mono" style="Regular"',
+        'bold_italic_font family="C64 Pro Mono" style="Regular"',
+    ]
+
+
 def test_write_cursor_shape_emits_lowercase_for_kitty(
     backend: KittyBackend, tmp_path: Path
 ) -> None:
@@ -309,6 +384,23 @@ def test_delete_padding_removes_shared_line(
     assert backend.read_setting(doc, SETTINGS["window.padding.y"]) is None
 
 
+def test_delete_font_family_removes_all_faces(
+    backend: KittyBackend,
+    tmp_path: Path,
+) -> None:
+    doc = _doc_from(
+        tmp_path,
+        [
+            'font_family family="C64 Pro Mono" style="Regular"',
+            'bold_font family="C64 Pro Mono" style="Regular"',
+            'italic_font family="C64 Pro Mono" style="Regular"',
+            'bold_italic_font family="C64 Pro Mono" style="Regular"',
+        ],
+    )
+    assert backend.delete_setting(doc, SETTINGS["font.family"]) is True
+    assert doc.lines == []
+
+
 def test_delete_missing_returns_false(backend: KittyBackend, tmp_path: Path) -> None:
     doc = _doc_from(tmp_path, [])
     assert backend.delete_setting(doc, SETTINGS["font.size"]) is False
@@ -319,11 +411,13 @@ def test_delete_missing_returns_false(backend: KittyBackend, tmp_path: Path) -> 
 
 def test_supported_settings_count(backend: KittyBackend) -> None:
     settings = backend.supported_settings()
-    assert len(settings) == 6
+    assert len(settings) == 8
     names = {s.name for s in settings}
     assert names == {
         "window.padding.x",
         "window.padding.y",
+        "window.columns",
+        "window.lines",
         "window.opacity",
         "font.size",
         "font.family",

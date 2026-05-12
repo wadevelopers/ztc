@@ -15,6 +15,7 @@ from tomlkit.toml_document import TOMLDocument
 
 from ztc.services import toml_io
 from ztc.services.colors import CanonicalSlot
+from ztc.services.fonts import resolve_font_faces
 from ztc.services.terminals import default_import_theme_file
 from ztc.services.terminals.settings import (
     SETTINGS,
@@ -39,6 +40,8 @@ KNOWN_SLOTS: list[CanonicalSlot] = [
 # Mapeo de cada setting canonico al path TOML donde Alacritty lo guarda.
 # Ej. `window.padding.x` -> doc["window"]["padding"]["x"].
 _CANONICAL_TO_ALACRITTY_SETTING: dict[str, tuple[str, ...]] = {
+    "window.columns": ("window", "dimensions", "columns"),
+    "window.lines": ("window", "dimensions", "lines"),
     "window.padding.x": ("window", "padding", "x"),
     "window.padding.y": ("window", "padding", "y"),
     "window.opacity": ("window", "opacity"),
@@ -179,15 +182,28 @@ class AlacrittyBackend:
         path = _CANONICAL_TO_ALACRITTY_SETTING.get(setting.name)
         if path is None:
             raise KeyError(f"Setting {setting.name!r} not supported by Alacritty")
+        if setting.name == "font.family" and isinstance(value, str):
+            _write_alacritty_font_family(doc, value)
+            _mark_setting_changed(doc, setting.name)
+            return
         _write_path(doc, path, value)
+        _mark_setting_changed(doc, setting.name)
 
     def delete_setting(
         self, doc: TOMLDocument, setting: CanonicalSetting
     ) -> bool:
+        if setting.name == "font.family":
+            deleted = _delete_alacritty_font_family(doc)
+            if deleted:
+                _mark_setting_changed(doc, setting.name)
+            return deleted
         path = _CANONICAL_TO_ALACRITTY_SETTING.get(setting.name)
         if path is None:
             return False
-        return _delete_path(doc, path)
+        deleted = _delete_path(doc, path)
+        if deleted:
+            _mark_setting_changed(doc, setting.name)
+        return deleted
 
 
 # ---------- helpers TOML por path ----------
@@ -206,6 +222,35 @@ def _read_path(doc: TOMLDocument, path: tuple[str, ...]) -> object | None:
             return None
         current = current[key]
     return current
+
+
+def _mark_setting_changed(doc: TOMLDocument, setting_name: str) -> None:
+    changed = getattr(doc, "changed_settings", None)
+    if changed is None:
+        changed = set()
+        doc.changed_settings = changed
+    changed.add(setting_name)
+
+
+def _write_alacritty_font_family(doc: TOMLDocument, family: str) -> None:
+    faces = resolve_font_faces(family)
+    by_face = {
+        "normal": faces.normal,
+        "bold": faces.bold,
+        "italic": faces.italic,
+        "bold_italic": faces.bold_italic,
+    }
+    for name, face in by_face.items():
+        _write_path(doc, ("font", name, "family"), face.family)
+        _write_path(doc, ("font", name, "style"), face.style)
+
+
+def _delete_alacritty_font_family(doc: TOMLDocument) -> bool:
+    deleted = False
+    for face_name in ("normal", "bold", "italic", "bold_italic"):
+        deleted = _delete_path(doc, ("font", face_name, "family")) or deleted
+        deleted = _delete_path(doc, ("font", face_name, "style")) or deleted
+    return deleted
 
 
 def _write_path(doc: TOMLDocument, path: tuple[str, ...], value: object) -> None:

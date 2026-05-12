@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 import tomlkit
 
+from ztc.services.fonts import FontFace, FontFaceSet
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.services.terminals.settings import SETTINGS
 
@@ -33,6 +34,12 @@ def test_read_padding_from_dotted_table(backend: AlacrittyBackend) -> None:
 def test_read_opacity_from_window_table(backend: AlacrittyBackend) -> None:
     doc = _doc_from('[window]\nopacity = 0.85\n')
     assert backend.read_setting(doc, SETTINGS["window.opacity"]) == 0.85
+
+
+def test_read_dimensions_from_window_table(backend: AlacrittyBackend) -> None:
+    doc = _doc_from('[window.dimensions]\ncolumns = 80\nlines = 25\n')
+    assert backend.read_setting(doc, SETTINGS["window.columns"]) == 80
+    assert backend.read_setting(doc, SETTINGS["window.lines"]) == 25
 
 
 def test_read_font_size_and_family(backend: AlacrittyBackend) -> None:
@@ -73,6 +80,8 @@ def test_read_missing_setting_returns_none(backend: AlacrittyBackend) -> None:
     doc = _doc_from("# empty\n")
     for name in (
         "window.padding.x",
+        "window.columns",
+        "window.lines",
         "window.opacity",
         "font.size",
         "font.family",
@@ -98,10 +107,36 @@ def test_write_then_read_opacity(backend: AlacrittyBackend) -> None:
     assert backend.read_setting(doc, SETTINGS["window.opacity"]) == 0.9
 
 
-def test_write_then_read_font_family(backend: AlacrittyBackend) -> None:
+def test_write_then_read_dimensions(backend: AlacrittyBackend) -> None:
+    doc = tomlkit.document()
+    backend.write_setting(doc, SETTINGS["window.columns"], 80)
+    backend.write_setting(doc, SETTINGS["window.lines"], 25)
+    assert backend.read_setting(doc, SETTINGS["window.columns"]) == 80
+    assert backend.read_setting(doc, SETTINGS["window.lines"]) == 25
+    assert doc.changed_settings == {"window.columns", "window.lines"}
+
+
+def test_write_then_read_font_family(
+    backend: AlacrittyBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    faces = FontFaceSet(
+        normal=FontFace("Fira Code", "Regular"),
+        bold=FontFace("Fira Code", "Bold"),
+        italic=FontFace("Fira Code", "Italic"),
+        bold_italic=FontFace("Fira Code", "Regular", fallback=True),
+    )
+    monkeypatch.setattr(
+        "ztc.services.terminals.alacritty.resolve_font_faces",
+        lambda family: faces,
+    )
     doc = tomlkit.document()
     backend.write_setting(doc, SETTINGS["font.family"], "Fira Code")
     assert backend.read_setting(doc, SETTINGS["font.family"]) == "Fira Code"
+    assert doc["font"]["normal"]["style"] == "Regular"
+    assert doc["font"]["bold"]["style"] == "Bold"
+    assert doc["font"]["italic"]["style"] == "Italic"
+    assert doc["font"]["bold_italic"]["style"] == "Regular"
 
 
 def test_write_then_read_cursor_shape(backend: AlacrittyBackend) -> None:
@@ -193,11 +228,13 @@ def test_delete_preserves_siblings(backend: AlacrittyBackend) -> None:
 
 def test_supported_settings_count(backend: AlacrittyBackend) -> None:
     settings = backend.supported_settings()
-    assert len(settings) == 6
+    assert len(settings) == 8
     names = {s.name for s in settings}
     assert names == {
         "window.padding.x",
         "window.padding.y",
+        "window.columns",
+        "window.lines",
         "window.opacity",
         "font.size",
         "font.family",

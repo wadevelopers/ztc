@@ -1,4 +1,4 @@
-"""Editor de settings de la terminal activa: padding, opacity, font,
+"""Editor de settings de la terminal activa: padding, size, opacity, font,
 cursor shape. Cubre los settings comunes con mapeo limpio entre
 backends (Alacritty TOML y Kitty conf). Paralelo a `ColorEditorScreen`.
 """
@@ -15,7 +15,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
-from ztc.services.fonts import list_monospace_fonts
+from ztc.services.fonts import FontFace, list_monospace_fonts, resolve_font_faces
 from ztc.services.save_helper import compose_save_toast, save_with_reload
 from ztc.services.terminals import TerminalBackend
 from ztc.services.terminals.settings import (
@@ -28,7 +28,7 @@ from ztc.widgets.header import StaticHeader
 
 
 class TerminalSettingsScreen(Screen[None]):
-    """Editor de settings (no-color) del backend activo: padding,
+    """Editor de settings (no-color) del backend activo: padding, size,
     opacity, font size, font family, cursor shape.
     """
 
@@ -156,7 +156,34 @@ class TerminalSettingsScreen(Screen[None]):
             f"Default: {setting.default}",
             f"Current: {self._format_value(value)}",
         ]
+        if setting.name == "font.family" and isinstance(value, str):
+            lines.extend(("", *self._font_faces_detail(value)))
+        elif setting.name in ("window.padding.x", "window.padding.y"):
+            lines.append("Unit: pixels")
+        elif setting.name in ("window.columns", "window.lines"):
+            lines.append("Unit: terminal cells")
+            lines.extend(
+                (
+                    "",
+                    "Note: For window size changes to take effect, restart your terminal.",
+                )
+            )
         meta_widget.update("\n".join(lines))
+
+    def _font_faces_detail(self, family: str) -> list[str]:
+        faces = resolve_font_faces(family)
+        return [
+            "Resolved faces:",
+            f"normal: {self._format_font_face(faces.normal)}",
+            f"bold: {self._format_font_face(faces.bold)}",
+            f"italic: {self._format_font_face(faces.italic)}",
+            f"bold_italic: {self._format_font_face(faces.bold_italic)}",
+        ]
+
+    @staticmethod
+    def _format_font_face(face: FontFace) -> str:
+        suffix = " (fallback)" if face.fallback else ""
+        return f"{face.style}{suffix}"
 
     # ---------- eventos ----------
 
