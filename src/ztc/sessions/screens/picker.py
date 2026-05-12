@@ -19,7 +19,7 @@ from ztc.sessions.services import session_info, state, zellij_session
 from ztc.sessions.services.session_info import PaneInfo, TabInfo
 from ztc.sessions.types import LaunchTarget
 from ztc.sessions.widgets.modals import (
-    ConfirmByNameModal,
+    ConfirmActionModal,
     NewSessionModal,
     NewSessionResult,
 )
@@ -179,6 +179,7 @@ class PickerScreen(Screen[None]):
         "running": "white",
         "unknown": "dim",
     }
+    _DETAIL_SEPARATOR = "[dim]" + ("─" * 56) + "[/]"
 
     # Anchos de columna del listado: nombre fijo a 24, estado a 10.
     _NAME_COL = 24
@@ -240,7 +241,9 @@ class PickerScreen(Screen[None]):
 
         # Tabs + panes (arbol indentado).
         if details and details.tabs:
-            tabs_w.update(self._render_tabs_tree(details.tabs))
+            tabs_w.update(
+                self._DETAIL_SEPARATOR + "\n\n" + self._render_tabs_tree(details.tabs)
+            )
         else:
             tabs_w.update("")
 
@@ -569,14 +572,17 @@ class PickerScreen(Screen[None]):
         s = self._highlighted()
         if s is None:
             return
+        reason = self._destructive_block_reason(s, "kill")
+        if reason:
+            self.app.notify(reason, severity="warning", timeout=8)
+            return
         self.app.push_screen(
-            ConfirmByNameModal(
+            ConfirmActionModal(
                 title="Kill session",
                 message=(
-                    f"This will kill the session \"{s.name}\" and all its processes."
+                    f"Kill \"{s.name}\" and all its processes?"
                 ),
-                expected=s.name,
-                confirm_label="Kill",
+                confirm_label="Yes, kill",
             ),
             lambda ok: self._after_destructive(ok, s.name, "kill"),
         )
@@ -585,15 +591,17 @@ class PickerScreen(Screen[None]):
         s = self._highlighted()
         if s is None:
             return
+        reason = self._destructive_block_reason(s, "delete")
+        if reason:
+            self.app.notify(reason, severity="warning", timeout=8)
+            return
         self.app.push_screen(
-            ConfirmByNameModal(
+            ConfirmActionModal(
                 title="Delete session",
                 message=(
-                    f"Deletes the cache of \"{s.name}\". If the session is alive it will fail: "
-                    "use Delete --force."
+                    f"Delete the saved cache for \"{s.name}\"?"
                 ),
-                expected=s.name,
-                confirm_label="Delete",
+                confirm_label="Yes, delete",
             ),
             lambda ok: self._after_destructive(ok, s.name, "delete"),
         )
@@ -602,18 +610,43 @@ class PickerScreen(Screen[None]):
         s = self._highlighted()
         if s is None:
             return
+        reason = self._destructive_block_reason(s, "delete-force")
+        if reason:
+            self.app.notify(reason, severity="warning", timeout=8)
+            return
         self.app.push_screen(
-            ConfirmByNameModal(
+            ConfirmActionModal(
                 title="Delete session --force",
                 message=(
-                    f"Kills AND deletes \"{s.name}\". Processes inside die. "
-                    "Not reversible."
+                    f"Kill and delete \"{s.name}\"? Processes inside will die. "
+                    "This cannot be undone."
                 ),
-                expected=s.name,
-                confirm_label="Delete --force",
+                confirm_label="Yes, delete",
             ),
             lambda ok: self._after_destructive(ok, s.name, "delete-force"),
         )
+
+    @staticmethod
+    def _destructive_block_reason(s: ZellijSession, action: str) -> str | None:
+        live_states = {"attached", "detached", "running"}
+        if action == "kill":
+            if s.state == "exited":
+                return f"Cannot kill '{s.name}': the session is already exited."
+            if s.state not in live_states:
+                return f"Cannot kill '{s.name}': session state is unknown."
+            return None
+        if action == "delete":
+            if s.state != "exited":
+                return (
+                    f"Cannot delete live session '{s.name}' without force. "
+                    "Use D Delete --force."
+                )
+            return None
+        if action == "delete-force":
+            if s.state == "unknown":
+                return f"Cannot force-delete '{s.name}': session state is unknown."
+            return None
+        return None
 
     def _after_destructive(self, ok: bool, name: str, action: str) -> None:
         if not ok:

@@ -12,6 +12,7 @@ from ztc.screens.layout_list import LayoutListScreen
 from ztc.services.runtime_detect import TerminalDetection
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.widgets.confirm import (
+    ConfirmActionModal,
     PaneEditModal,
     UnsavedChangesModal,
 )
@@ -176,6 +177,57 @@ async def test_layout_list_new_creates_file(tmp_path: Path) -> None:
         # Tras crear deberia haber empujado el editor.
         assert isinstance(app.screen, LayoutEditorScreen)
         assert (paths.zellij_layouts_dir / "trabajo.kdl").exists()
+
+
+async def test_layout_list_delete_uses_simple_confirm(tmp_path: Path) -> None:
+    paths = _paths_with_layout(tmp_path)
+    app = _make_app(tmp_path, paths)
+    async with app.run_test() as pilot:
+        await pilot.press("down", "enter")
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, LayoutListScreen)
+
+        screen.action_delete()
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmActionModal)
+        await pilot.press("tab", "enter")
+        await pilot.pause()
+
+        assert not (paths.zellij_layouts_dir / "dev.kdl").exists()
+
+
+async def test_layout_editor_delete_tab_deletes_without_confirm(tmp_path: Path) -> None:
+    paths = _paths_with_layout(tmp_path)
+    app = _make_app(tmp_path, paths)
+    async with app.run_test() as pilot:
+        await pilot.press("down", "enter", "enter")
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, LayoutEditorScreen)
+        original_count = len(screen.layout_model.tabs)
+
+        screen.action_delete_tab()
+        await pilot.pause()
+
+        assert isinstance(app.screen, LayoutEditorScreen)
+        assert len(app.screen.layout_model.tabs) == original_count - 1
+        assert app.screen.dirty is True
+
+
+async def test_layout_editor_tab_footer_orders_rename_before_delete(
+    tmp_path: Path,
+) -> None:
+    paths = _paths_with_layout(tmp_path)
+    app = _make_app(tmp_path, paths)
+    async with app.run_test() as pilot:
+        await pilot.press("down", "enter", "enter")
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, LayoutEditorScreen)
+
+        label = screen._tab_keys_label()
+        assert label.index("New") < label.index("Rename") < label.index("Delete")
 
 
 # ---------- PaneEditModal: validacion de default_bg / default_fg ----------

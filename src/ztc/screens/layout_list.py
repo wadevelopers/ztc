@@ -11,7 +11,7 @@ from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.models.layout import Layout
-from ztc.widgets.confirm import ConfirmByNameModal, PromptModal
+from ztc.widgets.confirm import ConfirmActionModal, PromptModal
 from ztc.widgets.header import StaticHeader
 from ztc.zellij import config_ops, layout_io, layout_ops
 
@@ -203,11 +203,10 @@ class LayoutListScreen(Screen[None]):
             self.action_refresh()
 
         self.app.push_screen(
-            ConfirmByNameModal(
+            ConfirmActionModal(
                 title="Delete layout",
                 message=f"This will delete the file {layout.path}.",
-                expected=layout.name,
-                confirm_label="Delete",
+                confirm_label="Yes, delete",
             ),
             after,
         )

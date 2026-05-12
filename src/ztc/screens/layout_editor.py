@@ -13,7 +13,6 @@ from textual.widgets.tree import TreeNode
 
 from ztc.models.layout import Layout, Pane, Tab
 from ztc.widgets.confirm import (
-    ConfirmByNameModal,
     KdlPreviewModal,
     PaneEditModal,
     PromptModal,
@@ -248,8 +247,8 @@ class LayoutEditorScreen(Screen[None]):
     def _tab_keys_label(self) -> str:
         keys = [
             self._key_chip("n", "New", width=6),
-            self._key_chip("D", "Delete", width=6),
-            self._key_chip("R", "Rename", width=7),
+            self._key_chip("R", "Rename", width=6),
+            self._key_chip("D", "Delete", width=7),
         ]
         return "Tabs:  " + "  ".join(keys)
 
@@ -604,38 +603,14 @@ class LayoutEditorScreen(Screen[None]):
         if tab is None:
             return
 
-        def do_delete() -> None:
-            if not layout_ops.delete_tab(self.layout_model, self._selected_tab_index):
-                return
-            if self._selected_tab_index >= len(self.layout_model.tabs):
-                self._selected_tab_index = max(0, len(self.layout_model.tabs) - 1)
-            self._selected_pane_id = None
-            self._rebuild_tabs()
-            self._rebuild_tree()
-            self._mark_dirty()
-
-        if tab.name:
-            self.app.push_screen(
-                ConfirmByNameModal(
-                    title="Delete tab",
-                    message=(
-                        f"This will remove tab '{tab.name}' from the layout "
-                        "(not from disk until save)."
-                    ),
-                    expected=tab.name,
-                    confirm_label="Delete",
-                ),
-                lambda ok: do_delete() if ok else None,
-            )
-        else:
-            self.app.push_screen(
-                PromptModal(
-                    title=f"Delete tab #{self._selected_tab_index + 1}",
-                    placeholder="type YES to confirm",
-                    confirm_label="Delete",
-                ),
-                lambda result: do_delete() if result == "YES" else None,
-            )
+        if not layout_ops.delete_tab(self.layout_model, self._selected_tab_index):
+            return
+        if self._selected_tab_index >= len(self.layout_model.tabs):
+            self._selected_tab_index = max(0, len(self.layout_model.tabs) - 1)
+        self._selected_pane_id = None
+        self._rebuild_tabs()
+        self._rebuild_tree()
+        self._mark_dirty()
 
     def action_rename_tab(self) -> None:
         tab = self._current_tab()

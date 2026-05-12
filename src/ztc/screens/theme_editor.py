@@ -11,7 +11,7 @@ from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.services import theme_sync
-from ztc.widgets.confirm import ConfirmByNameModal, PromptModal
+from ztc.widgets.confirm import ConfirmActionModal, PromptModal
 from ztc.widgets.header import StaticHeader
 from ztc.zellij import config_ops, theme_writer
 from ztc.zellij import theme_assets as zellij_theme_assets
@@ -448,14 +448,13 @@ class ThemePickerScreen(Screen[None]):
             self._reload()
 
         self.app.push_screen(
-            ConfirmByNameModal(
+            ConfirmActionModal(
                 title="Delete user theme",
                 message=(
                     f"This will remove '{theme.name}' from the themes block in config.kdl. "
                     "If it's the active theme, Zellij will fall back to 'default' on reload."
                 ),
-                expected=theme.name,
-                confirm_label="Delete",
+                confirm_label="Yes, delete",
             ),
             after,
         )

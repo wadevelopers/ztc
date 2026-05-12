@@ -10,6 +10,74 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Select, Static
 
 
+class ConfirmActionModal(ModalScreen[bool]):
+    """Confirma una accion destructiva con botones No/Yes.
+
+    El foco inicial queda en No para que Enter no confirme por accidente.
+    """
+
+    BINDINGS = [Binding("escape", "dismiss_false", "Cancel")]
+
+    DEFAULT_CSS = """
+    ConfirmActionModal {
+        align: center middle;
+    }
+    #dialog {
+        width: 70;
+        height: auto;
+        border: round $error;
+        padding: 1 2;
+        background: $surface;
+    }
+    #title {
+        text-style: bold;
+        color: $error;
+        margin-bottom: 1;
+    }
+    #message {
+        margin-bottom: 1;
+    }
+    #buttons {
+        align-horizontal: right;
+        height: 3;
+    }
+    """
+
+    def __init__(
+        self,
+        *,
+        title: str,
+        message: str,
+        confirm_label: str = "Confirm",
+    ) -> None:
+        super().__init__()
+        self._title = title
+        self._message = message
+        self._confirm_label = confirm_label
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Static(self._title, id="title")
+            yield Static(self._message, id="message")
+            with Horizontal(id="buttons"):
+                yield Button("No", id="cancel")
+                yield Button(self._confirm_label, id="confirm", variant="error")
+
+    def on_mount(self) -> None:
+        self.query_one("#cancel", Button).focus()
+
+    @on(Button.Pressed, "#confirm")
+    def _on_confirm(self) -> None:
+        self.dismiss(True)
+
+    @on(Button.Pressed, "#cancel")
+    def _on_cancel(self) -> None:
+        self.dismiss(False)
+
+    def action_dismiss_false(self) -> None:
+        self.dismiss(False)
+
+
 class ConfirmByNameModal(ModalScreen[bool]):
     """Confirma una acción destructiva pidiendo escribir el nombre objetivo."""
 
@@ -82,12 +150,12 @@ class ConfirmByNameModal(ModalScreen[bool]):
             self.dismiss(True)
 
     @on(Button.Pressed, "#confirm")
-    def _on_confirm(self) -> None:
+    def _on_confirm_by_name(self) -> None:
         if self.query_one("#confirm-input", Input).value == self._expected:
             self.dismiss(True)
 
     @on(Button.Pressed, "#cancel")
-    def _on_cancel(self) -> None:
+    def _on_cancel_by_name(self) -> None:
         self.dismiss(False)
 
     def action_dismiss_false(self) -> None:

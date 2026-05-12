@@ -12,7 +12,7 @@ from ztc.services import theme_sync
 from ztc.services.runtime_detect import TerminalDetection
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.widgets.confirm import (
-    ConfirmByNameModal,
+    ConfirmActionModal,
     PromptModal,
 )
 from ztc.zellij.user_themes import list_user_themes
@@ -80,10 +80,8 @@ async def test_picker_delete_user_theme(tmp_path: Path) -> None:
         assert isinstance(screen, ThemePickerScreen)
         screen.action_delete_theme()
         await pilot.pause()
-        assert isinstance(app.screen, ConfirmByNameModal)
-        for ch in "custom_dark":
-            await pilot.press(ch)
-        await pilot.press("enter")
+        assert isinstance(app.screen, ConfirmActionModal)
+        await pilot.press("tab", "enter")
         await pilot.pause()
         names = {t.name for t in list_user_themes(paths.zellij_config)}
         assert "custom_dark" not in names
@@ -108,7 +106,7 @@ async def test_picker_delete_blocks_builtin(tmp_path: Path) -> None:
         screen.action_delete_theme()
         await pilot.pause()
         # No abre modal porque dracula no es user.
-        assert not isinstance(app.screen, ConfirmByNameModal)
+        assert not isinstance(app.screen, ConfirmActionModal)
 
 
 async def test_custom_theme_editor_save_writes_block(tmp_path: Path) -> None:
