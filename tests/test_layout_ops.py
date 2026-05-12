@@ -117,26 +117,6 @@ def test_move_pane_at_boundary_returns_false() -> None:
     assert [pane.name for pane in layout.tabs[0].children] == ["a", "b"]
 
 
-def test_resize_pane_handles_percent_default_and_clamp() -> None:
-    pane = Pane()
-    assert layout_ops.resize_pane(pane, delta_pct=10) is True
-    assert pane.size == "60%"
-
-    pane.size = "90%"
-    assert layout_ops.resize_pane(pane, delta_pct=20) is True
-    assert pane.size == "95%"  # clamp
-
-    pane.size = "10%"
-    assert layout_ops.resize_pane(pane, delta_pct=-10) is True
-    assert pane.size == "5%"  # clamp
-
-
-def test_resize_pane_skips_non_percent() -> None:
-    pane = Pane(size="42")
-    assert layout_ops.resize_pane(pane, delta_pct=5) is False
-    assert pane.size == "42"
-
-
 def test_replace_pane_keeps_position() -> None:
     layout = _layout_with_two_panes()
     target = layout.tabs[0].children[0]

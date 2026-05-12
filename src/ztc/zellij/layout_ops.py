@@ -140,28 +140,6 @@ def move_pane(layout: Layout, tab_index: int, target: Pane, *, delta: int) -> bo
     return True
 
 
-def resize_pane(target: Pane, *, delta_pct: int) -> bool:
-    """Ajusta size en porcentajes. Solo opera si size es 'X%' o esta vacio.
-
-    delta_pct positivo aumenta, negativo disminuye. Limita entre 5% y 95%.
-    Si size estaba vacio, parte de 50%.
-    Devuelve True si cambio.
-    """
-    current = target.size or ""
-    m = re.match(r"^(\d+)%$", current.strip())
-    if m:
-        pct = int(m.group(1))
-    elif current == "":
-        pct = 50
-    else:
-        return False
-    new_pct = max(5, min(95, pct + delta_pct))
-    if new_pct == pct and current != "":
-        return False
-    target.size = f"{new_pct}%"
-    return True
-
-
 def replace_pane(
     layout: Layout, tab_index: int, target: Pane, replacement: Pane
 ) -> bool:

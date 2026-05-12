@@ -66,12 +66,14 @@ def list_sessions(*, timeout: float = 5.0) -> list[ZellijSession]:
 
     combined = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
     out: list[ZellijSession] = []
+    seen: set[str] = set()
     for raw in combined.splitlines():
         line = _strip_ansi(raw).strip()
         if not line or _NO_SESSIONS.search(line):
             continue
         session = _parse_line(line)
-        if session is not None:
+        if session is not None and session.name not in seen:
+            seen.add(session.name)
             out.append(session)
 
     # Refinar running -> attached/detached con info de procesos.

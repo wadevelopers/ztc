@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import tomlkit
-from tomlkit.items import Array
 from tomlkit.toml_document import TOMLDocument
 
 from ztc.services import toml_io
@@ -126,35 +125,6 @@ class AlacrittyBackend:
 
     def import_theme_file(self, doc: TOMLDocument, source_path: Path) -> int:
         return default_import_theme_file(self, doc, source_path)
-
-    def get_imports(self, doc: TOMLDocument) -> list[str]:
-        raw = doc.get("import")
-        if raw is None:
-            return []
-        if isinstance(raw, list):
-            return [str(x) for x in raw]
-        return []
-
-    def add_import(self, doc: TOMLDocument, path: str) -> bool:
-        """Anade una entrada al array `import` si no existe ya."""
-        current = self.get_imports(doc)
-        if path in current:
-            return False
-        if "import" not in doc:
-            arr = tomlkit.array()
-            arr.append(path)
-            doc["import"] = arr
-            return True
-        raw = doc["import"]
-        if isinstance(raw, Array):
-            raw.append(path)
-            return True
-        arr = tomlkit.array()
-        for item in current:
-            arr.append(item)
-        arr.append(path)
-        doc["import"] = arr
-        return True
 
     # ---------- settings (window, font, cursor) ----------
 

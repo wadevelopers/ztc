@@ -128,19 +128,6 @@ def test_import_theme_missing_file(tmp_path: Path) -> None:
         backend.import_theme_file(doc, tmp_path / "nope.toml")
 
 
-def test_add_import_creates_array_and_dedupes() -> None:
-    backend = AlacrittyBackend()
-    doc = tomlkit.document()
-    assert backend.add_import(doc, "~/themes/dracula.toml") is True
-    assert backend.add_import(doc, "~/themes/dracula.toml") is False
-    assert backend.get_imports(doc) == ["~/themes/dracula.toml"]
-    assert backend.add_import(doc, "~/themes/nord.toml") is True
-    assert backend.get_imports(doc) == [
-        "~/themes/dracula.toml",
-        "~/themes/nord.toml",
-    ]
-
-
 def test_contrast_ratio_known_values() -> None:
     # blanco vs negro = 21
     assert round(colors.contrast_ratio("#ffffff", "#000000") or 0, 1) == 21.0

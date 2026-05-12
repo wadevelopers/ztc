@@ -64,17 +64,6 @@ def find_themes_block(text: str) -> tuple[int, int] | None:
     return (start, i) if depth == 0 else None
 
 
-# Slots requeridos por el parser de Zellij en cualquier componente que
-# aparezca. Si falta uno, el parse falla entero (kdl/mod.rs:5158-1568).
-# `background` es opcional (default a #000000 upstream).
-_REQUIRED_RICH_SLOTS: tuple[str, ...] = (
-    "base",
-    "emphasis_0",
-    "emphasis_1",
-    "emphasis_2",
-    "emphasis_3",
-)
-
 # Default para campos del Palette de Zellij que no almacenamos en legacy
 # (purple, brown, gold, silver, pink, gray). Coincide con
 # PaletteColor::default() = EightBit(0) = negro.

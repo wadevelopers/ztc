@@ -112,17 +112,6 @@ class TerminalBackend(Protocol):
         ...
 
 
-# Filtro de extensiones que el FilePickerModal aplica al import de
-# theme/settings, indexado por `backend.kind`. Single source of truth
-# usado por color_editor y terminal_settings — sin duplicacion entre
-# screens y sin meter el dato en el Protocol. Agregar un backend nuevo
-# es una entrada acá.
-IMPORT_EXTENSIONS_BY_KIND: dict[str, list[str]] = {
-    "alacritty": [".toml"],
-    "kitty": [".conf"],
-}
-
-
 def default_import_theme_file(
     backend: TerminalBackend, doc: BackendDoc, source_path: Path
 ) -> int:
@@ -157,7 +146,6 @@ def default_import_theme_file(
 
 
 __all__ = [
-    "IMPORT_EXTENSIONS_BY_KIND",
     "BackendDoc",
     "CanonicalSetting",
     "CanonicalSlot",
