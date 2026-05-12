@@ -25,8 +25,13 @@ Open `ztc`, then go to **Terminal settings** and set:
 |---|---|
 | `window.padding.x` | `10` |
 | `window.padding.y` | `4` |
+| `window.columns` | `80` |
+| `window.lines` | `25` |
 | `window.opacity` | `1.0` |
 | `cursor.shape` | `Block` |
+
+> **Note:** changes to `window.columns` and `window.lines` require
+> restarting the terminal to take effect.
 
 Optional font setup:
 
@@ -60,14 +65,6 @@ Then go to **Terminal colors** and set the terminal background to:
 This becomes the outer frame color. On Kitty, ZTC may offer to add
 the reload settings needed for live updates. Accepting them is optional
 for the showcase; restarting the terminal after saving always works.
-
-For Alacritty, set a compact window size in `alacritty.toml`:
-
-```toml
-[window.dimensions]
-columns = 80
-lines = 25
-```
 
 ## Banner Script
 
