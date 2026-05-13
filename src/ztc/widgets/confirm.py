@@ -115,7 +115,7 @@ class ConfirmActionModal(ModalScreen[bool]):
         align: center middle;
     }
     #dialog {
-        width: 70;
+        width: 60;
         height: auto;
         border: round $error;
         padding: 1 2;
@@ -279,7 +279,7 @@ class PaneEditModal(ModalScreen[Pane | None]):
         align: center middle;
     }
     #dialog {
-        width: 80;
+        width: 70;
         height: 90%;
         border: round $accent;
         padding: 1 2;
@@ -374,16 +374,19 @@ class PaneEditModal(ModalScreen[Pane | None]):
                         yield Static("Split direction", classes="label")
                         with Horizontal(classes="field"), RadioSet(id="split"):
                             yield RadioButton(
-                                "vertical",
+                                "vert.",
                                 value=self._pane.split_direction == "vertical",
+                                id="dir-vertical",
                             )
                             yield RadioButton(
-                                "horizontal",
+                                "horiz.",
                                 value=self._pane.split_direction == "horizontal",
+                                id="dir-horizontal",
                             )
                             yield RadioButton(
                                 "(none)",
                                 value=self._pane.split_direction is None,
+                                id="dir-none",
                             )
                 else:
                     with Horizontal(classes="row"):
@@ -551,10 +554,12 @@ class PaneEditModal(ModalScreen[Pane | None]):
         if self._is_container:
             split_set = self.query_one("#split", RadioSet)
             choice: SplitDirection | None = None
-            if split_set.pressed_button is not None:
-                label = str(split_set.pressed_button.label).strip()
-                if label in ("vertical", "horizontal"):
-                    choice = label  # type: ignore[assignment]
+            pressed = split_set.pressed_button
+            if pressed is not None:
+                if pressed.id == "dir-vertical":
+                    choice = "vertical"
+                elif pressed.id == "dir-horizontal":
+                    choice = "horizontal"
             new_pane.split_direction = choice
         else:
             new_pane.focus = self.query_one("#focus", Switch).value
@@ -777,7 +782,7 @@ class KittyRemoteControlModal(ModalScreen[KittyRemoteControlChoice | None]):
         align: center middle;
     }
     #dialog {
-        width: 72;
+        width: 70;
         height: auto;
         border: round $accent;
         padding: 1 2;

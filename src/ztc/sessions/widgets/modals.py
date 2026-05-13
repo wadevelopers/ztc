@@ -23,7 +23,7 @@ class ConfirmActionModal(ModalScreen[bool]):
         align: center middle;
     }
     #dialog {
-        width: 70;
+        width: 60;
         height: auto;
         border: round $error;
         padding: 1 2;
@@ -94,7 +94,7 @@ class NewSessionModal(ModalScreen[NewSessionResult | None]):
         align: center middle;
     }
     #dialog {
-        width: 70;
+        width: 60;
         height: auto;
         border: round $accent;
         padding: 1 2;

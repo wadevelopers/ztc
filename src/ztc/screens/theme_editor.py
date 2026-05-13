@@ -57,7 +57,7 @@ class ThemePickerScreen(Screen[None]):
         height: 1fr;
     }
     OptionList {
-        width: 40;
+        width: 30;
         border-right: solid $panel;
     }
     #info {

@@ -53,7 +53,7 @@ class CustomThemeEditorScreen(Screen[None]):
         height: 1fr;
     }
     OptionList {
-        width: 60;
+        width: 54;
         border-right: solid $panel;
     }
     #detail {
