@@ -18,19 +18,12 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _NO_SESSIONS = re.compile(r"no active.*sessions", re.IGNORECASE)
 _EXITED_SUFFIX = re.compile(r"\(EXITED\b", re.IGNORECASE)
 
-# Variantes conocidas con las que un cliente identifica su sesion en
-# argv. Solo se usan como fallback cuando la deteccion por socket no
-# pudo asignar una sesion al proceso (ej. proc fs no accesible).
-_CLIENT_SESSION_PATTERNS = (
-    re.compile(r"(?:^|\s)attach\s+(?P<name>\S+)"),
-    re.compile(r"(?:^|\s)(?:-s|--session)\s+(?P<name>\S+)"),
-    re.compile(r"(?:^|\s)--session=(?P<name>\S+)"),
-)
-
-# Path del socket de Zellij dentro de un dir de sesion. Lo usamos para
-# parsear `ss -xa` y matchear inodos con nombres de sesion.
+# Path del socket de Zellij dentro de un dir de sesion. El nombre de
+# sesion es el ultimo componente del path; puede tener espacios pero no
+# `/`. Se ancla a fin de string porque se aplica al path ya aislado de
+# la linea de `ss -xa` (ver _parse_ss_unix_lines).
 _ZELLIJ_SOCKET_PATH_RE = re.compile(
-    r"/zellij/contract_version_\d+/(?P<name>[^/\s]+)"
+    r"/zellij/contract_version_\d+/(?P<name>[^/]+)$"
 )
 _PROC_SOCKET_RE = re.compile(r"^socket:\[(\d+)\]$")
 
@@ -99,12 +92,13 @@ def get_attached_session_clients(
 ) -> dict[str, int] | None:
     """Devuelve {nombre_sesion: cantidad_clientes_conectados}.
 
-    Estrategia (más robusto que solo argv): cada cliente Zellij abre
-    un socket UNIX hacia el server de su sesion. Mapeamos esos sockets
-    a nombres de sesion via `ss -xa` y buscamos en `/proc/PID/fd` de
-    cada proceso `zellij` cliente cual coincide. Si no se puede (no
-    hay `ss`, no hay /proc, etc.) caemos a parseo de argv como
-    fallback.
+    Para cada proceso `zellij` cliente (no `--server`) se determina su
+    sesion: primero siguiendo el socket UNIX hacia el server (`ss -xa`
+    + `/proc/PID/fd`), que es autoritativo y cubre tambien `zellij`
+    pelado; si eso no resuelve, se mira el argv del cliente
+    (`attach NAME`, `-s NAME`, ...). El argv se lee de
+    `/proc/PID/cmdline` (separado por NUL) para preservar nombres de
+    sesion con espacios.
 
     Devuelve `None` si `pgrep` no esta disponible o falla; el caller
     interpreta `None` como "no se pudo determinar" y deja las sesiones
@@ -113,7 +107,7 @@ def get_attached_session_clients(
         return None
     try:
         proc = subprocess.run(
-            ["pgrep", "-af", "zellij"],
+            ["pgrep", "-x", "zellij"],
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -125,49 +119,49 @@ def get_attached_session_clients(
     inode_to_session = _build_inode_session_map(timeout=timeout)
 
     counts: dict[str, int] = {}
-    for line in (proc.stdout or "").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        # Formato: "<pid> <cmdline...>". Skip el PID.
-        parts = line.split(maxsplit=1)
-        if len(parts) < 2:
-            continue
+    for raw_pid in (proc.stdout or "").split():
         try:
-            pid = int(parts[0])
+            pid = int(raw_pid)
         except ValueError:
             continue
-        cmdline = parts[1]
-        # Solo procesos cuyo binario es zellij (no "zellijthing"). Y
-        # excluimos servers (--server). Solo clientes.
-        if "--server" in cmdline:
+        argv = _proc_cmdline(pid)
+        if not argv:
             continue
-        first = cmdline.split(maxsplit=1)[0] if cmdline else ""
-        bin_name = first.rsplit("/", 1)[-1]
-        if bin_name != "zellij":
+        # Solo clientes: excluimos servers y binarios que no sean `zellij`.
+        if "--server" in argv:
+            continue
+        if argv[0].rsplit("/", 1)[-1] != "zellij":
             continue
 
-        # Primero por socket (mas robusto: detecta tambien `zellij`
-        # ejecutado solo, sin args explicitos).
         name = _session_via_sockets(pid, inode_to_session)
         if name is None:
-            # Fallback: intentar extraer del argv si tiene `attach NAME`,
-            # `-s NAME`, etc.
-            name = _extract_client_session_name(cmdline)
+            name = _session_name_from_argv(argv)
         if name:
             counts[name] = counts.get(name, 0) + 1
 
     return counts
 
 
-def _build_inode_session_map(*, timeout: float = 2.0) -> dict[int, str]:
-    """Parsea `ss -xa` y devuelve {client_inode: session_name}.
+def _proc_cmdline(pid: int) -> list[str] | None:
+    """Lee `/proc/<pid>/cmdline` (argumentos separados por NUL) y los
+    devuelve como lista. `None` si no se puede leer (proceso terminado,
+    sin permisos) o si esta vacio (proceso kernel)."""
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return None
+    parts = raw.split(b"\0")
+    # /proc/<pid>/cmdline suele terminar en NUL -> ultimo elemento vacio.
+    while parts and parts[-1] == b"":
+        parts.pop()
+    if not parts:
+        return None
+    return [p.decode("utf-8", "surrogateescape") for p in parts]
 
-    Para cada conexion ESTAB cuyo lado server tiene path
-    `/run/user/UID/zellij/contract_version_X/<sesion>`, registramos el
-    peer-inode (lado cliente) -> nombre de sesion. Despues, leyendo
-    `/proc/PID/fd` de un cliente zellij, si alguno de sus sockets es
-    una key de este map, sabemos a que sesion esta attached."""
+
+def _build_inode_session_map(*, timeout: float = 2.0) -> dict[int, str]:
+    """Corre `ss -xa` y devuelve {client_peer_inode: session_name} (ver
+    `_parse_ss_unix_lines`). Vacio si `ss` no esta o falla."""
     if shutil.which("ss") is None:
         return {}
     try:
@@ -180,16 +174,30 @@ def _build_inode_session_map(*, timeout: float = 2.0) -> dict[int, str]:
         )
     except subprocess.TimeoutExpired:
         return {}
+    return _parse_ss_unix_lines(proc.stdout or "")
 
+
+def _parse_ss_unix_lines(text: str) -> dict[int, str]:
+    """Mapea {client_peer_inode: session_name} a partir de la salida de
+    `ss -xa`.
+
+    Para una conexion cliente<->server de Zellij, el socket aceptado por
+    el server aparece como una linea ESTAB cuyo "Local Address:Port" es
+    `<path> <inode>` (el path puede tener espacios) y cuyo "Peer
+    Address:Port" es `* <client_inode>` (el cliente es anonimo). Por eso
+    el path local es `fields[4:-3]` unido por espacio, el client inode es
+    `fields[-1]`, y `fields[-2]` debe ser `*`. Despues, leyendo
+    `/proc/PID/fd` de un cliente, si alguno de sus sockets matchea una
+    key de este map, sabemos a que sesion esta attached."""
     out: dict[int, str] = {}
-    for line in (proc.stdout or "").splitlines():
+    for line in text.splitlines():
         if "ESTAB" not in line or "/zellij/" not in line:
             continue
         fields = line.split()
-        # ss -xa output: Netid State Recv-Q Send-Q Local-Addr Local-Inode Peer-Addr Peer-Inode
-        if len(fields) < 8:
+        if len(fields) < 8 or fields[-2] != "*":
             continue
-        m = _ZELLIJ_SOCKET_PATH_RE.search(fields[4])
+        local_addr = " ".join(fields[4:-3])
+        m = _ZELLIJ_SOCKET_PATH_RE.search(local_addr)
         if not m:
             continue
         try:
@@ -229,14 +237,31 @@ def _session_via_sockets(
     return None
 
 
-def _extract_client_session_name(cmdline: str) -> str | None:
-    """Intenta extraer el nombre de sesion de un argv de cliente.
-    Retorna None si ninguna variante conocida matchea (ej. `zellij`
-    ejecutado solo sin args)."""
-    for pat in _CLIENT_SESSION_PATTERNS:
-        m = pat.search(cmdline)
-        if m:
-            return m.group("name")
+def _session_name_from_argv(argv: list[str]) -> str | None:
+    """Extrae el nombre de sesion del argv de un cliente `zellij`.
+
+    Reconoce las formas con que zsm y los usuarios lo lanzan:
+    - opciones globales `-s NAME` / `-sNAME` / `--session NAME` /
+      `--session=NAME`
+    - subcommand `attach NAME` / `a NAME` (NAME = primer arg que no
+      empieza con `-` despues del subcommand)
+
+    `None` si ninguna aplica (`zellij` pelado, `zellij options ...`,
+    `zellij attach --index N`, ...) — el caller cae a la deteccion por
+    socket, que es autoritativa."""
+    args = argv[1:]
+    for i, tok in enumerate(args):
+        if tok in ("-s", "--session"):
+            return args[i + 1] if i + 1 < len(args) else None
+        if tok.startswith("--session="):
+            return tok[len("--session=") :] or None
+        if tok.startswith("-s") and not tok.startswith("--") and len(tok) > 2:
+            return tok[2:]
+        if tok in ("attach", "a"):
+            for sub in args[i + 1 :]:
+                if not sub.startswith("-"):
+                    return sub
+            return None
     return None
 
 
