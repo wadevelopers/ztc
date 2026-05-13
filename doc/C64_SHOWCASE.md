@@ -62,7 +62,7 @@ Both columns end up with a terminal window of roughly the same size:
 In **Terminal colors**, set the terminal background to:
 
 ```text
-#4040e0
+#9190ef
 ```
 
 This becomes the outer frame color. On Kitty, ZTC may offer to add
@@ -87,7 +87,20 @@ Paste:
 
 _c64_awk2() { "$@" 2>/dev/null | awk '{print $2; exit}'; }
 _c64_ver() { "$@" 2>/dev/null | grep -oE '[0-9]+(\.[0-9]+){0,2}' | head -1; }
-_c64_center() { printf '%*s%s\n' "$(( ($1 - ${#2}) / 2 ))" '' "$2"; }
+
+_c64_cols() {
+    local size cols
+    size=$(stty size </dev/tty 2>/dev/null) || size=
+    cols=${size#* }
+    [[ $cols =~ ^[1-9][0-9]*$ ]] && { printf '%s' "$cols"; return; }
+    [[ ${COLUMNS:-} =~ ^[1-9][0-9]*$ ]] && { printf '%s' "$COLUMNS"; return; }
+    printf '80'
+}
+
+_c64_center() {
+    local pad=$(( ($1 - ${#2}) / 2 ))
+    printf '%*s%s\n' "$(( pad < 0 ? 0 : pad ))" '' "$2"
+}
 
 _c64_terminal() {
     if [[ $TERM_PROGRAM == ghostty || $TERM == xterm-ghostty ]]; then
@@ -110,9 +123,9 @@ _c64_terminal() {
 }
 
 welcome_c64() {
-    local cols=80 term_name=${TERM:-UNKNOWN} term_ver= line1 line2
+    local cols term_name=${TERM:-UNKNOWN} term_ver= line1 line2
     local total_kb avail_kb avail_bytes bash_ver
-    cols=$(tput cols 2>/dev/null || printf '80')
+    cols=$(_c64_cols)
 
     _c64_terminal
     read -r total_kb avail_kb < <(awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} END{print t, a}' /proc/meminfo)
@@ -137,10 +150,6 @@ fi
 
 ```
 
-This file lives under `~/.config/ztc`, not under `~/.bashrc.d`, so it
-is not loaded by normal interactive shells that source every script in
-`~/.bashrc.d`.
-
 ## Zellij layouts
 
 Create or edit a Zellij layout in `ztc`, then configure the main pane:
@@ -149,8 +158,8 @@ Create or edit a Zellij layout in `ztc`, then configure the main pane:
 |---|---|
 | `command` | `bash` |
 | `args` | `-lc 'bash "$HOME/.config/ztc/welcome-c64.sh"; export PS1=""; exec bash --noprofile --norc -i'` |
-| `default_bg` | `#0000aa` |
-| `default_fg` | `#8080ff` |
+| `default_bg` | `#2c2a80` |
+| `default_fg` | `#9190ef` |
 | `borderless` | `true` |
 
 Use `bash` plus `args` instead of putting the script path directly in
@@ -169,8 +178,8 @@ The equivalent KDL pane looks like:
 ```kdl
 pane command="bash" borderless=true {
     args "-lc" "bash \"$HOME/.config/ztc/welcome-c64.sh\"; export PS1=\"\"; exec bash --noprofile --norc -i"
-    default_bg "#0000aa"
-    default_fg "#8080ff"
+    default_bg "#2c2a80"
+    default_fg "#9190ef"
 }
 ```
 
