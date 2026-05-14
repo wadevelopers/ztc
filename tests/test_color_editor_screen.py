@@ -208,3 +208,82 @@ async def test_action_load_nonexistent_file_shows_error(tmp_path: Path) -> None:
         assert any("Does not exist" in msg for msg, _ in errors)
         # set_active_profile NO se llamo.
         assert app.set_active_profile_calls == []
+
+
+async def test_action_load_rejects_manifest_path_as_profile(tmp_path: Path) -> None:
+    """Guard contra auto-referencia: cargar el manifest mismo como perfil
+    crearia `include kitty.conf` dentro de `kitty.conf` → recursion al
+    reload. Debe rechazar con error toast claro."""
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    manifest.write_text(
+        "[ztc]\nmanaged_manifest = true\n\n"
+        '[general]\nimport = ["c64.toml"]\n',
+        encoding="utf-8",
+    )
+    c64 = tmp_path / "c64.toml"
+    c64.write_text(
+        '[colors.primary]\nbackground = "#9190ef"\n', encoding="utf-8"
+    )
+    zcfg = tmp_path / "config.kdl"
+    zcfg.write_text("// empty\n", encoding="utf-8")
+    screen = ColorEditorScreen(
+        backend=backend, backend_path=c64, zellij_config_path=zcfg
+    )
+    app = _Harness(screen, manifest_path=manifest)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.action_load()
+        await pilot.pause()
+        from textual.widgets import Input
+
+        inp = app.screen.query_one("#prompt-input", Input)
+        inp.value = "alacritty.toml"  # mismo nombre que el manifest
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        errors = [n for n in app.notifications if n[1] == "error"]
+        assert any("manifest" in msg.lower() for msg, _ in errors)
+        # No se llamo set_active_profile.
+        assert app.set_active_profile_calls == []
+        # State NO cambio.
+        assert screen.backend_path == c64
+
+
+async def test_action_save_rejects_manifest_path_as_new_name(tmp_path: Path) -> None:
+    """Guard contra Save-as al manifest: sobrescribiria managed directives
+    + crearia auto-referencia. Save-in-place sobre el activo NO entra por
+    este path (se hace el branch antes)."""
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    manifest.write_text(
+        "[ztc]\nmanaged_manifest = true\n\n"
+        '[general]\nimport = ["c64.toml"]\n',
+        encoding="utf-8",
+    )
+    c64 = tmp_path / "c64.toml"
+    c64.write_text(
+        '[colors.primary]\nbackground = "#9190ef"\n', encoding="utf-8"
+    )
+    zcfg = tmp_path / "config.kdl"
+    zcfg.write_text("// empty\n", encoding="utf-8")
+    screen = ColorEditorScreen(
+        backend=backend, backend_path=c64, zellij_config_path=zcfg
+    )
+    app = _Harness(screen, manifest_path=manifest)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.dirty = True
+        screen.action_save()
+        await pilot.pause()
+        from textual.widgets import Input
+
+        inp = app.screen.query_one("#prompt-input", Input)
+        inp.value = "alacritty.toml"  # nombre del manifest
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        errors = [n for n in app.notifications if n[1] == "error"]
+        assert any("manifest" in msg.lower() for msg, _ in errors)
+        # set_active_profile NO se llamo (no hubo switch).
+        assert app.set_active_profile_calls == []

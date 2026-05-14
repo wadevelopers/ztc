@@ -341,6 +341,16 @@ class TerminalSettingsScreen(Screen[None]):
                     f"Does not exist: {path}", severity="error", timeout=8
                 )
                 return
+            if path == manifest_path:
+                # `include kitty.conf` dentro de `kitty.conf` = recursion
+                # infinita al reload. El manifest no es perfil cargable.
+                self.app.notify(
+                    f"Cannot load the manifest file ({manifest_path.name}) "
+                    "as a profile; choose another.",
+                    severity="error",
+                    timeout=8,
+                )
+                return
             if not self.backend.is_managed_manifest(manifest_path):
                 self._convert_then(
                     after_convert=lambda: self._do_load(path),
@@ -402,12 +412,17 @@ class TerminalSettingsScreen(Screen[None]):
             if not name:
                 return
             new_path = resolve_profile_path(name, manifest_path.parent)
-            error = validate_profile_path(self.backend, new_path)
-            if error:
-                self.app.notify(error, severity="error", timeout=8)
-                return
+            # Save-in-place sobre el activo: no aplica validacion. Caso
+            # standalone (backend_path == manifest_path) cae aca y es OK
+            # — es save normal sobre el archivo default sin convertir.
             if new_path == self.backend_path:
                 self._save_in_place(manifest_path)
+                return
+            error = validate_profile_path(
+                self.backend, new_path, manifest_path=manifest_path
+            )
+            if error:
+                self.app.notify(error, severity="error", timeout=8)
                 return
             if new_path.exists():
                 def after_confirm(confirmed: bool | None) -> None:
@@ -499,7 +514,10 @@ class TerminalSettingsScreen(Screen[None]):
                 return
             profile_path = resolve_profile_path(name, manifest_path.parent)
             error = validate_profile_path(
-                self.backend, profile_path, forbidden_path=forbidden_path
+                self.backend,
+                profile_path,
+                manifest_path=manifest_path,
+                forbidden_path=forbidden_path,
             )
             if error:
                 self.app.notify(error, severity="error", timeout=8)
