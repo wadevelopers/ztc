@@ -13,6 +13,8 @@ import tomlkit
 from tomlkit.toml_document import TOMLDocument
 
 from ztc.services import toml_io
+from ztc.services.atomic import write_atomic
+from ztc.services.backups import make_backup
 from ztc.services.colors import CanonicalSlot
 from ztc.services.fonts import resolve_font_faces
 from ztc.services.terminals import default_import_theme_file
@@ -125,6 +127,106 @@ class AlacrittyBackend:
 
     def import_theme_file(self, doc: TOMLDocument, source_path: Path) -> int:
         return default_import_theme_file(self, doc, source_path)
+
+    # ---------- perfiles intercambiables (manifest + profile switching) ----------
+
+    def is_managed_manifest(self, path: Path) -> bool:
+        if not path.exists():
+            return False
+        doc = self.load(path)
+        ztc_section = doc.get("ztc")
+        if not isinstance(ztc_section, dict):
+            return False
+        return bool(ztc_section.get("managed_manifest", False))
+
+    def read_active_profile(self, manifest_path: Path) -> Path | None:
+        if not self.is_managed_manifest(manifest_path):
+            return None
+        doc = self.load(manifest_path)
+        general = doc.get("general")
+        if not isinstance(general, dict):
+            return None
+        imports = general.get("import")
+        if not imports:
+            return None
+        # tomlkit array se comporta como list pero no es list. Iteramos
+        # para tolerar ambos tipos.
+        try:
+            raw = imports[0]
+        except (IndexError, KeyError, TypeError):
+            return None
+        if not isinstance(raw, str):
+            return None
+        raw_path = Path(raw).expanduser()
+        if raw_path.is_absolute():
+            return raw_path
+        return manifest_path.parent / raw_path
+
+    def write_active_profile(
+        self, manifest_path: Path, profile_path: Path
+    ) -> None:
+        doc = self.load(manifest_path)
+        if "ztc" not in doc:
+            doc["ztc"] = tomlkit.table()
+        doc["ztc"]["managed_manifest"] = True  # type: ignore[index]
+        if "general" not in doc:
+            doc["general"] = tomlkit.table()
+        # Path relativo si el perfil esta junto al manifest; absoluto si no.
+        import_value = (
+            profile_path.name
+            if profile_path.parent == manifest_path.parent
+            else str(profile_path)
+        )
+        doc["general"]["import"] = [import_value]  # type: ignore[index]
+        toml_io.dump_toml(doc, manifest_path)
+
+    def convert_to_manifest(
+        self, path: Path, profile_path: Path
+    ) -> Path | None:
+        """Mueve el contenido completo de `path` al `profile_path` y deja
+        `path` como manifest minimal. Preserva el formato exacto del
+        archivo original copiando el texto literal (no via tomlkit
+        round-trip)."""
+        if not path.exists():
+            raise FileNotFoundError(path)
+        backup = make_backup(path)
+        original_text = path.read_text(encoding="utf-8")
+        if profile_path.exists():
+            # Respaldo defensivo: el caller deberia haber validado, pero
+            # si igual existe, no perdemos el contenido.
+            make_backup(profile_path)
+        write_atomic(profile_path, original_text)
+        manifest_doc = tomlkit.document()
+        ztc_table = tomlkit.table()
+        ztc_table["managed_manifest"] = True
+        manifest_doc["ztc"] = ztc_table
+        general_table = tomlkit.table()
+        import_value = (
+            profile_path.name
+            if profile_path.parent == path.parent
+            else str(profile_path)
+        )
+        general_table["import"] = [import_value]
+        manifest_doc["general"] = general_table
+        toml_io.dump_toml(manifest_doc, path, backup=False)
+        return backup
+
+    def reload_after_profile_switch(
+        self, manifest_path: Path, new_profile_path: Path
+    ) -> bool:
+        # Live-reload nativo de Alacritty cubre el switch: el watchdog
+        # detecta el cambio en el manifest, sigue el import y aplica.
+        return True
+
+    def reload_after_profile_save(
+        self,
+        profile_doc: TOMLDocument,
+        profile_path: Path,
+        manifest_path: Path,
+    ) -> bool:
+        # Live-reload nativo del manifest dispara al detectar cambio en
+        # el archivo importado.
+        return True
 
     # ---------- settings (window, font, cursor) ----------
 

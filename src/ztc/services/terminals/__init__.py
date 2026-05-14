@@ -111,6 +111,72 @@ class TerminalBackend(Protocol):
         devuelve False. None si el backend no requiere hint manual."""
         ...
 
+    # ---------- perfiles intercambiables (manifest + profile switching) ----------
+
+    def is_managed_manifest(self, path: Path) -> bool:
+        """True si `path` es un manifest gestionado por ztc (tiene el
+        marcador propio). Si False, el archivo se trata como config
+        standalone — no se hace profile switching sobre el."""
+        ...
+
+    def read_active_profile(self, manifest_path: Path) -> Path | None:
+        """Si `manifest_path` es un manifest gestionado por ztc, devuelve
+        el path absoluto del perfil activo (primer `import` en Alacritty,
+        primer `include` en Kitty). Si no es manifest o no tiene perfil
+        referenciado, devuelve None."""
+        ...
+
+    def write_active_profile(
+        self, manifest_path: Path, profile_path: Path
+    ) -> None:
+        """Reescribe el manifest para que apunte a `profile_path`.
+        Preserva el marcador y el resto del archivo (en Kitty: prefs
+        runtime `# ztc:{...}` y managed directives)."""
+        ...
+
+    def convert_to_manifest(
+        self, path: Path, profile_path: Path
+    ) -> Path | None:
+        """Convierte el archivo `path` en un manifest gestionado por
+        ztc apuntando al nuevo `profile_path`. La semantica es
+        backend-specific:
+
+        - Alacritty: mueve el contenido completo a `profile_path`, deja
+          `path` como manifest minimal (marcador + import).
+        - Kitty: hace split — el manifest CONSERVA las managed
+          directives (`allow_remote_control`, `listen_on`, etc.) y la
+          linea `# ztc:{...}` con prefs runtime; el perfil RECIBE
+          colors, settings editables y el resto del contenido del
+          usuario.
+
+        Devuelve el path del backup del archivo original.
+        """
+        ...
+
+    def reload_after_profile_switch(
+        self, manifest_path: Path, new_profile_path: Path
+    ) -> bool:
+        """Recarga la terminal viva tras un switch de perfil
+        (`write_active_profile` recien escribio el manifest). Alacritty
+        retorna True directo (live-reload nativo del manifest); Kitty
+        invoca `kitty @ load-config` + `set-background-opacity`
+        idempotente."""
+        ...
+
+    def reload_after_profile_save(
+        self,
+        profile_doc: BackendDoc,
+        profile_path: Path,
+        manifest_path: Path,
+    ) -> bool:
+        """Recarga tras un save al perfil activo (sin cambio de perfil).
+        Para Kitty: igual que `reload_after_save` pero leyendo prefs
+        runtime (`allow_remote_control`, `listen_on`,
+        `remote_control_pending_instance`) del manifest, no del
+        `profile_doc`. Para Alacritty: True directo. Usado por el helper
+        `save_profile_with_reload`."""
+        ...
+
 
 def default_import_theme_file(
     backend: TerminalBackend, doc: BackendDoc, source_path: Path

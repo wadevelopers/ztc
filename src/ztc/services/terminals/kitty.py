@@ -408,6 +408,40 @@ class KittyBackend:
     def manual_reload_hint(self) -> str:
         return "Restart Kitty, or press Ctrl+Shift+F5 for settings that support live reload."
 
+    # ---------- perfiles intercambiables (manifest + profile switching) ----------
+    # Stubs: la implementacion completa va en Fase B del plan
+    # `doc/PLAN_TERMINAL_PROFILES.md`. Quedan declarados aca para que
+    # `KittyBackend` satisfaga el Protocol `TerminalBackend` desde Fase A.
+
+    def is_managed_manifest(self, path: Path) -> bool:
+        raise NotImplementedError("Kitty profile switching: implementado en Fase B")
+
+    def read_active_profile(self, manifest_path: Path) -> Path | None:
+        raise NotImplementedError("Kitty profile switching: implementado en Fase B")
+
+    def write_active_profile(
+        self, manifest_path: Path, profile_path: Path
+    ) -> None:
+        raise NotImplementedError("Kitty profile switching: implementado en Fase B")
+
+    def convert_to_manifest(
+        self, path: Path, profile_path: Path
+    ) -> Path | None:
+        raise NotImplementedError("Kitty profile switching: implementado en Fase B")
+
+    def reload_after_profile_switch(
+        self, manifest_path: Path, new_profile_path: Path
+    ) -> bool:
+        raise NotImplementedError("Kitty profile switching: implementado en Fase B")
+
+    def reload_after_profile_save(
+        self,
+        profile_doc: KittyDoc,
+        profile_path: Path,
+        manifest_path: Path,
+    ) -> bool:
+        raise NotImplementedError("Kitty profile switching: implementado en Fase B")
+
     def _effective_entries(self, doc: KittyDoc) -> list[_Entry]:
         return _linearize(doc.path, doc.lines, in_main=True)
 
