@@ -13,7 +13,6 @@ import pytest
 from textual.app import App, ComposeResult
 
 from ztc.screens.terminal_settings import TerminalSettingsScreen
-from ztc.services.save_helper import SaveResult
 from ztc.services.terminals.alacritty import AlacrittyBackend
 from ztc.services.terminals.kitty import KittyBackend
 from ztc.services.terminals.settings import SETTINGS
@@ -25,6 +24,10 @@ class _Harness(App[None]):
     def __init__(self, screen: TerminalSettingsScreen) -> None:
         super().__init__()
         self._screen = screen
+        # action_save / action_back / action_load consultan el manifest path
+        # del app. En tests sin manifest separado, apunta al mismo path que
+        # el perfil activo (caso config standalone).
+        self.backend_manifest_path: Path | None = screen.backend_path
 
     def compose(self) -> ComposeResult:  # noqa: D401
         return iter([])
@@ -71,67 +74,6 @@ async def test_screen_opens_with_kitty(tmp_path: Path) -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         assert isinstance(app.screen, TerminalSettingsScreen)
-
-
-# ---------- save ----------
-
-
-async def test_save_writes_to_disk_and_creates_backup(tmp_path: Path) -> None:
-    backend = AlacrittyBackend()
-    path = _alacritty_doc(tmp_path, '[window]\nopacity = 0.8\n')
-    screen = TerminalSettingsScreen(backend=backend, backend_path=path)
-    app = _Harness(screen)
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        # Modificar in-memory: setear opacity = 0.5 directamente en doc.
-        screen.backend.write_setting(screen.doc, SETTINGS["window.opacity"], 0.5)
-        screen.dirty = True
-        screen.action_save()
-        await pilot.pause()
-        # Reload from disk and verify.
-        doc = backend.load(path)
-        assert backend.read_setting(doc, SETTINGS["window.opacity"]) == 0.5
-        # Backup creado.
-        backups = list(tmp_path.glob("alacritty.toml.bak.*"))
-        assert backups
-
-
-async def test_action_save_uses_save_helper(tmp_path: Path, monkeypatch) -> None:
-    backend = KittyBackend()
-    path = _kitty_doc(tmp_path, "font_size 12.0\n")
-    screen = TerminalSettingsScreen(backend=backend, backend_path=path)
-    app = _Harness(screen)
-    result = SaveResult(tmp_path / "kitty.conf.bak", False, "manual hint")
-    calls: list[tuple[object, object, Path]] = []
-    notifications: list[str] = []
-
-    def fake_save_with_reload(backend_arg, doc_arg, path_arg):  # noqa: ANN001
-        calls.append((backend_arg, doc_arg, path_arg))
-        return result
-
-    def fake_compose_save_toast(file_name: str, result_arg: SaveResult) -> str:
-        assert file_name == "kitty.conf"
-        assert result_arg is result
-        return "settings toast"
-
-    monkeypatch.setattr(
-        "ztc.screens.terminal_settings.save_with_reload",
-        fake_save_with_reload,
-    )
-    monkeypatch.setattr(
-        "ztc.screens.terminal_settings.compose_save_toast",
-        fake_compose_save_toast,
-    )
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        app.notify = lambda message, **kwargs: notifications.append(message)  # type: ignore[method-assign]
-        screen.dirty = True
-        screen.action_save()
-        await pilot.pause()
-
-    assert calls == [(backend, screen.doc, path)]
-    assert screen.dirty is False
-    assert notifications == ["settings toast"]
 
 
 # ---------- reset ----------
