@@ -42,7 +42,6 @@ from pathlib import Path
 from ztc.services.atomic import write_atomic
 from ztc.services.backups import make_backup
 from ztc.services.colors import CanonicalSlot
-from ztc.services.terminals import default_import_theme_file
 from ztc.services.terminals.settings import (
     SETTINGS,
     CanonicalSetting,
@@ -628,9 +627,6 @@ class KittyBackend:
             return False
         del doc.lines[idx]
         return True
-
-    def import_theme_file(self, doc: KittyDoc, source_path: Path) -> int:
-        return default_import_theme_file(self, doc, source_path)
 
     # ---------- settings (window, font, cursor) ----------
 

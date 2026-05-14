@@ -97,37 +97,6 @@ def test_write_slot_preserves_other_keys(tmp_path: Path) -> None:
     assert doc["window"]["opacity"] == 0.97  # type: ignore[index]
 
 
-def test_read_all_slots_only_returns_defined(tmp_path: Path) -> None:
-    src = tmp_path / "a.toml"
-    shutil.copy2(FIX / "alacritty_min.toml", src)
-    backend = AlacrittyBackend()
-    doc = backend.load(src)
-    slots = backend.read_all_slots(doc)
-    assert ("primary", "background") in slots
-    assert ("normal", "red") in slots
-    assert ("normal", "blue") not in slots  # ausente en el fixture min
-
-
-def test_import_theme_overwrites_defined_slots(tmp_path: Path) -> None:
-    src = tmp_path / "a.toml"
-    shutil.copy2(FIX / "alacritty_min.toml", src)
-    backend = AlacrittyBackend()
-    doc = backend.load(src)
-    count = backend.import_theme_file(doc, FIX / "dracula.toml")
-    # Dracula define 2 (primary) + 8 (normal) + 2 (cursor) = 12 slots conocidos.
-    assert count == 12
-    assert backend.read_slot(doc, ("primary", "background")) == "#282a36"
-    assert backend.read_slot(doc, ("normal", "red")) == "#ff5555"
-    assert backend.read_slot(doc, ("cursor", "cursor")) == "#f8f8f2"
-
-
-def test_import_theme_missing_file(tmp_path: Path) -> None:
-    backend = AlacrittyBackend()
-    doc = tomlkit.document()
-    with pytest.raises(FileNotFoundError):
-        backend.import_theme_file(doc, tmp_path / "nope.toml")
-
-
 def test_contrast_ratio_known_values() -> None:
     # blanco vs negro = 21
     assert round(colors.contrast_ratio("#ffffff", "#000000") or 0, 1) == 21.0

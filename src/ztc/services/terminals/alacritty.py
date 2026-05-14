@@ -17,7 +17,6 @@ from ztc.services.atomic import write_atomic
 from ztc.services.backups import make_backup
 from ztc.services.colors import CanonicalSlot
 from ztc.services.fonts import resolve_font_faces
-from ztc.services.terminals import default_import_theme_file
 from ztc.services.terminals.settings import (
     SETTINGS,
     CanonicalSetting,
@@ -114,19 +113,6 @@ class AlacrittyBackend:
         if len(colors) == 0:
             del doc["colors"]
         return True
-
-    # ---------- capabilities especificas de Alacritty ----------
-
-    def read_all_slots(self, doc: TOMLDocument) -> dict[CanonicalSlot, str]:
-        out: dict[CanonicalSlot, str] = {}
-        for slot in KNOWN_SLOTS:
-            value = self.read_slot(doc, slot)
-            if value is not None:
-                out[slot] = value
-        return out
-
-    def import_theme_file(self, doc: TOMLDocument, source_path: Path) -> int:
-        return default_import_theme_file(self, doc, source_path)
 
     # ---------- perfiles intercambiables (manifest + profile switching) ----------
 
