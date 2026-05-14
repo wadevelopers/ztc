@@ -13,21 +13,6 @@ class SaveResult:
     manual_reload_hint: str | None = None
 
 
-def save_with_reload(
-    backend: TerminalBackend,
-    doc: BackendDoc,
-    path: Path,
-) -> SaveResult:
-    backup_path = backend.save(doc, path)
-    reload_ok = backend.reload_after_save(doc, path)
-    hint = backend.manual_reload_hint() if not reload_ok else None
-    return SaveResult(
-        backup_path=backup_path,
-        reload_ok=reload_ok,
-        manual_reload_hint=hint,
-    )
-
-
 def save_profile_with_reload(
     backend: TerminalBackend,
     profile_doc: BackendDoc,

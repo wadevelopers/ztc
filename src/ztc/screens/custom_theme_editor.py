@@ -323,8 +323,12 @@ class CustomThemeEditorScreen(Screen[None]):
         if active == self.theme.name:
             backend = getattr(self.app, "backend", None)
             backend_path = getattr(self.app, "backend_path", None)
-            if backend is not None and backend_path is not None:
-                manifest_path = getattr(self.app, "backend_manifest_path", None)
+            manifest_path = getattr(self.app, "backend_manifest_path", None)
+            if (
+                backend is not None
+                and backend_path is not None
+                and manifest_path is not None
+            ):
                 try:
                     result = theme_sync.sync_terminal_with_zellij_theme(
                         zellij_theme_name=self.theme.name,

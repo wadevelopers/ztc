@@ -4,24 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ztc.services.profile_io import (
-    expected_extension,
-    resolve_profile_path,
-    validate_profile_path,
-)
+from ztc.services.profile_io import resolve_profile_path, validate_profile_path
 from ztc.services.terminals.alacritty import AlacrittyBackend
-from ztc.services.terminals.kitty import KittyBackend
-
-# ---------- expected_extension ----------
-
-
-def test_expected_extension_alacritty() -> None:
-    assert expected_extension(AlacrittyBackend()) == ".toml"
-
-
-def test_expected_extension_kitty() -> None:
-    assert expected_extension(KittyBackend()) == ".conf"
-
 
 # ---------- resolve_profile_path ----------
 

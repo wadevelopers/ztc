@@ -13,11 +13,6 @@ from pathlib import Path
 from ztc.services.terminals import TerminalBackend
 
 
-def expected_extension(backend: TerminalBackend) -> str:
-    """Extension esperada para perfiles del backend (`.toml`/`.conf`)."""
-    return ".toml" if backend.kind == "alacritty" else ".conf"
-
-
 def resolve_profile_path(name: str, base_dir: Path) -> Path:
     """Expande `~` y resuelve nombres relativos contra `base_dir`."""
     raw = Path(name).expanduser()
@@ -42,7 +37,7 @@ def validate_profile_path(
     ese caso (es la operacion 'unmanage': volver a standalone) en lugar
     de rechazarlo.
     """
-    expected = expected_extension(backend)
+    expected = ".toml" if backend.kind == "alacritty" else ".conf"
     if path.suffix.lower() != expected:
         return f"Filename must end with {expected}"
     if not path.parent.exists():
