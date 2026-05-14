@@ -971,9 +971,10 @@ def test_write_active_profile_replaces_include_preserves_marker(
     assert "listen_on unix:@ztc-{kitty_pid}" in text
 
 
-def test_convert_to_manifest_splits_managed_directives(tmp_path: Path) -> None:
-    """Split correcto: managed directives + `# ztc:{...}` quedan en el
-    manifest; colors/settings/comentarios/includes propios van al perfil."""
+def test_convert_to_manifest_preserves_managed_directives(tmp_path: Path) -> None:
+    """Manifest conserva managed directives + `# ztc:{...}`. Colors,
+    font_size, includes propios, comentarios: se descartan del manifest
+    — quedan solo en el backup. El caller crea active_profile aparte."""
     backend = KittyBackend()
     path = tmp_path / "kitty.conf"
     path.write_text(
@@ -988,34 +989,35 @@ def test_convert_to_manifest_splits_managed_directives(tmp_path: Path) -> None:
         '# ztc:{"remote_control_pending_instance": "pid:1234"}\n',
         encoding="utf-8",
     )
-    profile = tmp_path / "c64.conf"
-    backup = backend.convert_to_manifest(path, profile)
+    active = tmp_path / "tokyo.conf"
+    backup = backend.convert_to_manifest(path, active)
     assert backup is not None
 
     manifest_text = path.read_text(encoding="utf-8")
-    profile_text = profile.read_text(encoding="utf-8")
+    backup_text = backup.read_text(encoding="utf-8")
 
     # Manifest conserva managed directives.
     assert "allow_remote_control yes" in manifest_text
     assert "listen_on unix:@ztc-{kitty_pid}" in manifest_text
     assert "dynamic_background_opacity yes" in manifest_text
     # Marker ztc con managed_manifest + remote_control_pending_instance
-    # preservado del original (no descartado).
+    # preservado del original.
     assert '"managed_manifest": true' in manifest_text
     assert '"remote_control_pending_instance": "pid:1234"' in manifest_text
-    # Manifest apunta al perfil.
-    assert "include c64.conf" in manifest_text
+    # Manifest apunta al active_profile (no creado por convert).
+    assert "include tokyo.conf" in manifest_text
+    assert not active.exists()  # caller es responsable de crearlo
+    # Colors/font_size/includes propios: NO estan en el manifest.
+    assert "background #000000" not in manifest_text
+    assert "font_size 14.0" not in manifest_text
+    assert "include user_theme.conf" not in manifest_text
+    assert "# user comment" not in manifest_text
 
-    # Profile recibe el resto del contenido.
-    assert "background #000000" in profile_text
-    assert "foreground #ffffff" in profile_text
-    assert "font_size 14.0" in profile_text
-    assert "# user comment" in profile_text
-    assert "include user_theme.conf" in profile_text  # user includes van al perfil
-    # Managed directives NO estan en el perfil.
-    assert "allow_remote_control" not in profile_text
-    assert "listen_on" not in profile_text
-    assert "dynamic_background_opacity" not in profile_text
+    # Backup preserva el contenido original VERBATIM.
+    assert "background #000000" in backup_text
+    assert "font_size 14.0" in backup_text
+    assert "include user_theme.conf" in backup_text
+    assert "# user comment" in backup_text
 
 
 def test_convert_to_manifest_raises_if_source_missing(tmp_path: Path) -> None:

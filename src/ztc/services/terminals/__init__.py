@@ -128,19 +128,28 @@ class TerminalBackend(Protocol):
         ...
 
     def convert_to_manifest(
-        self, path: Path, profile_path: Path
+        self, manifest_path: Path, active_profile: Path
     ) -> Path | None:
-        """Convierte el archivo `path` en un manifest gestionado por
-        ztc apuntando al nuevo `profile_path`. La semantica es
-        backend-specific:
+        """Convierte `manifest_path` en un manifest gestionado por ztc
+        que importa `active_profile`.
 
-        - Alacritty: mueve el contenido completo a `profile_path`, deja
-          `path` como manifest minimal (marcador + import).
-        - Kitty: hace split — el manifest CONSERVA las managed
-          directives (`allow_remote_control`, `listen_on`, etc.) y la
-          linea `# ztc:{...}` con prefs runtime; el perfil RECIBE
-          colors, settings editables y el resto del contenido del
-          usuario.
+        El contenido previo de `manifest_path` se preserva en un backup
+        automatico (`make_backup`); NO se duplica en el active_profile.
+        Si el caller necesita preservarlo como perfil cargable, debe
+        leer el backup despues.
+
+        Detalles por backend:
+        - Alacritty: reescribe el archivo como manifest minimal
+          (`[ztc] managed_manifest = true` + `[general] import = [...]`).
+        - Kitty: el manifest conserva las managed directives
+          (`allow_remote_control`, `listen_on`,
+          `dynamic_background_opacity`) y la linea `# ztc:{...}` con sus
+          prefs runtime, agregando `managed_manifest: true`. El resto
+          del contenido (colors, font_size, includes propios) se
+          descarta del manifest — vive solo en el backup.
+
+        El caller es responsable de que `active_profile` exista (Load:
+        ya existe; Save-as: caller lo escribe con `backend.save`).
 
         Devuelve el path del backup del archivo original.
         """

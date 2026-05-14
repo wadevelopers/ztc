@@ -456,21 +456,24 @@ class KittyBackend:
         write_atomic(manifest_path, doc.to_text())
 
     def convert_to_manifest(
-        self, path: Path, profile_path: Path
+        self, manifest_path: Path, active_profile: Path
     ) -> Path | None:
-        if not path.exists():
-            raise FileNotFoundError(path)
-        backup = make_backup(path)
-        doc = self.load(path)
-        if profile_path.exists():
-            make_backup(profile_path)
+        """Backup del archivo original + reescribe como manifest. El
+        manifest preserva las managed directives (`allow_remote_control`,
+        `listen_on`, `dynamic_background_opacity`) y la linea `# ztc:{...}`
+        existente, agregando `managed_manifest: true` al JSON. El resto
+        del contenido (colors, font_size, includes propios) se descarta
+        del manifest — queda solo en el backup. Caller responsable de
+        que `active_profile` exista en disco."""
+        if not manifest_path.exists():
+            raise FileNotFoundError(manifest_path)
+        backup = make_backup(manifest_path)
+        doc = self.load(manifest_path)
 
-        # Separar lineas: managed directives y # ztc: al manifest;
-        # el resto (colors, settings, comentarios, includes propios) al perfil.
+        # Recolectar lo que SI va al manifest: managed directives y JSON
+        # ztc (con `managed_manifest` agregado). El resto se descarta.
         manifest_managed: list[str] = []
-        profile_lines: list[str] = []
         ztc_dict: dict[str, object] = {}
-
         for line in doc.lines:
             if _ZTC_PREF_RE.match(line):
                 parsed = _parse_ztc_line(line)
@@ -480,24 +483,20 @@ class KittyBackend:
             parsed = _parse_line(line)
             if parsed is not None and parsed[0] in _MANAGED_DIRECTIVE_KEYS:
                 manifest_managed.append(line)
-            else:
-                profile_lines.append(line)
 
         ztc_dict["managed_manifest"] = True
         ztc_marker = "# ztc:" + json.dumps(ztc_dict, sort_keys=True)
         import_value = (
-            profile_path.name
-            if profile_path.parent == path.parent
-            else str(profile_path)
+            active_profile.name
+            if active_profile.parent == manifest_path.parent
+            else str(active_profile)
         )
 
         manifest_doc = KittyDoc(
-            path=path,
+            path=manifest_path,
             lines=[ztc_marker, f"include {import_value}"] + manifest_managed,
         )
-        profile_doc = KittyDoc(path=profile_path, lines=profile_lines)
-        write_atomic(profile_path, profile_doc.to_text())
-        write_atomic(path, manifest_doc.to_text())
+        write_atomic(manifest_path, manifest_doc.to_text())
         return backup
 
     def reload_after_profile_switch(

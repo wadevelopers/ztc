@@ -82,25 +82,3 @@ def test_validate_accepts_path_different_from_manifest(tmp_path: Path) -> None:
     )
 
 
-def test_validate_rejects_forbidden_path(tmp_path: Path) -> None:
-    """Caso edge Load+G2: el nombre del primer perfil no puede coincidir
-    con el target del Load."""
-    backend = AlacrittyBackend()
-    target = tmp_path / "c64.toml"
-    error = validate_profile_path(backend, target, forbidden_path=target)
-    assert error is not None
-    assert "collides" in error.lower()
-
-
-def test_validate_manifest_check_takes_precedence_over_forbidden(
-    tmp_path: Path,
-) -> None:
-    """Si path == manifest_path == forbidden_path, prioriza el mensaje de
-    manifest (mas informativo: explica el problema raiz)."""
-    backend = KittyBackend()
-    target = tmp_path / "kitty.conf"
-    error = validate_profile_path(
-        backend, target, manifest_path=target, forbidden_path=target
-    )
-    assert error is not None
-    assert "manifest" in error.lower()

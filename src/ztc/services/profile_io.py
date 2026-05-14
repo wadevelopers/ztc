@@ -29,7 +29,6 @@ def validate_profile_path(
     path: Path,
     *,
     manifest_path: Path | None = None,
-    forbidden_path: Path | None = None,
 ) -> str | None:
     """Devuelve mensaje de error si el path no es valido, o None.
 
@@ -44,9 +43,6 @@ def validate_profile_path(
       sobrescribiria las managed directives. Save-in-place sobre el
       activo NO pasa por esta validacion (el caller hace el branch
       antes).
-    - Si `forbidden_path` se pasa y coincide con `path`, error claro
-      (caso edge del flow Load+G2: el nombre del primer perfil no puede
-      ser igual al perfil que se esta cargando).
 
     NO chequea colision con archivo existente — eso es UI
     (`ConfirmActionModal`), decision del caller.
@@ -61,6 +57,4 @@ def validate_profile_path(
             f"Cannot use the manifest file ({manifest_path.name}) as a "
             "profile name; choose another"
         )
-    if forbidden_path is not None and path == forbidden_path:
-        return "Name collides with the profile you're loading; choose another"
     return None

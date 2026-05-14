@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 
 from textual import on
@@ -12,11 +11,7 @@ from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ztc.services import colors
-from ztc.services.profile_io import (
-    expected_extension,
-    resolve_profile_path,
-    validate_profile_path,
-)
+from ztc.services.profile_io import resolve_profile_path, validate_profile_path
 from ztc.services.save_helper import compose_save_toast, save_profile_with_reload
 from ztc.services.terminals import TerminalBackend
 from ztc.widgets.confirm import (
@@ -310,17 +305,7 @@ class ColorEditorScreen(Screen[None]):
                     timeout=8,
                 )
                 return
-            if not self.backend.is_managed_manifest(manifest_path):
-                # Primera vez: convertir el archivo default a manifest antes
-                # de poder switchear de perfil. `forbidden_path=path` evita
-                # que el primer perfil sobrescriba el target del Load.
-                self._convert_then(
-                    after_convert=lambda: self._do_load(path),
-                    forbidden_path=path,
-                    manifest_path=manifest_path,
-                )
-                return
-            self._do_load(path)
+            self._do_load(path, manifest_path)
 
         self.app.push_screen(
             PromptModal(
@@ -331,7 +316,22 @@ class ColorEditorScreen(Screen[None]):
             after,
         )
 
-    def _do_load(self, path: Path) -> None:
+    def _do_load(self, path: Path, manifest_path: Path) -> None:
+        """Carga `path` como perfil activo. Si el manifest aun no esta
+        gestionado, lo convierte primero (silencioso, con backup
+        automatico) y luego carga. El backup del estado pre-conversion
+        queda cargable directo desde Load con su nombre."""
+        convert_backup: Path | None = None
+        if not self.backend.is_managed_manifest(manifest_path):
+            try:
+                convert_backup = self.backend.convert_to_manifest(
+                    manifest_path, path
+                )
+            except Exception as exc:  # noqa: BLE001
+                self.app.notify(
+                    f"Convert error: {exc}", severity="error", timeout=10
+                )
+                return
         try:
             new_doc = self.backend.load(path)
         except Exception as exc:  # noqa: BLE001
@@ -350,9 +350,10 @@ class ColorEditorScreen(Screen[None]):
         self._refresh_header()
         self._rebuild_list()
         self._refresh_warnings()
-        self.app.notify(
-            f"Loaded {path.name}", severity="information", timeout=6
-        )
+        msg = f"Loaded {path.name}"
+        if convert_backup is not None:
+            msg += f"  (previous setup: {convert_backup.name})"
+        self.app.notify(msg, severity="information", timeout=6)
 
     def action_reload(self) -> None:
         self.doc = self.backend.load(self.backend_path)
@@ -432,21 +433,20 @@ class ColorEditorScreen(Screen[None]):
         )
 
     def _save_as(self, new_path: Path, manifest_path: Path) -> None:
-        """Save-as a archivo nuevo. Si el default todavia no es manifest,
-        dispara G2 conversion primero."""
+        """Save-as a archivo nuevo. Si el manifest aun no esta gestionado,
+        lo convierte silenciosamente primero (backup automatico) y luego
+        guarda el doc in-memory al new_path."""
+        convert_backup: Path | None = None
         if not self.backend.is_managed_manifest(manifest_path):
-            self._convert_then(
-                after_convert=lambda: self._do_save_as(new_path),
-                forbidden_path=None,
-                manifest_path=manifest_path,
-            )
-            return
-        self._do_save_as(new_path)
-
-    def _do_save_as(self, new_path: Path) -> None:
-        """Ejecuta save-as efectivo: write + set_active_profile. El reload
-        lo dispara `set_active_profile`; no usamos `save_profile_with_reload`
-        para evitar reload doble."""
+            try:
+                convert_backup = self.backend.convert_to_manifest(
+                    manifest_path, new_path
+                )
+            except Exception as exc:  # noqa: BLE001
+                self.app.notify(
+                    f"Convert error: {exc}", severity="error", timeout=10
+                )
+                return
         try:
             self.backend.save(self.doc, new_path)
         except Exception as exc:  # noqa: BLE001
@@ -462,69 +462,10 @@ class ColorEditorScreen(Screen[None]):
         self.backend_path = new_path
         self.dirty = False
         self._refresh_header()
-        self.app.notify(
-            f"Saved as {new_path.name}", severity="information", timeout=6
-        )
-
-    def _convert_then(
-        self,
-        *,
-        after_convert: Callable[[], None],
-        forbidden_path: Path | None,
-        manifest_path: Path,
-    ) -> None:
-        """G2: pide nombre para el primer perfil (con los settings
-        actuales del default), convierte, y dispara `after_convert`. Si
-        el user cancela el modal, aborta sin llamar callback."""
-        def after_name(name: str | None) -> None:
-            if not name:
-                return
-            profile_path = resolve_profile_path(name, manifest_path.parent)
-            error = validate_profile_path(
-                self.backend,
-                profile_path,
-                manifest_path=manifest_path,
-                forbidden_path=forbidden_path,
-            )
-            if error:
-                self.app.notify(error, severity="error", timeout=8)
-                return
-
-            def do_convert() -> None:
-                try:
-                    self.backend.convert_to_manifest(manifest_path, profile_path)
-                except Exception as exc:  # noqa: BLE001
-                    self.app.notify(
-                        f"Convert error: {exc}", severity="error", timeout=10
-                    )
-                    return
-                after_convert()
-
-            if profile_path.exists() and profile_path != manifest_path:
-                def after_confirm(confirmed: bool | None) -> None:
-                    if confirmed:
-                        do_convert()
-                self.app.push_screen(
-                    ConfirmActionModal(
-                        title="Overwrite file?",
-                        message=f"{profile_path} already exists.",
-                        confirm_label="Overwrite",
-                    ),
-                    after_confirm,
-                )
-                return
-            do_convert()
-
-        default_name = "default" + expected_extension(self.backend)
-        self.app.push_screen(
-            PromptModal(
-                title="Convert to manifest",
-                initial=default_name,
-                placeholder="Name for current settings profile",
-                confirm_label="Convert",
-            ),
-            after_name,
-        )
+        msg = f"Saved as {new_path.name}"
+        if convert_backup is not None:
+            msg += f"  (previous setup: {convert_backup.name})"
+        self.app.notify(msg, severity="information", timeout=6)
 
     def action_back(self) -> None:
         if not self.dirty:

@@ -200,33 +200,43 @@ def test_write_active_profile_preserves_marker(tmp_path: Path) -> None:
     assert backend.read_active_profile(manifest) == tmp_path / "vga.toml"
 
 
-def test_convert_to_manifest_moves_content_to_profile(tmp_path: Path) -> None:
-    """El archivo original se vuelve manifest minimal; su contenido pasa
-    al perfil verbatim (preservando formato)."""
+def test_convert_to_manifest_writes_minimal_manifest_with_backup(
+    tmp_path: Path,
+) -> None:
+    """El archivo original se vuelve manifest minimal apuntando al
+    active_profile. El contenido viejo NO se duplica en active_profile —
+    queda solo en el backup. El caller es responsable de crear
+    active_profile (en este test no lo creamos, solo verificamos el
+    estado del manifest)."""
     backend = AlacrittyBackend()
     path = tmp_path / "alacritty.toml"
     original_text = (
         '# user comment\n'
         '[colors.primary]\n'
         'background = "#000000"\n'
-        'foreground = "#ffffff"\n'
-        '\n'
         '[window]\n'
         'opacity = 0.97\n'
     )
     path.write_text(original_text, encoding="utf-8")
 
-    profile = tmp_path / "c64.toml"
-    backup = backend.convert_to_manifest(path, profile)
+    active = tmp_path / "tokyo.toml"
+    backup = backend.convert_to_manifest(path, active)
 
-    # Backup creado del original.
+    # Backup creado con el contenido original.
     assert backup is not None
     assert backup.exists()
-    # Perfil tiene el contenido original VERBATIM (preserva formato).
-    assert profile.read_text(encoding="utf-8") == original_text
-    # Manifest pasa a ser gestionado y apunta al perfil.
+    assert backup.read_text(encoding="utf-8") == original_text
+    # Active profile NO fue creado por convert_to_manifest.
+    assert not active.exists()
+    # Manifest pasa a ser gestionado y apunta al active.
     assert backend.is_managed_manifest(path) is True
-    assert backend.read_active_profile(path) == profile
+    assert backend.read_active_profile(path) == active
+    # Manifest es minimal: marker + import, sin colores/settings viejos.
+    manifest_text = path.read_text(encoding="utf-8")
+    assert "managed_manifest" in manifest_text
+    assert "tokyo.toml" in manifest_text
+    assert "#000000" not in manifest_text
+    assert "opacity" not in manifest_text
 
 
 def test_convert_to_manifest_raises_if_source_missing(tmp_path: Path) -> None:
@@ -235,16 +245,3 @@ def test_convert_to_manifest_raises_if_source_missing(tmp_path: Path) -> None:
         backend.convert_to_manifest(
             tmp_path / "missing.toml", tmp_path / "c64.toml"
         )
-
-
-def test_convert_to_manifest_backs_up_existing_profile(tmp_path: Path) -> None:
-    """Si el profile destino ya existe, se respalda (no se sobrescribe sin
-    huellas)."""
-    backend = AlacrittyBackend()
-    path = tmp_path / "alacritty.toml"
-    path.write_text('[window]\nopacity = 0.9\n', encoding="utf-8")
-    profile = tmp_path / "c64.toml"
-    profile.write_text("# previous c64 content\n", encoding="utf-8")
-    backend.convert_to_manifest(path, profile)
-    backups = list(tmp_path.glob("c64.toml.*.bak"))
-    assert backups, "expected backup of pre-existing profile"

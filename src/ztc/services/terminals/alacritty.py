@@ -13,7 +13,6 @@ import tomlkit
 from tomlkit.toml_document import TOMLDocument
 
 from ztc.services import toml_io
-from ztc.services.atomic import write_atomic
 from ztc.services.backups import make_backup
 from ztc.services.colors import CanonicalSlot
 from ztc.services.fonts import resolve_font_faces
@@ -167,34 +166,28 @@ class AlacrittyBackend:
         toml_io.dump_toml(doc, manifest_path)
 
     def convert_to_manifest(
-        self, path: Path, profile_path: Path
+        self, manifest_path: Path, active_profile: Path
     ) -> Path | None:
-        """Mueve el contenido completo de `path` al `profile_path` y deja
-        `path` como manifest minimal. Preserva el formato exacto del
-        archivo original copiando el texto literal (no via tomlkit
-        round-trip)."""
-        if not path.exists():
-            raise FileNotFoundError(path)
-        backup = make_backup(path)
-        original_text = path.read_text(encoding="utf-8")
-        if profile_path.exists():
-            # Respaldo defensivo: el caller deberia haber validado, pero
-            # si igual existe, no perdemos el contenido.
-            make_backup(profile_path)
-        write_atomic(profile_path, original_text)
+        """Backup del archivo original + reescribe como manifest minimal
+        apuntando a `active_profile`. El contenido viejo queda solo en
+        el backup; no se duplica en `active_profile` (caller responsable
+        de que exista)."""
+        if not manifest_path.exists():
+            raise FileNotFoundError(manifest_path)
+        backup = make_backup(manifest_path)
         manifest_doc = tomlkit.document()
         ztc_table = tomlkit.table()
         ztc_table["managed_manifest"] = True
         manifest_doc["ztc"] = ztc_table
         general_table = tomlkit.table()
         import_value = (
-            profile_path.name
-            if profile_path.parent == path.parent
-            else str(profile_path)
+            active_profile.name
+            if active_profile.parent == manifest_path.parent
+            else str(active_profile)
         )
         general_table["import"] = [import_value]
         manifest_doc["general"] = general_table
-        toml_io.dump_toml(manifest_doc, path, backup=False)
+        toml_io.dump_toml(manifest_doc, manifest_path, backup=False)
         return backup
 
     def reload_after_profile_switch(
