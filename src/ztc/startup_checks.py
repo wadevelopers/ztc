@@ -34,23 +34,29 @@ class StartupCheck:
 
 def build_startup_check(
     backend: TerminalBackend,
-    backend_path: Path,
+    manifest_path: Path,
     app: Any,
 ) -> StartupCheck | None:
     builder = STARTUP_CHECKS.get(backend.kind)
     if builder is None:
         return None
-    return builder(backend, backend_path, app)
+    return builder(backend, manifest_path, app)
 
 
 def build_kitty_remote_control_check(
     backend: TerminalBackend,
-    backend_path: Path,
+    manifest_path: Path,
     app: Any,
 ) -> StartupCheck | None:
+    # `manifest_path` es el archivo default (= manifest cuando hay perfiles,
+    # o config standalone cuando aun no se convirtio). Las managed directives
+    # (`allow_remote_control`, `listen_on`, `dynamic_background_opacity`) y
+    # las prefs `# ztc:` viven aca: son globales a la instancia Kitty, no
+    # por perfil — si vivieran en el perfil, switchear de perfil romperia
+    # el remote control y deshabilitaria los reloads IPC.
     if not isinstance(backend, KittyBackend):
         return None
-    doc = backend.load(backend_path)
+    doc = backend.load(manifest_path)
     if read_ztc_pref(doc, "remote_control_modal") == "dismissed":
         return None
 
@@ -67,7 +73,7 @@ def build_kitty_remote_control_check(
     def on_result(choice: KittyRemoteControlChoice | None) -> None:
         if choice is None:
             return
-        current_doc = backend.load(backend_path)
+        current_doc = backend.load(manifest_path)
         if choice.action == "enable":
             added = 0
             if is_remote_control_disabled(read_remote_control(current_doc)):
@@ -90,7 +96,7 @@ def build_kitty_remote_control_check(
                         pending_instance,
                     )
             try:
-                backend.save(current_doc, backend_path)
+                backend.save(current_doc, manifest_path)
             except Exception as exc:  # noqa: BLE001
                 app.notify(
                     f"Error updating Kitty config: {exc}",
@@ -109,7 +115,7 @@ def build_kitty_remote_control_check(
         if choice.dont_show_again:
             write_ztc_pref(current_doc, "remote_control_modal", "dismissed")
             try:
-                backend.save(current_doc, backend_path)
+                backend.save(current_doc, manifest_path)
             except Exception as exc:  # noqa: BLE001
                 app.notify(
                     f"Error updating Kitty config: {exc}",
