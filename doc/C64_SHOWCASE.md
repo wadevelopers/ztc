@@ -7,6 +7,8 @@ padding, pane background and a startup command compose into one look.
 
 ## Result
 
+![Retro-style terminal showcase running with `bash` plus the C64 banner](screenshots/showcase.png)
+
 - The terminal window uses a saturated blue background with extra
   padding, creating the outer frame.
 - The focused Zellij pane uses a darker blue background and pale text,
@@ -45,13 +47,13 @@ Both columns end up with a terminal window of roughly the same size:
 
 | Setting | JetBrainsMono Nerd Font | C64 Pro Mono |
 |---|---|---|
-| `font.family` | `JetBrainsMono Nerd Font` | `C64 Pro Mono` |
-| `font.size` | `12.0` | `9.0` |
-| `window.columns` | `80` | `80` |
+| `window.columns` | `80` | `70` |
 | `window.lines` | `25` | `47` |
 | `window.padding.x` | `40` | `40` |
 | `window.padding.y` | `40` | `40` |
 | `window.opacity` | `1.0` | `1.0` |
+| `font.size` | `12.0` | `9.0` |
+| `font.family` | `JetBrainsMono Nerd Font` | `C64 Pro Mono` |
 | `cursor.shape` | `Block` | `Block` |
 
 > **Note:** changes to `window.columns` and `window.lines` require
@@ -65,10 +67,8 @@ In **Terminal colors**, set the terminal background to:
 #9190ef
 ```
 
-This becomes the outer frame color. On Kitty, ZTC may offer to add
-the reload settings needed for live updates — accepting them is
-optional for the showcase; restarting the terminal after saving always
-works.
+This becomes the outer frame color. Accept Kitty's auto-reload prompt
+if it shows up (optional — restarting the terminal works too).
 
 ## Banner script
 
@@ -156,41 +156,24 @@ Create or edit a Zellij layout in `ztc`, then configure the main pane:
 
 | Pane field | Value |
 |---|---|
-| `command` | `bash` |
-| `args` | `-lc 'bash "$HOME/.config/ztc/welcome-c64.sh"; export PS1=""; exec bash --noprofile --norc -i'` |
 | `default_bg` | `#2c2a80` |
 | `default_fg` | `#9190ef` |
+| `command` | `bash` |
+| `args` | `-lc 'bash "$HOME/.config/ztc/welcome-c64.sh"; export PS1=""; exec bash --noprofile --norc -i'` |
 | `borderless` | `true` |
 
-Use `bash` plus `args` instead of putting the script path directly in
-`command`: Zellij does not expand `~` in `command`, while `bash -lc`
-does expand `$HOME` inside the argument string. Running the script with
-`bash "$HOME/..."` also means the file does not need executable
-permissions.
-
-The `export PS1=""` part removes the interactive prompt only inside
-that pane, keeping the retro `READY.` look without changing your
-global shell prompt. The shell is started with `--noprofile --norc`
-so your regular `.bashrc` does not overwrite the empty prompt.
+Both `PS1=""` and `--noprofile --norc` only affect this pane — your
+global shell prompt is not touched.
 
 The equivalent KDL pane looks like:
 
 ```kdl
 pane command="bash" borderless=true {
-    args "-lc" "bash \"$HOME/.config/ztc/welcome-c64.sh\"; export PS1=\"\"; exec bash --noprofile --norc -i"
     default_bg "#2c2a80"
     default_fg "#9190ef"
+    args "-lc" "bash \"$HOME/.config/ztc/welcome-c64.sh\"; export PS1=\"\"; exec bash --noprofile --norc -i"
 }
 ```
 
 Save the layout, launch it, and the pane should open with the banner
 and an interactive shell.
-
-## Tweaks
-
-- Increase `window.padding.x` and `window.padding.y` for a thicker
-  frame.
-- Use `#2020c0` for a darker outer frame or `#5050ff` for a brighter
-  one.
-- Use `#a0a0ff` for a brighter pane foreground if your theme has low
-  contrast.

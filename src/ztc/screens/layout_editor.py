@@ -406,9 +406,20 @@ class LayoutEditorScreen(Screen[None]):
         `[dim]` exterior (Rich respeta styles anidados)."""
         from ztc.services.colors import zellij_color_to_rich_hex
 
+        # Orden alineado con PaneEditModal (leaf, sin Name que va en el
+        # header del nodo): size, focus, default_bg, default_fg, command,
+        # args, cwd, start_suspended, borderless.
         rows: list[str] = []
         if pane.size:
             rows.append(f"[dim]size: {pane.size}[/]")
+        if pane.focus:
+            rows.append("[dim]focus: true[/]")
+        if pane.default_bg:
+            swatch = self._inline_swatch(pane.default_bg, zellij_color_to_rich_hex)
+            rows.append(f"[dim]default_bg: {swatch} {pane.default_bg}[/]")
+        if pane.default_fg:
+            swatch = self._inline_swatch(pane.default_fg, zellij_color_to_rich_hex)
+            rows.append(f"[dim]default_fg: {swatch} {pane.default_fg}[/]")
         if pane.command:
             rows.append(f"[dim]command: {pane.command}[/]")
         if pane.args:
@@ -417,16 +428,8 @@ class LayoutEditorScreen(Screen[None]):
             rows.append(f"[dim]cwd: {pane.cwd}[/]")
         if pane.start_suspended:
             rows.append("[dim]start_suspended: true[/]")
-        if pane.focus:
-            rows.append("[dim]focus: true[/]")
         if pane.borderless:
             rows.append("[dim]borderless: true[/]")
-        if pane.default_bg:
-            swatch = self._inline_swatch(pane.default_bg, zellij_color_to_rich_hex)
-            rows.append(f"[dim]default_bg: {swatch} {pane.default_bg}[/]")
-        if pane.default_fg:
-            swatch = self._inline_swatch(pane.default_fg, zellij_color_to_rich_hex)
-            rows.append(f"[dim]default_fg: {swatch} {pane.default_fg}[/]")
         return rows
 
     @staticmethod
