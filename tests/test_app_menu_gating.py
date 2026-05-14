@@ -358,7 +358,7 @@ async def test_e2e_kitty_detection_writes_to_real_kitty_conf(tmp_path: Path) -> 
         assert "allow_remote_control yes" in text
         assert "listen_on unix:@ztc-{kitty_pid}" in text
         # El backup se creo (porque el archivo existia).
-        backups = list(tmp_path.glob("kitty.conf.bak.*"))
+        backups = list(tmp_path.glob("kitty.conf.*.bak"))
         assert backups
 
 

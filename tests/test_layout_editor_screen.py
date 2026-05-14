@@ -100,7 +100,7 @@ async def test_layout_editor_save_writes_file(tmp_path: Path) -> None:
 
         on_disk = kdl_io.load_layout(paths.zellij_layouts_dir / "dev.kdl")
         assert len(on_disk.tabs[0].children) == 2
-        backups = list(paths.zellij_layouts_dir.glob("dev.kdl.bak.*"))
+        backups = list(paths.zellij_layouts_dir.glob("dev.kdl.*.bak"))
         assert backups
 
 

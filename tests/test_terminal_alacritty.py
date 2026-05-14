@@ -246,5 +246,5 @@ def test_convert_to_manifest_backs_up_existing_profile(tmp_path: Path) -> None:
     profile = tmp_path / "c64.toml"
     profile.write_text("# previous c64 content\n", encoding="utf-8")
     backend.convert_to_manifest(path, profile)
-    backups = list(tmp_path.glob("c64.toml.bak.*"))
+    backups = list(tmp_path.glob("c64.toml.*.bak"))
     assert backups, "expected backup of pre-existing profile"
