@@ -455,6 +455,41 @@ class KittyBackend:
             doc.lines.append(f"include {import_value}")
         write_atomic(manifest_path, doc.to_text())
 
+    def unmanage_manifest(
+        self, manifest_path: Path, profile_doc: KittyDoc
+    ) -> Path | None:
+        """Reescribe `manifest_path` con el contenido del `profile_doc` +
+        las managed directives del manifest viejo + `# ztc:` line sin
+        `managed_manifest`. Si el dict ztc queda vacio tras quitar la
+        key, no se escribe la linea."""
+        if not self.is_managed_manifest(manifest_path):
+            return None
+        backup = make_backup(manifest_path)
+        old_manifest = self.load(manifest_path)
+
+        # Extraer managed directives y JSON ztc (sin managed_manifest).
+        managed_lines: list[str] = []
+        ztc_dict: dict[str, object] = {}
+        for line in old_manifest.lines:
+            if _ZTC_PREF_RE.match(line):
+                parsed = _parse_ztc_line(line)
+                if parsed:
+                    ztc_dict.update(parsed)
+                continue
+            parsed = _parse_line(line)
+            if parsed is not None and parsed[0] in _MANAGED_DIRECTIVE_KEYS:
+                managed_lines.append(line)
+
+        ztc_dict.pop("managed_manifest", None)
+
+        new_lines = list(profile_doc.lines) + managed_lines
+        if ztc_dict:
+            new_lines.append("# ztc:" + json.dumps(ztc_dict, sort_keys=True))
+
+        new_doc = KittyDoc(path=manifest_path, lines=new_lines)
+        write_atomic(manifest_path, new_doc.to_text())
+        return backup
+
     def convert_to_manifest(
         self, manifest_path: Path, active_profile: Path
     ) -> Path | None:

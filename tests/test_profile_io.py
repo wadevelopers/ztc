@@ -57,28 +57,4 @@ def test_validate_accepts_valid_path(tmp_path: Path) -> None:
     assert validate_profile_path(backend, tmp_path / "c64.toml") is None
 
 
-def test_validate_rejects_manifest_path(tmp_path: Path) -> None:
-    """Manifest_path no puede ser usado como nombre de perfil. Sin este
-    guard, Save-as al manifest sobrescribiria managed directives y
-    crearia auto-referencia (`include kitty.conf` dentro de
-    `kitty.conf`) → recursion infinita al reload."""
-    backend = KittyBackend()
-    manifest = tmp_path / "kitty.conf"
-    error = validate_profile_path(backend, manifest, manifest_path=manifest)
-    assert error is not None
-    assert "manifest" in error.lower()
-    assert manifest.name in error
-
-
-def test_validate_accepts_path_different_from_manifest(tmp_path: Path) -> None:
-    backend = KittyBackend()
-    assert (
-        validate_profile_path(
-            backend,
-            tmp_path / "c64.conf",
-            manifest_path=tmp_path / "kitty.conf",
-        )
-        is None
-    )
-
 

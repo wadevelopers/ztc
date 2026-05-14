@@ -165,6 +165,24 @@ class AlacrittyBackend:
         doc["general"]["import"] = [import_value]  # type: ignore[index]
         toml_io.dump_toml(doc, manifest_path)
 
+    def unmanage_manifest(
+        self, manifest_path: Path, profile_doc: TOMLDocument
+    ) -> Path | None:
+        """Reescribe `manifest_path` con el contenido del `profile_doc`
+        (perfil activo). Quita la seccion `[ztc]` con `managed_manifest`.
+        Alacritty no tiene managed directives globales, asi que el
+        resultado es el TOML del perfil escrito tal cual."""
+        if not self.is_managed_manifest(manifest_path):
+            return None
+        backup = make_backup(manifest_path)
+        # El profile_doc no deberia contener la seccion [ztc] (viene de
+        # un perfil cargado, no del manifest). Defensivo: si la tiene, la
+        # quitamos antes de escribir.
+        if "ztc" in profile_doc:
+            del profile_doc["ztc"]
+        toml_io.dump_toml(profile_doc, manifest_path, backup=False)
+        return backup
+
     def convert_to_manifest(
         self, manifest_path: Path, active_profile: Path
     ) -> Path | None:

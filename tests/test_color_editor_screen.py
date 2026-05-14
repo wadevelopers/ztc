@@ -250,10 +250,12 @@ async def test_action_load_rejects_manifest_path_as_profile(tmp_path: Path) -> N
         assert screen.backend_path == c64
 
 
-async def test_action_save_rejects_manifest_path_as_new_name(tmp_path: Path) -> None:
-    """Guard contra Save-as al manifest: sobrescribiria managed directives
-    + crearia auto-referencia. Save-in-place sobre el activo NO entra por
-    este path (se hace el branch antes)."""
+async def test_action_save_to_manifest_unmanages(tmp_path: Path) -> None:
+    """Save con el nombre del manifest sobre un manifest gestionado =
+    unmanage: el manifest se reescribe con el contenido del perfil
+    activo + managed directives, y vuelve a ser standalone. Backup
+    automatico. backend_path pasa a apuntar al manifest. El archivo del
+    perfil viejo NO se borra."""
     backend = AlacrittyBackend()
     manifest = tmp_path / "alacritty.toml"
     manifest.write_text(
@@ -273,7 +275,6 @@ async def test_action_save_rejects_manifest_path_as_new_name(tmp_path: Path) -> 
     app = _Harness(screen, manifest_path=manifest)
     async with app.run_test() as pilot:
         await pilot.pause()
-        screen.dirty = True
         screen.action_save()
         await pilot.pause()
         from textual.widgets import Input
@@ -283,7 +284,22 @@ async def test_action_save_rejects_manifest_path_as_new_name(tmp_path: Path) -> 
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
-        errors = [n for n in app.notifications if n[1] == "error"]
-        assert any("manifest" in msg.lower() for msg, _ in errors)
-        # set_active_profile NO se llamo (no hubo switch).
-        assert app.set_active_profile_calls == []
+        # set_active_profile invocado con el manifest path (sync state).
+        assert app.set_active_profile_calls == [manifest]
+        # State actualizado.
+        assert screen.backend_path == manifest
+        assert screen.dirty is False
+        # Manifest ya no es gestionado: vuelve a standalone con los
+        # colores del perfil activo adentro.
+        assert backend.is_managed_manifest(manifest) is False
+        manifest_text = manifest.read_text(encoding="utf-8")
+        assert "#9190ef" in manifest_text  # color del perfil viejo
+        assert "managed_manifest" not in manifest_text
+        # Backup del manifest viejo creado.
+        backups = list(tmp_path.glob("alacritty.toml.*.bak"))
+        assert backups
+        # Archivo del perfil viejo NO borrado.
+        assert c64.exists()
+        # Toast menciona el backup.
+        info = [n for n in app.notifications if n[1] == "information"]
+        assert any("previous manifest" in msg for msg, _ in info)

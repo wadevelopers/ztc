@@ -192,12 +192,19 @@ class TermConfigApp(App[None]):
            el activo es el nuevo perfil — esa es la verdad logica.
         3. `reload_after_profile_switch`: best-effort. Si falla, mostrar
            warning toast pero mantener state al nuevo perfil.
+
+        Caso especial `new_profile_path == backend_manifest_path`: post
+        unmanage (volver a standalone). El manifest fue reescrito por
+        `unmanage_manifest` con el contenido standalone; no llamamos a
+        `write_active_profile` (escribiria `include kitty.conf` adentro
+        de `kitty.conf` → loop). Solo sync state + reload.
         """
         if self.backend is None or self.backend_manifest_path is None:
             raise RuntimeError("No backend available for profile switching")
-        self.backend.write_active_profile(
-            self.backend_manifest_path, new_profile_path
-        )
+        if new_profile_path != self.backend_manifest_path:
+            self.backend.write_active_profile(
+                self.backend_manifest_path, new_profile_path
+            )
         self.backend_path = new_profile_path
         reload_ok = self.backend.reload_after_profile_switch(
             self.backend_manifest_path, new_profile_path

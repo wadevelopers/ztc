@@ -127,6 +127,26 @@ class TerminalBackend(Protocol):
         runtime `# ztc:{...}` y managed directives)."""
         ...
 
+    def unmanage_manifest(
+        self, manifest_path: Path, profile_doc: BackendDoc
+    ) -> Path | None:
+        """Reverse de `convert_to_manifest`: vuelve `manifest_path` a un
+        archivo standalone con el contenido de `profile_doc` adentro.
+
+        Preserva las managed directives (Kitty: `allow_remote_control`,
+        `listen_on`, `dynamic_background_opacity`) y las prefs `# ztc:`
+        existentes — solo quita la key `managed_manifest`. Si el dict
+        `# ztc:` queda vacio tras quitarla, no se escribe la linea.
+
+        Hace backup automatico del manifest antes de reescribir. NO toca
+        el archivo del perfil activo en disco (caller decide que hacer
+        con el).
+
+        Devuelve el path del backup del manifest. Devuelve `None` si
+        `manifest_path` no es manifest gestionado (no hay nada que
+        des-hacer)."""
+        ...
+
     def convert_to_manifest(
         self, manifest_path: Path, active_profile: Path
     ) -> Path | None:

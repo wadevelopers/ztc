@@ -27,8 +27,6 @@ def resolve_profile_path(name: str, base_dir: Path) -> Path:
 def validate_profile_path(
     backend: TerminalBackend,
     path: Path,
-    *,
-    manifest_path: Path | None = None,
 ) -> str | None:
     """Devuelve mensaje de error si el path no es valido, o None.
 
@@ -36,25 +34,17 @@ def validate_profile_path(
     - Extension debe coincidir con la del backend (`.toml`/`.conf`).
     - Directory padre debe existir (no auto-crear; evita ensuciar
       `~/.config` con typos).
-    - Si `manifest_path` se pasa y coincide con `path`, error claro: el
-      manifest no puede ser usado como nombre de perfil porque crearia
-      una auto-referencia (`include kitty.conf` dentro de `kitty.conf`)
-      → recursion infinita al reload, y si el caller es Save-as
-      sobrescribiria las managed directives. Save-in-place sobre el
-      activo NO pasa por esta validacion (el caller hace el branch
-      antes).
 
     NO chequea colision con archivo existente — eso es UI
     (`ConfirmActionModal`), decision del caller.
+
+    NO chequea si `path == manifest_path` — el caller de Save-as maneja
+    ese caso (es la operacion 'unmanage': volver a standalone) en lugar
+    de rechazarlo.
     """
     expected = expected_extension(backend)
     if path.suffix.lower() != expected:
         return f"Filename must end with {expected}"
     if not path.parent.exists():
         return f"Directory does not exist: {path.parent}"
-    if manifest_path is not None and path == manifest_path:
-        return (
-            f"Cannot use the manifest file ({manifest_path.name}) as a "
-            "profile name; choose another"
-        )
     return None

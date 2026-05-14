@@ -383,9 +383,14 @@ class ColorEditorScreen(Screen[None]):
             if new_path == self.backend_path:
                 self._save_in_place(manifest_path)
                 return
-            error = validate_profile_path(
-                self.backend, new_path, manifest_path=manifest_path
-            )
+            # Save al manifest gestionado = "unmanage": volver a standalone.
+            # En standalone manifest_path == backend_path, asi que ese caso
+            # ya cayo en save-in-place arriba; aqui llegamos solo cuando
+            # is_managed es True.
+            if new_path == manifest_path:
+                self._save_unmanage(manifest_path)
+                return
+            error = validate_profile_path(self.backend, new_path)
             if error:
                 self.app.notify(error, severity="error", timeout=8)
                 return
@@ -431,6 +436,35 @@ class ColorEditorScreen(Screen[None]):
             severity="information",
             timeout=6,
         )
+
+    def _save_unmanage(self, manifest_path: Path) -> None:
+        """Volver a standalone: reescribe el manifest con el contenido
+        del doc actual + managed directives preservadas. Quita el marker
+        ztc. El perfil que estaba activo en disco NO se borra — caller
+        humano decide."""
+        try:
+            backup = self.backend.unmanage_manifest(manifest_path, self.doc)
+        except Exception as exc:  # noqa: BLE001
+            self.app.notify(f"Save error: {exc}", severity="error", timeout=10)
+            return
+        # Recargar doc desde el manifest reescrito: ahora contiene
+        # managed directives + el contenido del perfil. Esto mantiene la
+        # UI sincronizada para futuras ediciones del archivo.
+        self.doc = self.backend.load(manifest_path)
+        try:
+            self.app.set_active_profile(manifest_path)
+        except Exception as exc:  # noqa: BLE001
+            self.app.notify(
+                f"Profile switch error: {exc}", severity="error", timeout=10
+            )
+            return
+        self.backend_path = manifest_path
+        self.dirty = False
+        self._refresh_header()
+        msg = f"Saved as {manifest_path.name}"
+        if backup is not None:
+            msg += f"  (previous manifest: {backup.name})"
+        self.app.notify(msg, severity="information", timeout=6)
 
     def _save_as(self, new_path: Path, manifest_path: Path) -> None:
         """Save-as a archivo nuevo. Si el manifest aun no esta gestionado,
