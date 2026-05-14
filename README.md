@@ -53,6 +53,9 @@ The main `ztc` menu exposes five modules:
   backends; each is serialized to its native format (TOML for
   Alacritty, flat key/value for Kitty).
 
+For an end-to-end example combining terminal settings, colors and a
+Zellij layout, see [`doc/C64_SHOWCASE.md`](doc/C64_SHOWCASE.md).
+
 General navigation: `↑↓` to move, `↲` to open, `Esc` to go back, `q`
 to quit (only from the main menu — inside editors `q` is a no-op so it
 cannot be pressed accidentally).

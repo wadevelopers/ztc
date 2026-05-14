@@ -4,26 +4,6 @@ ZTC follows [SemVer](https://semver.org/). Minor versions ship one
 focused feature each — small, atomic releases instead of large
 batches. Patch versions are bug-fix-only.
 
-## v1.3.0 (next)
-
-### Feature
-
-- **Reusable file picker widget.** A `FilePickerModal` that lists
-  files from a configurable directory (with extension filtering
-  and a fallback to manual path entry). Replaces the typed-path
-  inputs in two places:
-  - **Import of theme/settings** in the colors and terminal-settings
-    editors. Today the importer asks for a filename (resolved
-    against the backend's config dir) or an absolute path. The new
-    picker lists the existing files (e.g. `.toml` in
-    `~/.config/alacritty/`, `.conf` in `~/.config/kitty/`).
-  - **Pane `command` field** in the layout editor. Today the user
-    has to type the full path of an executable script. The picker
-    lets them browse the filesystem; the field still accepts free
-    text for commands resolved via `$PATH` (`bash`, `vim`, etc.).
-
-See [`PLAN_FILE_PICKER.md`](PLAN_FILE_PICKER.md).
-
 ## Released
 
 - **v1.2.0** — Kitty parity. Two things: (1) **Kitty theme + settings
@@ -57,17 +37,22 @@ See [`PLAN_FILE_PICKER.md`](PLAN_FILE_PICKER.md).
   editing, Zellij themes, layouts and sessions management; embedded
   and standalone (`zsm`) launcher.
 
-## Later (no committed version yet)
+## Possible future work (no committed timeline)
 
-- **PyPI publish** as `ztc-tui`. The name `ztc` is taken, so the
-  PyPI distribution name will differ from the GitHub repo and the
-  CLI command (which stays `ztc`). Will land in some future minor
-  release once the project has a few more iterations under its belt.
-- **Support for more terminals.** Currently supported: Alacritty
-  and Kitty. The backend layer in `src/ztc/services/terminals/` is
-  built to be extended — implementing `TerminalBackend` for a new
-  terminal (e.g. Ghostty, WezTerm, Foot) integrates it without
-  touching the rest of the code. Fork contributions are welcome.
+- **PyPI publish** as `ztc-tui`. The name `ztc` is taken, so the PyPI
+  distribution name would differ from the GitHub repo and the CLI
+  command (which stays `ztc`). Not committed; the repo is already
+  installable via `uv tool install git+https://github.com/wadevelopers/ztc`.
+- **Support for more terminals.** Currently supported: Alacritty and
+  Kitty. The backend layer in `src/ztc/services/terminals/` is built
+  to be extended — implementing `TerminalBackend` for a new terminal
+  (e.g. Ghostty, WezTerm, Foot) integrates it without touching the
+  rest of the code. Fork contributions are welcome.
+- **Reusable file picker.** Theme/settings import and the pane
+  `command` field in the layout editor currently ask for a typed
+  filesystem path. A `FilePickerModal` based on Textual's
+  `DirectoryTree` would replace both with browsing, keeping free
+  text for `$PATH` lookups. Fork contributions welcome.
 
 ## How to propose features or report bugs
 
