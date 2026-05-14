@@ -13,7 +13,7 @@ from textual.widgets.option_list import Option
 from ztc.services import colors
 from ztc.services.save_helper import compose_save_toast, save_with_reload
 from ztc.services.terminals import TerminalBackend
-from ztc.widgets.confirm import EditColorModal, PromptModal
+from ztc.widgets.confirm import EditColorModal, PromptModal, UnsavedChangesModal
 from ztc.widgets.header import StaticHeader
 from ztc.zellij.config import read_active_theme
 from ztc.zellij.user_themes import list_user_themes
@@ -31,8 +31,8 @@ class ColorEditorScreen(Screen[None]):
     BINDINGS = [
         Binding("enter", "edit", "Edit"),
         Binding("x", "reset", "Reset slot"),
-        Binding("i", "import", "Import theme"),
         Binding("r", "reload", "Reload"),
+        Binding("l", "load", "Load"),
         Binding("s", "save", "Save"),
         Binding("escape", "back", "Back"),
         # `q` y `ctrl+q` neutralizados: solo `Esc` sale del editor.
@@ -252,47 +252,80 @@ class ColorEditorScreen(Screen[None]):
             after,
         )
 
-    def action_import(self) -> None:
-        # `import_theme_file` esta en la TerminalBackend Protocol; cada
-        # backend lo implementa para su propio formato (`.toml` para
-        # Alacritty, `.conf` para Kitty). No hay cross-backend.
-        backend = self.backend
+    def action_load(self) -> None:
+        """Carga un perfil desde archivo y lo deja como activo: escribe
+        el manifest apuntando al nuevo perfil y aplica al terminal vivo
+        via `set_active_profile`. Si hay cambios sin guardar, pide
+        confirmacion antes (descartarlos perderia trabajo)."""
+        if self.dirty:
+
+            def after_dirty(choice: str | None) -> None:
+                if choice == "discard":
+                    self._prompt_load_profile()
+                elif choice == "save":
+                    self.action_save()
+                    if not self.dirty:
+                        self._prompt_load_profile()
+
+            self.app.push_screen(UnsavedChangesModal(), after_dirty)
+            return
+        self._prompt_load_profile()
+
+    def _prompt_load_profile(self) -> None:
+        manifest_path = self.app.backend_manifest_path
+        if manifest_path is None:
+            return
 
         def after(path_str: str | None) -> None:
             if not path_str:
                 return
             raw = Path(path_str).expanduser()
-            path = raw if raw.is_absolute() else (self.backend_path.parent / raw)
-            try:
-                count = backend.import_theme_file(self.doc, path)
-            except FileNotFoundError:
-                self.app.notify(f"Does not exist: {path}", severity="error", timeout=8)
-                return
-            except Exception as exc:  # noqa: BLE001
-                self.app.notify(f"Import error: {exc}", severity="error", timeout=10)
-                return
-            if count == 0:
+            path = raw if raw.is_absolute() else (manifest_path.parent / raw)
+            if not path.exists():
                 self.app.notify(
-                    "The file contains no recognized color slots.",
-                    severity="warning",
-                    timeout=8,
+                    f"Does not exist: {path}", severity="error", timeout=8
                 )
                 return
-            self.dirty = True
+            if not self.backend.is_managed_manifest(manifest_path):
+                # Sin manifest, Load no puede operar: write_active_profile
+                # sumaria un include a un archivo standalone sin marker, y
+                # el archivo no se trataria como manifest al releerse.
+                self.app.notify(
+                    "Current configuration is not a managed manifest. "
+                    "Use Save with a new name first to enable profile switching.",
+                    severity="error",
+                    timeout=10,
+                )
+                return
+            try:
+                new_doc = self.backend.load(path)
+            except Exception as exc:  # noqa: BLE001
+                self.app.notify(f"Load error: {exc}", severity="error", timeout=10)
+                return
+            try:
+                self.app.set_active_profile(path)
+            except Exception as exc:  # noqa: BLE001
+                self.app.notify(
+                    f"Profile switch error: {exc}", severity="error", timeout=10
+                )
+                return
+            self.doc = new_doc
+            self.backend_path = path
+            self.dirty = False
             self._refresh_header()
             self._rebuild_list()
             self._refresh_warnings()
             self.app.notify(
-                f"Imported {count} slot(s) from {path.name}",
+                f"Loaded {path.name}",
                 severity="information",
                 timeout=6,
             )
 
         self.app.push_screen(
             PromptModal(
-                title="Import theme from file",
-                placeholder=f"filename (next to {self.backend_path.name}) or absolute path",
-                confirm_label="Import",
+                title="Load profile from file",
+                placeholder=f"filename (next to {manifest_path.name}) or absolute path",
+                confirm_label="Load",
             ),
             after,
         )
@@ -323,7 +356,6 @@ class ColorEditorScreen(Screen[None]):
         if not self.dirty:
             self.app.pop_screen()
             return
-        from ztc.widgets.confirm import UnsavedChangesModal
 
         def after(choice: str | None) -> None:
             if choice == "discard":
