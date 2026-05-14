@@ -21,19 +21,36 @@ from ztc.services.terminals.settings import SETTINGS
 class _Harness(App[None]):
     """App minima que monta el screen para testearlo aislado."""
 
-    def __init__(self, screen: TerminalSettingsScreen) -> None:
+    def __init__(
+        self,
+        screen: TerminalSettingsScreen,
+        *,
+        manifest_path: Path | None = None,
+    ) -> None:
         super().__init__()
         self._screen = screen
         # action_save / action_back / action_load consultan el manifest path
         # del app. En tests sin manifest separado, apunta al mismo path que
         # el perfil activo (caso config standalone).
-        self.backend_manifest_path: Path | None = screen.backend_path
+        self.backend_manifest_path: Path | None = (
+            manifest_path or screen.backend_path
+        )
+        self.set_active_profile_calls: list[Path] = []
+        self.notifications: list[tuple[str, str]] = []
+
+    def set_active_profile(self, new_profile_path: Path) -> None:
+        self.set_active_profile_calls.append(new_profile_path)
 
     def compose(self) -> ComposeResult:  # noqa: D401
         return iter([])
 
     def on_mount(self) -> None:
         self.push_screen(self._screen)
+
+    def notify(self, message: str, **kwargs: object) -> None:  # type: ignore[override]
+        self.notifications.append(
+            (str(message), str(kwargs.get("severity", "information")))
+        )
 
 
 def _alacritty_doc(tmp_path: Path, content: str = "") -> Path:
@@ -312,3 +329,89 @@ async def test_unsaved_modal_save_failure_keeps_screen(tmp_path: Path) -> None:
             assert screen.dirty is True
         finally:
             backend.save = original_save  # type: ignore[method-assign]
+
+
+# ---------- action_save: modal + save in-place / save-as ----------
+
+
+async def test_action_save_same_name_saves_in_place(tmp_path: Path) -> None:
+    """Enter en el PromptModal con el nombre actual prellenado guarda en
+    el activo: archivo en disco actualizado + dirty=False."""
+    backend = AlacrittyBackend()
+    path = _alacritty_doc(tmp_path, '[window]\nopacity = 0.8\n')
+    screen = TerminalSettingsScreen(backend=backend, backend_path=path)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        backend.write_setting(screen.doc, SETTINGS["window.opacity"], 0.5)
+        screen.dirty = True
+        screen.action_save()
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        on_disk = backend.load(path)
+        assert backend.read_setting(on_disk, SETTINGS["window.opacity"]) == 0.5
+        assert screen.dirty is False
+
+
+async def test_action_save_rejects_wrong_extension(tmp_path: Path) -> None:
+    """Nombre con `.conf` en Alacritty rechazado con error toast."""
+    backend = AlacrittyBackend()
+    path = _alacritty_doc(tmp_path, '[window]\nopacity = 0.8\n')
+    screen = TerminalSettingsScreen(backend=backend, backend_path=path)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.dirty = True
+        screen.action_save()
+        await pilot.pause()
+        from textual.widgets import Input
+
+        inp = app.screen.query_one("#prompt-input", Input)
+        inp.value = "wrong.conf"
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        errors = [n for n in app.notifications if n[1] == "error"]
+        assert any(".toml" in msg for msg, _ in errors)
+        # No se creo el archivo wrong.conf.
+        assert not (tmp_path / "wrong.conf").exists()
+
+
+# ---------- action_load: switch profile ----------
+
+
+async def test_action_load_switches_active_profile(tmp_path: Path) -> None:
+    """Load en un manifest gestionado: doc actualizado, backend_path
+    asignado al nuevo perfil, set_active_profile invocado."""
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    manifest.write_text(
+        "[ztc]\nmanaged_manifest = true\n\n"
+        '[general]\nimport = ["c64.toml"]\n',
+        encoding="utf-8",
+    )
+    c64 = tmp_path / "c64.toml"
+    c64.write_text('[window]\nopacity = 0.5\n', encoding="utf-8")
+    vga = tmp_path / "vga.toml"
+    vga.write_text('[window]\nopacity = 0.95\n', encoding="utf-8")
+    screen = TerminalSettingsScreen(backend=backend, backend_path=c64)
+    app = _Harness(screen, manifest_path=manifest)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.action_load()
+        await pilot.pause()
+        from textual.widgets import Input
+
+        inp = app.screen.query_one("#prompt-input", Input)
+        inp.value = "vga.toml"
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.set_active_profile_calls == [vga]
+        assert screen.backend_path == vga
+        assert screen.dirty is False
+        # El doc tiene los settings del nuevo perfil.
+        assert (
+            backend.read_setting(screen.doc, SETTINGS["window.opacity"]) == 0.95
+        )

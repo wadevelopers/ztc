@@ -157,3 +157,125 @@ def test_compute_warnings_clean_when_high_contrast() -> None:
     backend.write_slot(doc, ("selection", "background"), "#888888")
     backend.write_slot(doc, ("cursor", "cursor"), "#ffaa00")
     assert colors.compute_warnings(_slots_from_doc(backend, doc)) == []
+
+
+# ---------- perfiles intercambiables (manifest + profile switching) ----------
+
+
+def _write_manifest(path: Path, profile_name: str) -> None:
+    """Helper: crea un manifest minimal apuntando a `profile_name`."""
+    path.write_text(
+        "[ztc]\nmanaged_manifest = true\n\n"
+        f'[general]\nimport = ["{profile_name}"]\n',
+        encoding="utf-8",
+    )
+
+
+def test_is_managed_manifest_false_for_standalone(tmp_path: Path) -> None:
+    """Una config sin marker ztc no es manifest, aunque tenga imports."""
+    backend = AlacrittyBackend()
+    path = tmp_path / "alacritty.toml"
+    path.write_text(
+        '[general]\nimport = ["theme.toml"]\n[window]\nopacity = 0.9\n',
+        encoding="utf-8",
+    )
+    assert backend.is_managed_manifest(path) is False
+
+
+def test_is_managed_manifest_false_for_missing_file(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    assert backend.is_managed_manifest(tmp_path / "missing.toml") is False
+
+
+def test_is_managed_manifest_true_when_marker_present(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    path = tmp_path / "alacritty.toml"
+    _write_manifest(path, "c64.toml")
+    assert backend.is_managed_manifest(path) is True
+
+
+def test_read_active_profile_returns_none_when_not_manifest(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    path = tmp_path / "alacritty.toml"
+    path.write_text(
+        '[general]\nimport = ["theme.toml"]\n', encoding="utf-8"
+    )
+    assert backend.read_active_profile(path) is None
+
+
+def test_read_active_profile_returns_relative_path(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    _write_manifest(manifest, "c64.toml")
+    assert backend.read_active_profile(manifest) == tmp_path / "c64.toml"
+
+
+def test_read_active_profile_handles_absolute_path(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    abs_profile = tmp_path / "other" / "c64.toml"
+    manifest.write_text(
+        "[ztc]\nmanaged_manifest = true\n\n"
+        f'[general]\nimport = ["{abs_profile}"]\n',
+        encoding="utf-8",
+    )
+    assert backend.read_active_profile(manifest) == abs_profile
+
+
+def test_write_active_profile_preserves_marker(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    _write_manifest(manifest, "c64.toml")
+    backend.write_active_profile(manifest, tmp_path / "vga.toml")
+    assert backend.is_managed_manifest(manifest) is True
+    assert backend.read_active_profile(manifest) == tmp_path / "vga.toml"
+
+
+def test_convert_to_manifest_moves_content_to_profile(tmp_path: Path) -> None:
+    """El archivo original se vuelve manifest minimal; su contenido pasa
+    al perfil verbatim (preservando formato)."""
+    backend = AlacrittyBackend()
+    path = tmp_path / "alacritty.toml"
+    original_text = (
+        '# user comment\n'
+        '[colors.primary]\n'
+        'background = "#000000"\n'
+        'foreground = "#ffffff"\n'
+        '\n'
+        '[window]\n'
+        'opacity = 0.97\n'
+    )
+    path.write_text(original_text, encoding="utf-8")
+
+    profile = tmp_path / "c64.toml"
+    backup = backend.convert_to_manifest(path, profile)
+
+    # Backup creado del original.
+    assert backup is not None
+    assert backup.exists()
+    # Perfil tiene el contenido original VERBATIM (preserva formato).
+    assert profile.read_text(encoding="utf-8") == original_text
+    # Manifest pasa a ser gestionado y apunta al perfil.
+    assert backend.is_managed_manifest(path) is True
+    assert backend.read_active_profile(path) == profile
+
+
+def test_convert_to_manifest_raises_if_source_missing(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    with pytest.raises(FileNotFoundError):
+        backend.convert_to_manifest(
+            tmp_path / "missing.toml", tmp_path / "c64.toml"
+        )
+
+
+def test_convert_to_manifest_backs_up_existing_profile(tmp_path: Path) -> None:
+    """Si el profile destino ya existe, se respalda (no se sobrescribe sin
+    huellas)."""
+    backend = AlacrittyBackend()
+    path = tmp_path / "alacritty.toml"
+    path.write_text('[window]\nopacity = 0.9\n', encoding="utf-8")
+    profile = tmp_path / "c64.toml"
+    profile.write_text("# previous c64 content\n", encoding="utf-8")
+    backend.convert_to_manifest(path, profile)
+    backups = list(tmp_path.glob("c64.toml.bak.*"))
+    assert backups, "expected backup of pre-existing profile"

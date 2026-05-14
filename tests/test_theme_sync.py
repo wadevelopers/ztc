@@ -242,3 +242,85 @@ def test_sync_result_includes_reload_result(
     assert result.backup == tmp_path / "alacritty.toml.bak"
     assert result.reload_ok is False
     assert result.manual_reload_hint == "manual hint"
+
+
+def test_sync_uses_save_profile_with_reload_when_manifest_path_given(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Cuando se pasa `manifest_path`, debe ir por `save_profile_with_reload`
+    (no `save_with_reload`). Necesario en Kitty con manifest para que el
+    reload IPC lea las prefs runtime del manifest."""
+    ala = _make_alacritty(tmp_path)
+    cfg = _empty_zellij_config(tmp_path)
+    backend = AlacrittyBackend()
+    profile_calls: list[tuple[object, object, Path, Path]] = []
+    plain_calls: list[tuple[object, object, Path]] = []
+
+    def fake_save_profile_with_reload(  # noqa: ANN001
+        backend_arg, doc_arg, profile_path, manifest_path
+    ):
+        profile_calls.append((backend_arg, doc_arg, profile_path, manifest_path))
+        return SaveResult(
+            backup_path=tmp_path / "alacritty.toml.bak",
+            reload_ok=True,
+            manual_reload_hint=None,
+        )
+
+    def fake_save_with_reload(backend_arg, doc_arg, path_arg):  # noqa: ANN001
+        plain_calls.append((backend_arg, doc_arg, path_arg))
+        return SaveResult(backup_path=None, reload_ok=True, manual_reload_hint=None)
+
+    monkeypatch.setattr(
+        theme_sync, "save_profile_with_reload", fake_save_profile_with_reload
+    )
+    monkeypatch.setattr(theme_sync, "save_with_reload", fake_save_with_reload)
+
+    manifest_path = tmp_path / "alacritty.manifest.toml"
+    theme_sync.sync_terminal_with_zellij_theme(
+        zellij_theme_name="dracula",
+        backend=backend,
+        backend_path=ala,
+        zellij_config_path=cfg,
+        manifest_path=manifest_path,
+    )
+    assert len(profile_calls) == 1
+    assert profile_calls[0][2] == ala
+    assert profile_calls[0][3] == manifest_path
+    assert plain_calls == []  # no debe llamar al helper sin manifest
+
+
+def test_sync_falls_back_to_save_with_reload_when_no_manifest_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Sin `manifest_path` (default None), comportamiento clasico: usa
+    `save_with_reload`. Compat con callers que aun no conocen el concepto."""
+    ala = _make_alacritty(tmp_path)
+    cfg = _empty_zellij_config(tmp_path)
+    backend = AlacrittyBackend()
+    profile_calls: list[object] = []
+    plain_calls: list[object] = []
+
+    def fake_save_profile_with_reload(*args, **kwargs):  # noqa: ANN001, ANN003
+        profile_calls.append((args, kwargs))
+        return SaveResult(backup_path=None, reload_ok=True, manual_reload_hint=None)
+
+    def fake_save_with_reload(*args, **kwargs):  # noqa: ANN001, ANN003
+        plain_calls.append((args, kwargs))
+        return SaveResult(backup_path=None, reload_ok=True, manual_reload_hint=None)
+
+    monkeypatch.setattr(
+        theme_sync, "save_profile_with_reload", fake_save_profile_with_reload
+    )
+    monkeypatch.setattr(theme_sync, "save_with_reload", fake_save_with_reload)
+
+    theme_sync.sync_terminal_with_zellij_theme(
+        zellij_theme_name="dracula",
+        backend=backend,
+        backend_path=ala,
+        zellij_config_path=cfg,
+        # manifest_path default = None
+    )
+    assert len(plain_calls) == 1
+    assert profile_calls == []
