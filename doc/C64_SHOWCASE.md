@@ -5,6 +5,10 @@ ZTC-managed terminal settings and a Zellij pane layout. It is a usage
 example, not a new feature: the goal is to show how terminal color,
 padding, pane background and a startup command compose into one look.
 
+The look is saved as a **dedicated terminal profile** (`c64`) so it
+coexists with your everyday configuration — you can switch back at any
+time via **Load**.
+
 ## Result
 
 ![Retro-style terminal showcase running with `bash` plus the C64 banner](screenshots/showcase.png)
@@ -40,6 +44,28 @@ The look works with any monospaced font. Two options:
   3. If `fc-match` prints a different family name, use that name as
      `font.family` in **Terminal settings** below.
 
+## Create the `c64` profile
+
+ZTC keeps each terminal "look" in its own profile file (a `.toml` for
+Alacritty, a `.conf` for Kitty). The first **Save** with a new name
+converts your default config into a *manifest* that imports the active
+profile; subsequent Save / Load operations switch the profile without
+touching the manifest.
+
+For this showcase, save the C64 look as a profile named `c64`:
+
+1. In **Terminal settings**, apply the values from the table below.
+2. Press `s` (Save). The modal is prefilled with your current profile
+   name — change it to `c64.toml` (Alacritty) or `c64.conf` (Kitty)
+   and confirm.
+3. The first time, a second modal appears: *"Convert to manifest — name
+   for the profile with the current settings"*. Accept the default
+   (`default.toml` / `default.conf`); this snapshot lets you switch
+   back to your old look later via **Load** (`l`).
+4. Open **Terminal colors**, set the background, and Save again — the
+   modal is already prefilled with `c64.{toml,conf}`, so Enter saves
+   in-place on the active profile.
+
 ## Terminal settings
 
 In **Terminal settings**, apply the column for the font you picked.
@@ -69,6 +95,16 @@ In **Terminal colors**, set the terminal background to:
 
 This becomes the outer frame color. Accept Kitty's auto-reload prompt
 if it shows up (optional — restarting the terminal works too).
+
+## Switching profiles
+
+Once both the `default` and `c64` profiles exist:
+
+- **Load** (`l`) opens a path prompt — type `default.toml` (or
+  `default.conf`) to return to your everyday look; type `c64.toml` to
+  bring the C64 frame back.
+- **Save** (`s`) with a new name creates yet another profile; with the
+  current name, saves in-place on the active profile.
 
 ## Banner script
 
@@ -177,3 +213,24 @@ pane command="bash" borderless=true {
 
 Save the layout, launch it, and the pane should open with the banner
 and an interactive shell.
+
+## Launching the showcase as a one-shot
+
+Once the `c64` profile and a `c64` Zellij layout exist, you can open
+the showcase in a fresh window without touching your everyday terminal
+session. With Alacritty, the `--config-file` flag points the new window
+at the profile directly:
+
+```bash
+alacritty --config-file ~/.config/alacritty/c64.toml \
+    -e bash -lc "zellij attach -f main5 2>/dev/null || zellij -n c64 -s main5"
+```
+
+`-n c64` creates the session with the `c64` layout; `-s main5` names
+it `main5`; `attach -f` reuses the session if it already exists (the
+`-f` flag re-attaches an existing one without complaint).
+
+Kitty has an equivalent flag (`kitty --config ~/.config/kitty/c64.conf
+zellij ...`); Ghostty exposes `--config-file=...`. These haven't been
+verified end-to-end here, so adapt the command to your shell and
+terminal.

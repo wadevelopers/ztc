@@ -6,6 +6,23 @@ batches. Patch versions are bug-fix-only.
 
 ## Released
 
+- **v1.3.0** — Terminal profiles via Load / Save. The color editor and
+  terminal-settings editor support switchable profiles: **Save** (`s`)
+  opens a modal prefilled with the active profile name, **Load** (`l`)
+  reads a profile from disk and applies it live. Behind the scenes,
+  the first Save with a new name converts the default config
+  (`alacritty.toml` / `kitty.conf`) into a *manifest* that imports the
+  active profile; subsequent saves and loads only rewrite the import
+  line (Alacritty) or `include` line (Kitty), so global directives like
+  `allow_remote_control` and `# ztc:` preferences stay in the manifest
+  and survive profile switches. Live-reload follows: Alacritty picks up
+  the manifest change via its watchdog; Kitty dispatches `kitty @
+  load-config` and, for opacity, an idempotent `set-background-opacity`
+  IPC after every switch. The old `Import` action (which merged colors
+  / settings into the current doc) is gone — the manifest layer is the
+  new merge point. See the rewritten
+  [retro-style terminal showcase](C64_SHOWCASE.md) for an end-to-end
+  walkthrough that uses the new profile flow.
 - **v1.2.0** — Kitty parity. Two things: (1) **Kitty theme + settings
   import** — the color editor and the terminal-settings editor accept
   `i` for import on the Kitty backend, matching Alacritty;
@@ -48,11 +65,11 @@ batches. Patch versions are bug-fix-only.
   to be extended — implementing `TerminalBackend` for a new terminal
   (e.g. Ghostty, WezTerm, Foot) integrates it without touching the
   rest of the code. Fork contributions are welcome.
-- **Reusable file picker.** Theme/settings import and the pane
-  `command` field in the layout editor currently ask for a typed
-  filesystem path. A `FilePickerModal` based on Textual's
-  `DirectoryTree` would replace both with browsing, keeping free
-  text for `$PATH` lookups. Fork contributions welcome.
+- **Reusable file picker.** The `Load` / `Save` flow in the terminal
+  editors and the pane `command` field in the layout editor currently
+  ask for a typed filesystem path. A `FilePickerModal` based on
+  Textual's `DirectoryTree` would replace both with browsing, keeping
+  free text for `$PATH` lookups. Fork contributions welcome.
 
 ## How to propose features or report bugs
 
