@@ -260,12 +260,14 @@ class ThemePickerScreen(Screen[None]):
         backend_path = getattr(self.app, "backend_path", None)
         if backend is None or backend_path is None:
             return
+        manifest_path = getattr(self.app, "backend_manifest_path", None)
         try:
             result = theme_sync.sync_terminal_with_zellij_theme(
                 zellij_theme_name=zellij_name,
                 backend=backend,
                 backend_path=backend_path,
                 zellij_config_path=self.config_path,
+                manifest_path=manifest_path,
             )
         except Exception as exc:  # noqa: BLE001
             self.app.notify(

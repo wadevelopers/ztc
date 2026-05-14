@@ -16,7 +16,7 @@ from ztc.services.colors import (
     is_valid_hex,
     normalize_hex,
 )
-from ztc.services.save_helper import save_with_reload
+from ztc.services.save_helper import save_profile_with_reload, save_with_reload
 from ztc.services.terminals import TerminalBackend
 from ztc.zellij import theme_assets as zta
 from ztc.zellij.user_themes import list_user_themes
@@ -114,11 +114,17 @@ def sync_terminal_with_zellij_theme(
     backend: TerminalBackend,
     backend_path: Path,
     zellij_config_path: Path,
+    manifest_path: Path | None = None,
 ) -> SyncResult:
     """Aplica los colores del tema Zellij dado al archivo de la terminal.
 
     No toca otras secciones del archivo. Solo escribe slots cuyo valor
     cambia. Crea backup si hay cambios efectivos.
+
+    Si `manifest_path` se pasa, el reload usa `save_profile_with_reload`
+    (Kitty necesita leer prefs runtime del manifest, no del perfil). Si
+    es `None`, fallback al `save_with_reload` clasico — compat con
+    callers que aun no conocen el concepto de manifest.
     """
     if not backend_path.exists():
         return SyncResult(
@@ -167,7 +173,12 @@ def sync_terminal_with_zellij_theme(
     if not updated:
         return SyncResult(backup=None, updated={}, skipped_reason="No changes")
 
-    save_result = save_with_reload(backend, doc, backend_path)
+    if manifest_path is not None:
+        save_result = save_profile_with_reload(
+            backend, doc, backend_path, manifest_path
+        )
+    else:
+        save_result = save_with_reload(backend, doc, backend_path)
     return SyncResult(
         backup=save_result.backup_path,
         updated=updated,
