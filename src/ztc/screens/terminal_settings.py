@@ -15,26 +15,19 @@ from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
+from ztc.screens.profile_editing import ProfileEditingMixin
 from ztc.services.fonts import FontFace, list_monospace_fonts, resolve_font_faces
-from ztc.services.profile_io import resolve_profile_path, validate_profile_path
-from ztc.services.save_helper import compose_save_toast, save_profile_with_reload
 from ztc.services.terminals import TerminalBackend
 from ztc.services.terminals.settings import (
     CanonicalSetting,
     SettingKind,
     coerce_setting_value,
 )
-from ztc.widgets.confirm import (
-    ConfirmActionModal,
-    EnumPickerModal,
-    FontPickerModal,
-    PromptModal,
-    UnsavedChangesModal,
-)
+from ztc.widgets.confirm import EnumPickerModal, FontPickerModal, PromptModal
 from ztc.widgets.header import StaticHeader
 
 
-class TerminalSettingsScreen(Screen[None]):
+class TerminalSettingsScreen(ProfileEditingMixin, Screen[None]):
     """Editor de settings (no-color) del backend activo: padding, size,
     opacity, font size, font family, cursor shape.
     """
@@ -229,8 +222,7 @@ class TerminalSettingsScreen(Screen[None]):
                 self.app.notify(f"Invalid: {exc}", severity="error", timeout=6)
                 return
             self.dirty = True
-            self._refresh_header()
-            self._rebuild_list()
+            self._refresh_profile_view()
 
         if setting.kind == SettingKind.ENUM:
             self.app.push_screen(
@@ -288,8 +280,7 @@ class TerminalSettingsScreen(Screen[None]):
         setting = self.settings[option_list.highlighted]
         if self.backend.delete_setting(self.doc, setting):
             self.dirty = True
-            self._refresh_header()
-            self._rebuild_list()
+            self._refresh_profile_view()
             self.app.notify(
                 f"{setting.name} reset (press 's' to save to disk)",
                 severity="information",
@@ -301,246 +292,8 @@ class TerminalSettingsScreen(Screen[None]):
                 severity="information",
             )
 
-    def action_load(self) -> None:
-        """Carga un perfil desde archivo y lo deja como activo: escribe
-        el manifest apuntando al nuevo perfil y aplica al terminal vivo
-        via `set_active_profile`. Si hay cambios sin guardar, pide
-        confirmacion antes (descartarlos perderia trabajo)."""
-        if self.dirty:
-            manifest_path = self.app.backend_manifest_path
-
-            def after_dirty(choice: str | None) -> None:
-                if choice == "discard":
-                    self._prompt_load_profile()
-                elif choice == "save" and manifest_path is not None:
-                    self._save_in_place(manifest_path)
-                    if not self.dirty:
-                        self._prompt_load_profile()
-
-            self.app.push_screen(UnsavedChangesModal(), after_dirty)
-            return
-        self._prompt_load_profile()
-
-    def _prompt_load_profile(self) -> None:
-        manifest_path = self.app.backend_manifest_path
-        if manifest_path is None:
-            return
-
-        def after(path_str: str | None) -> None:
-            if not path_str:
-                return
-            raw = Path(path_str).expanduser()
-            path = raw if raw.is_absolute() else (manifest_path.parent / raw)
-            if not path.exists():
-                self.app.notify(
-                    f"Does not exist: {path}", severity="error", timeout=8
-                )
-                return
-            if path == manifest_path:
-                self.app.notify(
-                    f"Cannot load the manifest file ({manifest_path.name}) "
-                    "as a profile; choose another.",
-                    severity="error",
-                    timeout=8,
-                )
-                return
-            self._do_load(path, manifest_path)
-
-        self.app.push_screen(
-            PromptModal(
-                title="Load profile from file",
-                placeholder=f"filename (next to {manifest_path.name}) or absolute path",
-                confirm_label="Load",
-            ),
-            after,
-        )
-
-    def _do_load(self, path: Path, manifest_path: Path) -> None:
-        """Carga `path` como perfil activo. Si el manifest aun no esta
-        gestionado, lo convierte silenciosamente (backup automatico)."""
-        convert_backup: Path | None = None
-        if not self.backend.is_managed_manifest(manifest_path):
-            try:
-                convert_backup = self.backend.convert_to_manifest(
-                    manifest_path, path
-                )
-            except Exception as exc:  # noqa: BLE001
-                self.app.notify(
-                    f"Convert error: {exc}", severity="error", timeout=10
-                )
-                return
-        try:
-            new_doc = self.backend.load(path)
-        except Exception as exc:  # noqa: BLE001
-            self.app.notify(f"Load error: {exc}", severity="error", timeout=10)
-            return
-        try:
-            self.app.set_active_profile(path)
-        except Exception as exc:  # noqa: BLE001
-            self.app.notify(
-                f"Profile switch error: {exc}", severity="error", timeout=10
-            )
-            return
-        self.doc = new_doc
-        self.backend_path = path
-        self.dirty = False
-        self._refresh_header()
-        self._rebuild_list()
-        msg = f"Loaded {path.name}"
-        if convert_backup is not None:
-            msg += f"  (previous setup: {convert_backup.name})"
-        self.app.notify(msg, severity="information", timeout=6)
-
     def action_reload(self) -> None:
         self.doc = self.backend.load(self.backend_path)
         self.dirty = False
-        self._refresh_header()
-        self._rebuild_list()
+        self._refresh_profile_view()
         self.app.notify("Reloaded from disk.", severity="information")
-
-    def action_save(self) -> None:
-        """Abre Save modal prellenado con el nombre actual.
-        - Enter directo con mismo nombre → save in-place sobre el activo.
-        - Nombre nuevo → save-as: crea archivo, set_active_profile, switch.
-        Si el archivo destino existe y no es el activo, confirma overwrite.
-        Si todavia no hay manifest, dispara G2 antes del save-as."""
-        manifest_path = self.app.backend_manifest_path
-        if manifest_path is None:
-            return
-
-        def after(name: str | None) -> None:
-            if not name:
-                return
-            new_path = resolve_profile_path(name, manifest_path.parent)
-            # Save-in-place sobre el activo: sin validacion. Standalone
-            # (backend_path == manifest_path) cae aca y es OK — save
-            # normal sobre el archivo default sin convertir.
-            if new_path == self.backend_path:
-                self._save_in_place(manifest_path)
-                return
-            # Save al manifest gestionado = "unmanage": volver a standalone.
-            if new_path == manifest_path:
-                self._save_unmanage(manifest_path)
-                return
-            error = validate_profile_path(self.backend, new_path)
-            if error:
-                self.app.notify(error, severity="error", timeout=8)
-                return
-            if new_path.exists():
-                def after_confirm(confirmed: bool | None) -> None:
-                    if confirmed:
-                        self._save_as(new_path, manifest_path)
-                self.app.push_screen(
-                    ConfirmActionModal(
-                        title="Overwrite file?",
-                        message=f"{new_path} already exists.",
-                        confirm_label="Overwrite",
-                    ),
-                    after_confirm,
-                )
-                return
-            self._save_as(new_path, manifest_path)
-
-        self.app.push_screen(
-            PromptModal(
-                title="Save profile",
-                initial=self.backend_path.name,
-                confirm_label="Save",
-            ),
-            after,
-        )
-
-    def _save_in_place(self, manifest_path: Path) -> None:
-        """Save al perfil activo. Usa `save_profile_with_reload` para que
-        en Kitty el reload IPC lea las prefs runtime del manifest."""
-        try:
-            result = save_profile_with_reload(
-                self.backend, self.doc, self.backend_path, manifest_path
-            )
-        except Exception as exc:  # noqa: BLE001
-            self.app.notify(f"Save error: {exc}", severity="error", timeout=10)
-            return
-        self.dirty = False
-        self._refresh_header()
-        self.app.notify(
-            compose_save_toast(self.backend_path.name, result),
-            severity="information",
-            timeout=6,
-        )
-
-    def _save_unmanage(self, manifest_path: Path) -> None:
-        """Volver a standalone: reescribe el manifest con el contenido
-        del doc actual + managed directives preservadas. Quita el marker
-        ztc. El perfil que estaba activo en disco NO se borra."""
-        try:
-            backup = self.backend.unmanage_manifest(manifest_path, self.doc)
-        except Exception as exc:  # noqa: BLE001
-            self.app.notify(f"Save error: {exc}", severity="error", timeout=10)
-            return
-        self.doc = self.backend.load(manifest_path)
-        try:
-            self.app.set_active_profile(manifest_path)
-        except Exception as exc:  # noqa: BLE001
-            self.app.notify(
-                f"Profile switch error: {exc}", severity="error", timeout=10
-            )
-            return
-        self.backend_path = manifest_path
-        self.dirty = False
-        self._refresh_header()
-        msg = f"Saved as {manifest_path.name}"
-        if backup is not None:
-            msg += f"  (previous manifest: {backup.name})"
-        self.app.notify(msg, severity="information", timeout=6)
-
-    def _save_as(self, new_path: Path, manifest_path: Path) -> None:
-        """Save-as a archivo nuevo. Si el manifest aun no esta gestionado,
-        lo convierte silenciosamente (backup automatico) antes del save."""
-        convert_backup: Path | None = None
-        if not self.backend.is_managed_manifest(manifest_path):
-            try:
-                convert_backup = self.backend.convert_to_manifest(
-                    manifest_path, new_path
-                )
-            except Exception as exc:  # noqa: BLE001
-                self.app.notify(
-                    f"Convert error: {exc}", severity="error", timeout=10
-                )
-                return
-        try:
-            self.backend.save(self.doc, new_path)
-        except Exception as exc:  # noqa: BLE001
-            self.app.notify(f"Save error: {exc}", severity="error", timeout=10)
-            return
-        try:
-            self.app.set_active_profile(new_path)
-        except Exception as exc:  # noqa: BLE001
-            self.app.notify(
-                f"Profile switch error: {exc}", severity="error", timeout=10
-            )
-            return
-        self.backend_path = new_path
-        self.dirty = False
-        self._refresh_header()
-        msg = f"Saved as {new_path.name}"
-        if convert_backup is not None:
-            msg += f"  (previous setup: {convert_backup.name})"
-        self.app.notify(msg, severity="information", timeout=6)
-
-    def action_back(self) -> None:
-        if not self.dirty:
-            self.app.pop_screen()
-            return
-        manifest_path = self.app.backend_manifest_path
-
-        def after(choice: str | None) -> None:
-            if choice == "discard":
-                self.app.pop_screen()
-                return
-            if choice == "save" and manifest_path is not None:
-                self._save_in_place(manifest_path)
-                if not self.dirty:
-                    self.app.pop_screen()
-                return
-
-        self.app.push_screen(UnsavedChangesModal(), after)

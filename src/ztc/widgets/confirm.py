@@ -631,7 +631,6 @@ class EditColorModal(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
             yield Static(f"Edit {self._slot_label}", id="title")
-            yield Static("Hex: #rgb, #rrggbb or #rrggbbaa", classes="label")
             yield Input(
                 value=self._initial,
                 placeholder="#1e1e2e",
@@ -679,7 +678,7 @@ class EditColorModal(ModalScreen[str | None]):
         if valid:
             normalized = normalize_hex(value)
             swatch.update(f"[on {normalized}]                              [/]")
-            status.update(f"OK  ->  {normalized}")
+            status.update("")
         else:
             swatch.update("")
             status.update("Invalid format")
