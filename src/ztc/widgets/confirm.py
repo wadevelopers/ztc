@@ -599,6 +599,7 @@ class EditColorModal(ModalScreen[str | None]):
     #title {
         text-style: bold;
         color: $accent;
+        margin-bottom: 1;
     }
     .label {
         color: $text-muted;
@@ -607,9 +608,6 @@ class EditColorModal(ModalScreen[str | None]):
         height: 3;
         margin: 1 0;
         content-align: center middle;
-    }
-    #status {
-        color: $text-muted;
     }
     #buttons {
         align-horizontal: right;
@@ -637,7 +635,6 @@ class EditColorModal(ModalScreen[str | None]):
                 id="hex-input",
             )
             yield Static("", id="swatch")
-            yield Static("", id="status")
             with Horizontal(id="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Apply", id="save", variant="primary", disabled=True)
@@ -674,14 +671,11 @@ class EditColorModal(ModalScreen[str | None]):
         valid = is_valid_hex(value)
         self.query_one("#save", Button).disabled = not valid
         swatch = self.query_one("#swatch", Static)
-        status = self.query_one("#status", Static)
         if valid:
             normalized = normalize_hex(value)
             swatch.update(f"[on {normalized}]                              [/]")
-            status.update("")
         else:
-            swatch.update("")
-            status.update("Invalid format")
+            swatch.update("[red]Invalid format[/]")
 
     def _submit(self) -> None:
         from ztc.services.colors import is_valid_hex, normalize_hex
