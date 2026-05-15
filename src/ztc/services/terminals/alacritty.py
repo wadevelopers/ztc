@@ -205,8 +205,13 @@ class AlacrittyBackend:
         profile_path: Path,
         manifest_path: Path,
     ) -> bool:
-        # Live-reload nativo del manifest dispara al detectar cambio en
-        # el archivo importado.
+        # Alacritty solo vigila el archivo principal (manifest), no los
+        # archivos importados. Si acabamos de guardar un perfil distinto
+        # del manifest, tocar el manifest fuerza a Alacritty a
+        # re-procesarlo y volver a leer el import — sin esto los
+        # cambios solo se aplican al reiniciar la terminal.
+        if profile_path != manifest_path and manifest_path.exists():
+            manifest_path.touch()
         return True
 
     # ---------- settings (window, font, cursor) ----------

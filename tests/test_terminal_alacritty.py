@@ -334,3 +334,66 @@ def test_convert_to_manifest_raises_if_source_missing(tmp_path: Path) -> None:
         backend.convert_to_manifest(
             tmp_path / "missing.toml", tmp_path / "c64.toml"
         )
+
+
+def test_reload_after_profile_save_touches_manifest_when_profile_differs(
+    tmp_path: Path,
+) -> None:
+    """Alacritty solo vigila el manifest, no los imports. Cuando se
+    guarda un perfil distinto del manifest, el reload debe tocar el
+    manifest para forzar a Alacritty a re-procesarlo."""
+    import time as _time
+
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    _write_manifest(manifest, "tincho.toml")
+    profile = tmp_path / "tincho.toml"
+    profile.write_text('[window]\npadding = { x = 10, y = 10 }\n', encoding="utf-8")
+
+    # Forzar mtime conocido en el pasado, así el touch del reload se
+    # nota con resolución de segundos.
+    old_mtime = _time.time() - 60
+    import os as _os
+
+    _os.utime(manifest, (old_mtime, old_mtime))
+    pre_mtime = manifest.stat().st_mtime
+
+    profile_doc = backend.load(profile)
+    assert backend.reload_after_profile_save(profile_doc, profile, manifest) is True
+
+    post_mtime = manifest.stat().st_mtime
+    assert post_mtime > pre_mtime, "manifest mtime should be bumped"
+
+
+def test_reload_after_profile_save_skips_touch_when_profile_is_manifest(
+    tmp_path: Path,
+) -> None:
+    """Si el perfil ES el manifest (caso standalone), no hay que tocar
+    nada — el `backend.save` ya cambió el archivo y Alacritty lo
+    detecta nativamente."""
+    backend = AlacrittyBackend()
+    standalone = tmp_path / "alacritty.toml"
+    standalone.write_text('[window]\nopacity = 0.9\n', encoding="utf-8")
+
+    # No hay nada que verificar en términos de mtime acá (el caller ya
+    # cambió el archivo escribiéndolo); solo aseguramos que el reload
+    # no falla y no crea side effects raros.
+    doc = backend.load(standalone)
+    assert backend.reload_after_profile_save(doc, standalone, standalone) is True
+
+
+def test_reload_after_profile_save_handles_missing_manifest(
+    tmp_path: Path,
+) -> None:
+    """Defensivo: si el manifest no existe (primer save antes de que
+    se cree), no romper."""
+    backend = AlacrittyBackend()
+    profile = tmp_path / "tincho.toml"
+    profile.write_text('[window]\nopacity = 0.9\n', encoding="utf-8")
+    nonexistent_manifest = tmp_path / "alacritty.toml"
+
+    doc = backend.load(profile)
+    assert (
+        backend.reload_after_profile_save(doc, profile, nonexistent_manifest)
+        is True
+    )
