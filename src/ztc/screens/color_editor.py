@@ -10,16 +10,16 @@ from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
+from ztc.screens.profile_editing import ProfileEditingMixin
 from ztc.services import colors
-from ztc.services.save_helper import compose_save_toast, save_with_reload
 from ztc.services.terminals import TerminalBackend
-from ztc.widgets.confirm import EditColorModal, PromptModal
+from ztc.widgets.confirm import EditColorModal
 from ztc.widgets.header import StaticHeader
 from ztc.zellij.config import read_active_theme
 from ztc.zellij.user_themes import list_user_themes
 
 
-class ColorEditorScreen(Screen[None]):
+class ColorEditorScreen(ProfileEditingMixin, Screen[None]):
     """Editor de colores de la terminal activa.
 
     Lista los slots conocidos con sus valores y swatches. Permite editar uno
@@ -31,8 +31,8 @@ class ColorEditorScreen(Screen[None]):
     BINDINGS = [
         Binding("enter", "edit", "Edit"),
         Binding("x", "reset", "Reset slot"),
-        Binding("i", "import", "Import theme"),
         Binding("r", "reload", "Reload"),
+        Binding("l", "load", "Load"),
         Binding("s", "save", "Save"),
         Binding("escape", "back", "Back"),
         # `q` y `ctrl+q` neutralizados: solo `Esc` sale del editor.
@@ -163,12 +163,10 @@ class ColorEditorScreen(Screen[None]):
                 [f"[on {value}]                                                  [/]"] * 3
             )
             swatch_widget.update(big)
-            meta_widget.update(f"Current value: {value}\nEnter to edit.")
+            meta_widget.update(f"Current value: {value}")
         else:
             swatch_widget.update("")
-            meta_widget.update(
-                f"Current value: {value or '(unset)'}\nEnter to set."
-            )
+            meta_widget.update(f"Current value: {value or '(unset)'}")
 
     def _refresh_warnings(self) -> None:
         zellij_bg: str | None = None
@@ -217,9 +215,7 @@ class ColorEditorScreen(Screen[None]):
         slot = self.slots[option_list.highlighted]
         if self.backend.delete_slot(self.doc, slot):
             self.dirty = True
-            self._refresh_header()
-            self._rebuild_list()
-            self._refresh_warnings()
+            self._refresh_profile_view()
             self.app.notify(
                 f"{slot[0]}.{slot[1]} reset (press 's' to save to disk)",
                 severity="information",
@@ -243,96 +239,19 @@ class ColorEditorScreen(Screen[None]):
                 return
             self.backend.write_slot(self.doc, slot, value)
             self.dirty = True
-            self._refresh_header()
-            self._rebuild_list()
-            self._refresh_warnings()
+            self._refresh_profile_view()
 
         self.app.push_screen(
             EditColorModal(slot_label=f"{slot[0]}.{slot[1]}", initial=current),
             after,
         )
 
-    def action_import(self) -> None:
-        # `import_theme_file` esta en la TerminalBackend Protocol; cada
-        # backend lo implementa para su propio formato (`.toml` para
-        # Alacritty, `.conf` para Kitty). No hay cross-backend.
-        backend = self.backend
-
-        def after(path_str: str | None) -> None:
-            if not path_str:
-                return
-            raw = Path(path_str).expanduser()
-            path = raw if raw.is_absolute() else (self.backend_path.parent / raw)
-            try:
-                count = backend.import_theme_file(self.doc, path)
-            except FileNotFoundError:
-                self.app.notify(f"Does not exist: {path}", severity="error", timeout=8)
-                return
-            except Exception as exc:  # noqa: BLE001
-                self.app.notify(f"Import error: {exc}", severity="error", timeout=10)
-                return
-            if count == 0:
-                self.app.notify(
-                    "The file contains no recognized color slots.",
-                    severity="warning",
-                    timeout=8,
-                )
-                return
-            self.dirty = True
-            self._refresh_header()
-            self._rebuild_list()
-            self._refresh_warnings()
-            self.app.notify(
-                f"Imported {count} slot(s) from {path.name}",
-                severity="information",
-                timeout=6,
-            )
-
-        self.app.push_screen(
-            PromptModal(
-                title="Import theme from file",
-                placeholder=f"filename (next to {self.backend_path.name}) or absolute path",
-                confirm_label="Import",
-            ),
-            after,
-        )
-
     def action_reload(self) -> None:
         self.doc = self.backend.load(self.backend_path)
         self.dirty = False
-        self._refresh_header()
-        self._rebuild_list()
-        self._refresh_warnings()
+        self._refresh_profile_view()
         self.app.notify("Reloaded from disk.", severity="information")
 
-    def action_save(self) -> None:
-        try:
-            result = save_with_reload(self.backend, self.doc, self.backend_path)
-        except Exception as exc:  # noqa: BLE001
-            self.app.notify(f"Save error: {exc}", severity="error", timeout=10)
-            return
-        self.dirty = False
-        self._refresh_header()
-        self.app.notify(
-            compose_save_toast(self.backend_path.name, result),
-            severity="information",
-            timeout=6,
-        )
-
-    def action_back(self) -> None:
-        if not self.dirty:
-            self.app.pop_screen()
-            return
-        from ztc.widgets.confirm import UnsavedChangesModal
-
-        def after(choice: str | None) -> None:
-            if choice == "discard":
-                self.app.pop_screen()
-                return
-            if choice == "save":
-                self.action_save()
-                if not self.dirty:
-                    self.app.pop_screen()
-                return
-
-        self.app.push_screen(UnsavedChangesModal(), after)
+    def _refresh_profile_view(self) -> None:
+        super()._refresh_profile_view()
+        self._refresh_warnings()

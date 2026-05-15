@@ -6,6 +6,44 @@ batches. Patch versions are bug-fix-only.
 
 ## Released
 
+- **v1.3.0** — Terminal profiles via Load / Save. The color editor
+  and terminal-settings editor share a Load / Save flow that lets you
+  keep multiple named profiles for the same backend and switch
+  between them live. **Save** (`s`) opens a modal prefilled with the
+  active profile name; **Load** (`l`) reads a profile from disk and
+  applies it. Three internals make it work:
+
+  1. **Manifest layer**. The first Save with a new name silently
+     turns your default config (`alacritty.toml` / `kitty.conf`) into
+     a small manifest that imports the named profile. The previous
+     content is preserved as a content-hashed backup
+     (`<name>.<hash>.bak`) — loadable directly via `l` to roll back.
+     For Kitty, global directives required by ZTC's live-reload
+     (`allow_remote_control`, `listen_on`,
+     `dynamic_background_opacity`) stay in the manifest so they
+     survive profile switches.
+  2. **Round-trip back to standalone**. Saving with the original
+     config filename converts the manifest back to a standalone file
+     with the current profile's contents inline — the user is never
+     trapped in manifest mode.
+  3. **Live-reload**. Alacritty picks up manifest changes via its
+     watchdog. Kitty dispatches `kitty @ load-config` plus an
+     idempotent `set-background-opacity` after every switch. The
+     Alacritty backend also detects the installed Alacritty version
+     and emits the right manifest layout (root `import` for 0.13,
+     `[general].import` for 0.14+) with `~/...` paths so Alacritty
+     resolves them correctly.
+
+  The old `Import` action (which merged colors / settings into the
+  current doc) is gone — the manifest layer is the new merge point.
+  Backup format also changed from timestamped (`.bak.YYYYMMDD-HHMMSS`)
+  to content-hashed (`<name>.<hash8>.bak`): cleaner filter via
+  `*.bak`, idempotent (same content produces the same backup), and
+  the date/time stays on the filesystem mtime where it belongs.
+
+  See the rewritten
+  [retro-style terminal showcase](C64_SHOWCASE.md) for an end-to-end
+  walkthrough that uses the new profile flow.
 - **v1.2.0** — Kitty parity. Two things: (1) **Kitty theme + settings
   import** — the color editor and the terminal-settings editor accept
   `i` for import on the Kitty backend, matching Alacritty;
@@ -48,11 +86,11 @@ batches. Patch versions are bug-fix-only.
   to be extended — implementing `TerminalBackend` for a new terminal
   (e.g. Ghostty, WezTerm, Foot) integrates it without touching the
   rest of the code. Fork contributions are welcome.
-- **Reusable file picker.** Theme/settings import and the pane
-  `command` field in the layout editor currently ask for a typed
-  filesystem path. A `FilePickerModal` based on Textual's
-  `DirectoryTree` would replace both with browsing, keeping free
-  text for `$PATH` lookups. Fork contributions welcome.
+- **Reusable file picker.** The `Load` / `Save` flow in the terminal
+  editors and the pane `command` field in the layout editor currently
+  ask for a typed filesystem path. A `FilePickerModal` based on
+  Textual's `DirectoryTree` would replace both with browsing, keeping
+  free text for `$PATH` lookups. Fork contributions welcome.
 
 ## How to propose features or report bugs
 

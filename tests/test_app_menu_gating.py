@@ -338,9 +338,12 @@ async def test_e2e_kitty_detection_writes_to_real_kitty_conf(tmp_path: Path) -> 
             editor.doc, ("normal", "red")
         ) == "#f7768e"
 
-        # Modificar normal.red en el doc y guardar.
+        # Modificar normal.red en el doc y guardar. action_save abre un
+        # PromptModal prellenado con el nombre actual; Enter confirma.
         editor.backend.write_slot(editor.doc, ("normal", "red"), "#deadbe")
         editor.action_save()
+        await pilot.pause()
+        await pilot.press("enter")
         await pilot.pause()
 
         # El archivo del main refleja el cambio (formato kitty,
@@ -355,7 +358,7 @@ async def test_e2e_kitty_detection_writes_to_real_kitty_conf(tmp_path: Path) -> 
         assert "allow_remote_control yes" in text
         assert "listen_on unix:@ztc-{kitty_pid}" in text
         # El backup se creo (porque el archivo existia).
-        backups = list(tmp_path.glob("kitty.conf.bak.*"))
+        backups = list(tmp_path.glob("kitty.conf.*.bak"))
         assert backups
 
 

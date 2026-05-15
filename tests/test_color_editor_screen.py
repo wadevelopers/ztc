@@ -1,9 +1,11 @@
-"""Tests del ColorEditorScreen.
+"""Tests del flow Load/Save de ColorEditorScreen (Fase F+G).
 
-Inicialmente vacio. Stage A de v1.2.0 (Kitty import parity) agrega los
-primeros tests para el flujo de import: confirma que removido el guard
-`isinstance(AlacrittyBackend)`, el callback de import funciona para
-ambos backends."""
+Cubre:
+- action_save con nombre actual (Enter directo) → save in-place + disk write.
+- action_save validacion: extension equivocada rechazada.
+- action_load happy path: switch + state update.
+- action_load con dirty=True dispara UnsavedChangesModal.
+"""
 
 from __future__ import annotations
 
@@ -12,16 +14,34 @@ from pathlib import Path
 from textual.app import App, ComposeResult
 
 from ztc.screens.color_editor import ColorEditorScreen
-from ztc.services.save_helper import SaveResult
-from ztc.services.terminals.kitty import KittyBackend
+from ztc.services.terminals.alacritty import AlacrittyBackend
 
 
 class _Harness(App[None]):
-    """App minima que monta el screen para testing aislado."""
+    """App minima que monta el screen y expone backend_manifest_path
+    para que las acciones (que consultan `self.app.backend_manifest_path`)
+    no exploten."""
 
-    def __init__(self, screen: ColorEditorScreen) -> None:
+    def __init__(
+        self,
+        screen: ColorEditorScreen,
+        *,
+        manifest_path: Path | None = None,
+    ) -> None:
         super().__init__()
         self._screen = screen
+        # En tests sin manifest separado, manifest_path apunta al mismo
+        # archivo que el perfil activo (caso config standalone).
+        self.backend_manifest_path: Path | None = (
+            manifest_path or screen.backend_path
+        )
+        self.notifications: list[tuple[str, str]] = []
+        # Proxy: set_active_profile no es metodo de App por default; el
+        # screen lo llama via self.app.set_active_profile.
+        self.set_active_profile_calls: list[Path] = []
+
+    def set_active_profile(self, new_profile_path: Path) -> None:
+        self.set_active_profile_calls.append(new_profile_path)
 
     def compose(self) -> ComposeResult:
         return iter([])
@@ -29,117 +49,257 @@ class _Harness(App[None]):
     def on_mount(self) -> None:
         self.push_screen(self._screen)
 
-
-def _kitty_doc(tmp_path: Path, content: str = "") -> Path:
-    p = tmp_path / "kitty.conf"
-    p.write_text(content, encoding="utf-8")
-    return p
-
-
-# ---------- Stage A: import flow para Kitty ----------
+    def notify(self, message: str, **kwargs: object) -> None:  # type: ignore[override]
+        self.notifications.append(
+            (str(message), str(kwargs.get("severity", "information")))
+        )
 
 
-async def test_action_import_works_with_kitty_backend(tmp_path: Path) -> None:
-    """Antes: `action_import` salia early con toast "not supported" para
-    Kitty. Stage A removio el guard — Kitty ahora tiene `import_theme_file`
-    en la Protocol.
-
-    Verificamos que el callback que `action_import` pasa a `push_screen`,
-    al ser invocado con un path source valido, copia color slots al doc."""
-    backend = KittyBackend()
-
-    # Source `.conf` con colores distintos al destino.
-    source = tmp_path / "source.conf"
-    source.write_text(
-        "background #112233\n"
-        "foreground #aabbcc\n"
-        "color1 #ff0000\n",
-        encoding="utf-8",
-    )
-
-    # Doc destino con valores diferentes.
-    dst = _kitty_doc(
-        tmp_path,
-        "background #1e1e2e\nforeground #cdd6f4\ncolor1 #f38ba8\n",
-    )
-    zellij_cfg = tmp_path / "config.kdl"
-    zellij_cfg.write_text("// empty\n", encoding="utf-8")
-
+def _setup_screen(
+    tmp_path: Path, content: str = '[colors.primary]\nbackground = "#000000"\n'
+) -> tuple[ColorEditorScreen, Path, Path]:
+    backend = AlacrittyBackend()
+    path = tmp_path / "alacritty.toml"
+    path.write_text(content, encoding="utf-8")
+    zcfg = tmp_path / "config.kdl"
+    zcfg.write_text("// empty\n", encoding="utf-8")
     screen = ColorEditorScreen(
-        backend=backend, backend_path=dst, zellij_config_path=zellij_cfg
+        backend=backend, backend_path=path, zellij_config_path=zcfg
     )
+    return screen, path, zcfg
+
+
+# ---------- action_save: modal + save in-place ----------
+
+
+async def test_action_save_same_name_saves_in_place(tmp_path: Path) -> None:
+    """Enter directo en el PromptModal (nombre actual prellenado) saves
+    in-place: el archivo en disco refleja el cambio y dirty queda False."""
+    screen, path, _ = _setup_screen(tmp_path)
     app = _Harness(screen)
     async with app.run_test() as pilot:
         await pilot.pause()
-
-        # Monkey-patch ANTES de action_import: el callback se pasa
-        # durante esa llamada via push_screen(modal, callback). Capturamos
-        # ese callback sin que el modal real se levante.
-        captured: list[object] = []
-
-        def fake_push_screen(modal, callback=None, *args, **kwargs):  # noqa: ANN001
-            captured.append(callback)
-
-        original = app.push_screen
-        app.push_screen = fake_push_screen  # type: ignore[assignment]
-        try:
-            screen.action_import()
-            await pilot.pause()
-        finally:
-            app.push_screen = original  # type: ignore[assignment]
-
-        assert len(captured) == 1, "action_import should push exactly one modal"
-        callback = captured[0]
-        assert callback is not None
-
-        # Invocar el callback directamente con el path del source.
-        callback(str(source))
-        await pilot.pause()
-
-        # Color slots importados quedaron en el doc + screen marcado dirty.
-        assert backend.read_slot(screen.doc, ("primary", "background")) == "#112233"
-        assert backend.read_slot(screen.doc, ("primary", "foreground")) == "#aabbcc"
-        assert backend.read_slot(screen.doc, ("normal", "red")) == "#ff0000"
-        assert screen.dirty is True
-
-
-async def test_action_save_uses_save_helper(tmp_path: Path, monkeypatch) -> None:
-    backend = KittyBackend()
-    dst = _kitty_doc(tmp_path, "background #1e1e2e\n")
-    zellij_cfg = tmp_path / "config.kdl"
-    zellij_cfg.write_text("// empty\n", encoding="utf-8")
-    screen = ColorEditorScreen(
-        backend=backend, backend_path=dst, zellij_config_path=zellij_cfg
-    )
-    app = _Harness(screen)
-    result = SaveResult(tmp_path / "kitty.conf.bak", False, "manual hint")
-    calls: list[tuple[object, object, Path]] = []
-    notifications: list[str] = []
-
-    def fake_save_with_reload(backend_arg, doc_arg, path_arg):  # noqa: ANN001
-        calls.append((backend_arg, doc_arg, path_arg))
-        return result
-
-    def fake_compose_save_toast(file_name: str, result_arg: SaveResult) -> str:
-        assert file_name == "kitty.conf"
-        assert result_arg is result
-        return "composed toast"
-
-    monkeypatch.setattr(
-        "ztc.screens.color_editor.save_with_reload",
-        fake_save_with_reload,
-    )
-    monkeypatch.setattr(
-        "ztc.screens.color_editor.compose_save_toast",
-        fake_compose_save_toast,
-    )
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        app.notify = lambda message, **kwargs: notifications.append(message)  # type: ignore[method-assign]
+        # Modificar in-memory y marcar dirty.
+        screen.backend.write_slot(
+            screen.doc, ("primary", "background"), "#abcdef"
+        )
         screen.dirty = True
         screen.action_save()
         await pilot.pause()
+        # PromptModal activo con "alacritty.toml" prellenado. Enter confirma.
+        await pilot.press("enter")
+        await pilot.pause()
+        # Archivo en disco tiene el nuevo color.
+        loaded = screen.backend.load(path)
+        assert (
+            screen.backend.read_slot(loaded, ("primary", "background"))
+            == "#abcdef"
+        )
+        assert screen.dirty is False
 
-    assert calls == [(backend, screen.doc, dst)]
-    assert screen.dirty is False
-    assert notifications == ["composed toast"]
+
+async def test_action_save_rejects_wrong_extension(tmp_path: Path) -> None:
+    """Nombre con extension distinta a .toml rechazado con error toast.
+    El archivo no se escribe."""
+    screen, path, _ = _setup_screen(tmp_path)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.dirty = True
+        screen.action_save()
+        await pilot.pause()
+        # En el modal, escribir un nombre con extension equivocada.
+        from textual.widgets import Input
+
+        inp = app.screen.query_one("#prompt-input", Input)
+        inp.value = "wrong.conf"
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        # Error notify con mensaje de extension.
+        errors = [n for n in app.notifications if n[1] == "error"]
+        assert any(".toml" in msg for msg, _ in errors)
+        # No se creo el archivo wrong.conf.
+        assert not (tmp_path / "wrong.conf").exists()
+
+
+# ---------- action_load: switch profile ----------
+
+
+async def test_action_load_switches_active_profile(tmp_path: Path) -> None:
+    """Load valido en un manifest gestionado: doc actualizado, backend_path
+    asignado al nuevo perfil, set_active_profile invocado en el app."""
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    manifest.write_text(
+        "[ztc]\nmanaged_manifest = true\n\n"
+        '[general]\nimport = ["c64.toml"]\n',
+        encoding="utf-8",
+    )
+    c64 = tmp_path / "c64.toml"
+    c64.write_text(
+        '[colors.primary]\nbackground = "#9190ef"\n', encoding="utf-8"
+    )
+    vga = tmp_path / "vga.toml"
+    vga.write_text(
+        '[colors.primary]\nbackground = "#0000aa"\n', encoding="utf-8"
+    )
+    zcfg = tmp_path / "config.kdl"
+    zcfg.write_text("// empty\n", encoding="utf-8")
+    screen = ColorEditorScreen(
+        backend=backend, backend_path=c64, zellij_config_path=zcfg
+    )
+    app = _Harness(screen, manifest_path=manifest)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.action_load()
+        await pilot.pause()
+        # PromptModal pidiendo path. Escribir "vga.toml" y confirmar.
+        from textual.widgets import Input
+
+        inp = app.screen.query_one("#prompt-input", Input)
+        inp.value = "vga.toml"
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        # set_active_profile invocado con el nuevo path.
+        assert app.set_active_profile_calls == [vga]
+        # Screen state actualizado.
+        assert screen.backend_path == vga
+        assert screen.dirty is False
+        # El doc tiene los slots del nuevo perfil.
+        assert (
+            backend.read_slot(screen.doc, ("primary", "background"))
+            == "#0000aa"
+        )
+
+
+async def test_action_load_dirty_opens_unsaved_changes_modal(tmp_path: Path) -> None:
+    """Con cambios sin guardar, action_load NO abre el PromptModal de path
+    sino el UnsavedChangesModal primero."""
+    from ztc.widgets.confirm import UnsavedChangesModal
+
+    screen, _, _ = _setup_screen(tmp_path)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.dirty = True
+        screen.action_load()
+        await pilot.pause()
+        assert isinstance(app.screen, UnsavedChangesModal)
+
+
+async def test_action_load_nonexistent_file_shows_error(tmp_path: Path) -> None:
+    """Path que no existe → error toast, sin tocar state."""
+    screen, _, _ = _setup_screen(tmp_path)
+    app = _Harness(screen)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.action_load()
+        await pilot.pause()
+        from textual.widgets import Input
+
+        inp = app.screen.query_one("#prompt-input", Input)
+        inp.value = "missing.toml"
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        errors = [n for n in app.notifications if n[1] == "error"]
+        assert any("Does not exist" in msg for msg, _ in errors)
+        # set_active_profile NO se llamo.
+        assert app.set_active_profile_calls == []
+
+
+async def test_action_load_rejects_manifest_path_as_profile(tmp_path: Path) -> None:
+    """Guard contra auto-referencia: cargar el manifest mismo como perfil
+    crearia `include kitty.conf` dentro de `kitty.conf` → recursion al
+    reload. Debe rechazar con error toast claro."""
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    manifest.write_text(
+        "[ztc]\nmanaged_manifest = true\n\n"
+        '[general]\nimport = ["c64.toml"]\n',
+        encoding="utf-8",
+    )
+    c64 = tmp_path / "c64.toml"
+    c64.write_text(
+        '[colors.primary]\nbackground = "#9190ef"\n', encoding="utf-8"
+    )
+    zcfg = tmp_path / "config.kdl"
+    zcfg.write_text("// empty\n", encoding="utf-8")
+    screen = ColorEditorScreen(
+        backend=backend, backend_path=c64, zellij_config_path=zcfg
+    )
+    app = _Harness(screen, manifest_path=manifest)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.action_load()
+        await pilot.pause()
+        from textual.widgets import Input
+
+        inp = app.screen.query_one("#prompt-input", Input)
+        inp.value = "alacritty.toml"  # mismo nombre que el manifest
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        errors = [n for n in app.notifications if n[1] == "error"]
+        assert any("manifest" in msg.lower() for msg, _ in errors)
+        # No se llamo set_active_profile.
+        assert app.set_active_profile_calls == []
+        # State NO cambio.
+        assert screen.backend_path == c64
+
+
+async def test_action_save_to_manifest_unmanages(tmp_path: Path) -> None:
+    """Save con el nombre del manifest sobre un manifest gestionado =
+    unmanage: el manifest se reescribe con el contenido del perfil
+    activo + managed directives, y vuelve a ser standalone. Backup
+    automatico. backend_path pasa a apuntar al manifest. El archivo del
+    perfil viejo NO se borra."""
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    manifest.write_text(
+        "[ztc]\nmanaged_manifest = true\n\n"
+        '[general]\nimport = ["c64.toml"]\n',
+        encoding="utf-8",
+    )
+    c64 = tmp_path / "c64.toml"
+    c64.write_text(
+        '[colors.primary]\nbackground = "#9190ef"\n', encoding="utf-8"
+    )
+    zcfg = tmp_path / "config.kdl"
+    zcfg.write_text("// empty\n", encoding="utf-8")
+    screen = ColorEditorScreen(
+        backend=backend, backend_path=c64, zellij_config_path=zcfg
+    )
+    app = _Harness(screen, manifest_path=manifest)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen.action_save()
+        await pilot.pause()
+        from textual.widgets import Input
+
+        inp = app.screen.query_one("#prompt-input", Input)
+        inp.value = "alacritty.toml"  # nombre del manifest
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        # set_active_profile invocado con el manifest path (sync state).
+        assert app.set_active_profile_calls == [manifest]
+        # State actualizado.
+        assert screen.backend_path == manifest
+        assert screen.dirty is False
+        # Manifest ya no es gestionado: vuelve a standalone con los
+        # colores del perfil activo adentro.
+        assert backend.is_managed_manifest(manifest) is False
+        manifest_text = manifest.read_text(encoding="utf-8")
+        assert "#9190ef" in manifest_text  # color del perfil viejo
+        assert "managed_manifest" not in manifest_text
+        # Backup del manifest viejo creado.
+        backups = list(tmp_path.glob("alacritty.toml.*.bak"))
+        assert backups
+        # Archivo del perfil viejo NO borrado.
+        assert c64.exists()
+        # Toast menciona el backup.
+        info = [n for n in app.notifications if n[1] == "information"]
+        assert any("previous manifest" in msg for msg, _ in info)

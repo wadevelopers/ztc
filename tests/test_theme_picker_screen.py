@@ -125,7 +125,7 @@ async def test_theme_picker_apply_writes_config(tmp_path: Path) -> None:
         assert 'theme "dracula"' in text
         assert 'theme "custom_dark"' not in text
         # Backup creado.
-        backups = list(paths.zellij_config.parent.glob("config.kdl.bak.*"))
+        backups = list(paths.zellij_config.parent.glob("config.kdl.*.bak"))
         assert backups
 
 

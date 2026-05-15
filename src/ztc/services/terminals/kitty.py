@@ -42,7 +42,6 @@ from pathlib import Path
 from ztc.services.atomic import write_atomic
 from ztc.services.backups import make_backup
 from ztc.services.colors import CanonicalSlot
-from ztc.services.terminals import default_import_theme_file
 from ztc.services.terminals.settings import (
     SETTINGS,
     CanonicalSetting,
@@ -53,6 +52,13 @@ from ztc.services.terminals.settings import (
 # Profundidad maxima para expandir `include`. Evita loops por
 # circular includes y tambien acota el costo de parsing.
 _MAX_INCLUDE_DEPTH = 5
+
+# Directivas que pertenecen al manifest (no al perfil): son globales para
+# la instancia Kitty. Si vivieran en el perfil, cambiar de perfil
+# romperia el remote-control y los reloads IPC.
+_MANAGED_DIRECTIVE_KEYS: frozenset[str] = frozenset(
+    {"allow_remote_control", "listen_on", "dynamic_background_opacity"}
+)
 
 # Mapping canonico -> nombre de key en kitty.conf.
 _CANONICAL_TO_KITTY: dict[CanonicalSlot, str] = {
@@ -408,6 +414,206 @@ class KittyBackend:
     def manual_reload_hint(self) -> str:
         return "Restart Kitty, or press Ctrl+Shift+F5 for settings that support live reload."
 
+    # ---------- perfiles intercambiables (manifest + profile switching) ----------
+
+    def is_managed_manifest(self, path: Path) -> bool:
+        if not path.exists():
+            return False
+        doc = self.load(path)
+        return bool(_read_ztc_dict(doc).get("managed_manifest", False))
+
+    def read_active_profile(self, manifest_path: Path) -> Path | None:
+        if not self.is_managed_manifest(manifest_path):
+            return None
+        doc = self.load(manifest_path)
+        for line in doc.lines:
+            parsed = _parse_line(line)
+            if parsed is not None and parsed[0] == "include":
+                target = Path(parsed[1].strip())
+                if not target.is_absolute():
+                    target = manifest_path.parent / target
+                return target
+        return None
+
+    def write_active_profile(
+        self, manifest_path: Path, profile_path: Path
+    ) -> None:
+        doc = self.load(manifest_path)
+        import_value = (
+            profile_path.name
+            if profile_path.parent == manifest_path.parent
+            else str(profile_path)
+        )
+        replaced = False
+        for i, line in enumerate(doc.lines):
+            parsed = _parse_line(line)
+            if parsed is not None and parsed[0] == "include":
+                doc.lines[i] = f"include {import_value}"
+                replaced = True
+                break
+        if not replaced:
+            doc.lines.append(f"include {import_value}")
+        write_atomic(manifest_path, doc.to_text())
+
+    def unmanage_manifest(
+        self, manifest_path: Path, profile_doc: KittyDoc
+    ) -> Path | None:
+        """Reescribe `manifest_path` con el contenido del `profile_doc` +
+        las managed directives del manifest viejo + `# ztc:` line sin
+        `managed_manifest`. Si el dict ztc queda vacio tras quitar la
+        key, no se escribe la linea."""
+        if not self.is_managed_manifest(manifest_path):
+            return None
+        backup = make_backup(manifest_path)
+        old_manifest = self.load(manifest_path)
+
+        # Extraer managed directives y JSON ztc (sin managed_manifest).
+        managed_lines: list[str] = []
+        ztc_dict: dict[str, object] = {}
+        for line in old_manifest.lines:
+            if _ZTC_PREF_RE.match(line):
+                parsed = _parse_ztc_line(line)
+                if parsed:
+                    ztc_dict.update(parsed)
+                continue
+            parsed = _parse_line(line)
+            if parsed is not None and parsed[0] in _MANAGED_DIRECTIVE_KEYS:
+                managed_lines.append(line)
+
+        ztc_dict.pop("managed_manifest", None)
+
+        new_lines = list(profile_doc.lines) + managed_lines
+        if ztc_dict:
+            new_lines.append("# ztc:" + json.dumps(ztc_dict, sort_keys=True))
+
+        new_doc = KittyDoc(path=manifest_path, lines=new_lines)
+        write_atomic(manifest_path, new_doc.to_text())
+        return backup
+
+    def convert_to_manifest(
+        self, manifest_path: Path, active_profile: Path
+    ) -> Path | None:
+        """Backup del archivo original + reescribe como manifest. El
+        manifest preserva las managed directives (`allow_remote_control`,
+        `listen_on`, `dynamic_background_opacity`) y la linea `# ztc:{...}`
+        existente, agregando `managed_manifest: true` al JSON. El resto
+        del contenido (colors, font_size, includes propios) se descarta
+        del manifest — queda solo en el backup. Caller responsable de
+        que `active_profile` exista en disco."""
+        if not manifest_path.exists():
+            raise FileNotFoundError(manifest_path)
+        backup = make_backup(manifest_path)
+        doc = self.load(manifest_path)
+
+        # Recolectar lo que SI va al manifest: managed directives y JSON
+        # ztc (con `managed_manifest` agregado). El resto se descarta.
+        manifest_managed: list[str] = []
+        ztc_dict: dict[str, object] = {}
+        for line in doc.lines:
+            if _ZTC_PREF_RE.match(line):
+                parsed = _parse_ztc_line(line)
+                if parsed:
+                    ztc_dict.update(parsed)
+                continue
+            parsed = _parse_line(line)
+            if parsed is not None and parsed[0] in _MANAGED_DIRECTIVE_KEYS:
+                manifest_managed.append(line)
+
+        ztc_dict["managed_manifest"] = True
+        ztc_marker = "# ztc:" + json.dumps(ztc_dict, sort_keys=True)
+        import_value = (
+            active_profile.name
+            if active_profile.parent == manifest_path.parent
+            else str(active_profile)
+        )
+
+        manifest_doc = KittyDoc(
+            path=manifest_path,
+            lines=[ztc_marker, f"include {import_value}"] + manifest_managed,
+        )
+        write_atomic(manifest_path, manifest_doc.to_text())
+        return backup
+
+    def reload_after_profile_switch(
+        self, manifest_path: Path, new_profile_path: Path
+    ) -> bool:
+        manifest_doc = self.load(manifest_path)
+        target = os.environ.get("KITTY_LISTEN_ON")
+        current_instance = _current_kitty_instance_marker()
+        pending_instance = read_ztc_pref(manifest_doc, "remote_control_pending_instance")
+        if (
+            not target
+            and current_instance is not None
+            and pending_instance == current_instance
+        ):
+            return False
+        if not target and is_remote_control_disabled(read_remote_control(manifest_doc)):
+            return False
+        # Opacity efectiva post-switch: leida desde manifest + includes resueltos
+        # (el manifest ya apunta al nuevo perfil cuando este metodo se invoca).
+        opacity = self.read_setting(manifest_doc, SETTINGS["window.opacity"])
+        for binary in ("kitty", "kitten"):
+            if not _run_kitty_remote_command(
+                binary,
+                target,
+                ["load-config"],
+                no_response_without_target=True,
+            ):
+                continue
+            # Siempre disparar set-background-opacity si la opacity efectiva
+            # es float: idempotente si no cambio, necesario si cambio.
+            if not isinstance(opacity, float):
+                return True
+            if _run_kitty_remote_command(
+                binary,
+                target,
+                ["set-background-opacity", str(opacity)],
+            ):
+                return True
+        return False
+
+    def reload_after_profile_save(
+        self,
+        profile_doc: KittyDoc,
+        profile_path: Path,
+        manifest_path: Path,
+    ) -> bool:
+        # Las prefs runtime (allow_remote_control, listen_on,
+        # remote_control_pending_instance) viven en el manifest, no en el
+        # perfil. Sin leer el manifest, los checks de remote control fallan
+        # y reload retorna False aunque el IPC este disponible.
+        manifest_doc = self.load(manifest_path)
+        target = os.environ.get("KITTY_LISTEN_ON")
+        current_instance = _current_kitty_instance_marker()
+        pending_instance = read_ztc_pref(manifest_doc, "remote_control_pending_instance")
+        if (
+            not target
+            and current_instance is not None
+            and pending_instance == current_instance
+        ):
+            return False
+        if not target and is_remote_control_disabled(read_remote_control(manifest_doc)):
+            return False
+        opacity_changed = "window.opacity" in profile_doc.changed_settings
+        opacity = self.read_setting(profile_doc, SETTINGS["window.opacity"])
+        for binary in ("kitty", "kitten"):
+            if not _run_kitty_remote_command(
+                binary,
+                target,
+                ["load-config"],
+                no_response_without_target=True,
+            ):
+                continue
+            if not opacity_changed or not isinstance(opacity, float):
+                return True
+            if _run_kitty_remote_command(
+                binary,
+                target,
+                ["set-background-opacity", str(opacity)],
+            ):
+                return True
+        return False
+
     def _effective_entries(self, doc: KittyDoc) -> list[_Entry]:
         return _linearize(doc.path, doc.lines, in_main=True)
 
@@ -455,9 +661,6 @@ class KittyBackend:
             return False
         del doc.lines[idx]
         return True
-
-    def import_theme_file(self, doc: KittyDoc, source_path: Path) -> int:
-        return default_import_theme_file(self, doc, source_path)
 
     # ---------- settings (window, font, cursor) ----------
 

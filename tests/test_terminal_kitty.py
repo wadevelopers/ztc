@@ -544,86 +544,6 @@ def test_registry_resolves_kitty_backend() -> None:
     assert isinstance(backend, KittyBackend)
 
 
-# ---------- import_theme_file ----------
-
-
-def test_import_theme_file_copies_color_slots(tmp_path: Path) -> None:
-    """Crea un .conf source con colores distintos a los del fixture y
-    los mergea sobre el doc destino. Los slots quedan con los valores
-    del source."""
-    backend = KittyBackend()
-    dst = _copy_fixture(tmp_path)
-    doc = backend.load(dst)
-
-    source = tmp_path / "theme.conf"
-    source.write_text(
-        "background #112233\n"
-        "foreground #aabbcc\n"
-        "color1 #ff0000\n",
-        encoding="utf-8",
-    )
-
-    count = backend.import_theme_file(doc, source)
-
-    assert count == 3
-    assert backend.read_slot(doc, ("primary", "background")) == "#112233"
-    assert backend.read_slot(doc, ("primary", "foreground")) == "#aabbcc"
-    assert backend.read_slot(doc, ("normal", "red")) == "#ff0000"
-
-
-def test_import_theme_file_skips_invalid_hex(tmp_path: Path) -> None:
-    """Source con valores invalidos (texto basura, hex incompleto):
-    esos slots se ignoran, los validos se aplican."""
-    backend = KittyBackend()
-    dst = _copy_fixture(tmp_path)
-    doc = backend.load(dst)
-
-    bg_before = backend.read_slot(doc, ("primary", "background"))
-
-    source = tmp_path / "theme.conf"
-    source.write_text(
-        "background not-a-color\n"
-        "foreground #abcabc\n"
-        "color1 #zzz\n",
-        encoding="utf-8",
-    )
-
-    count = backend.import_theme_file(doc, source)
-
-    assert count == 1
-    # Solo foreground se importa.
-    assert backend.read_slot(doc, ("primary", "foreground")) == "#abcabc"
-    # background se preserva (no fue sobreescrito por valor invalido).
-    assert backend.read_slot(doc, ("primary", "background")) == bg_before
-
-
-def test_import_theme_file_raises_on_missing_source(tmp_path: Path) -> None:
-    """Source que no existe: FileNotFoundError. Espejo de Alacritty."""
-    backend = KittyBackend()
-    dst = _copy_fixture(tmp_path)
-    doc = backend.load(dst)
-
-    missing = tmp_path / "nonexistent.conf"
-    with pytest.raises(FileNotFoundError):
-        backend.import_theme_file(doc, missing)
-
-
-def test_import_theme_file_returns_zero_when_no_color_slots(tmp_path: Path) -> None:
-    """Source sin entradas reconocibles: count = 0, doc intacto."""
-    backend = KittyBackend()
-    dst = _copy_fixture(tmp_path)
-    doc = backend.load(dst)
-    fg_before = backend.read_slot(doc, ("primary", "foreground"))
-
-    source = tmp_path / "theme.conf"
-    source.write_text("# nothing useful\nfont_family Arial\n", encoding="utf-8")
-
-    count = backend.import_theme_file(doc, source)
-
-    assert count == 0
-    assert backend.read_slot(doc, ("primary", "foreground")) == fg_before
-
-
 # ---------- remote control / listen_on helpers ----------
 
 
@@ -982,3 +902,268 @@ def test_reload_after_save_catches_file_not_found(
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     assert KittyBackend().reload_after_save(doc, path) is False
+
+
+# ---------- perfiles intercambiables (manifest + profile switching) ----------
+
+
+def _write_kitty_manifest(
+    path: Path, profile_name: str, *, with_directives: bool = True
+) -> None:
+    """Helper: crea un manifest gestionado apuntando a `profile_name`.
+    Si `with_directives` es True, agrega managed directives (caso post
+    `convert_to_manifest`)."""
+    lines = ['# ztc:{"managed_manifest": true}', f"include {profile_name}"]
+    if with_directives:
+        lines += [
+            "allow_remote_control yes",
+            "listen_on unix:@ztc-{kitty_pid}",
+            "dynamic_background_opacity yes",
+        ]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_is_managed_manifest_false_for_include_without_marker(tmp_path: Path) -> None:
+    """Una config con `include theme.conf` pero sin `managed_manifest: true`
+    NO se trata como manifest. Cubre el bloqueante de la review: existing
+    user configs con includes propios no deben ser apropiadas por ztc."""
+    path = tmp_path / "kitty.conf"
+    path.write_text("include theme.conf\n", encoding="utf-8")
+    assert KittyBackend().is_managed_manifest(path) is False
+
+
+def test_is_managed_manifest_false_for_missing_file(tmp_path: Path) -> None:
+    assert KittyBackend().is_managed_manifest(tmp_path / "missing.conf") is False
+
+
+def test_is_managed_manifest_true_with_marker(tmp_path: Path) -> None:
+    path = tmp_path / "kitty.conf"
+    _write_kitty_manifest(path, "c64.conf")
+    assert KittyBackend().is_managed_manifest(path) is True
+
+
+def test_read_active_profile_returns_none_when_not_manifest(tmp_path: Path) -> None:
+    path = tmp_path / "kitty.conf"
+    path.write_text("include theme.conf\n", encoding="utf-8")
+    assert KittyBackend().read_active_profile(path) is None
+
+
+def test_read_active_profile_returns_first_include(tmp_path: Path) -> None:
+    path = tmp_path / "kitty.conf"
+    _write_kitty_manifest(path, "c64.conf")
+    assert KittyBackend().read_active_profile(path) == tmp_path / "c64.conf"
+
+
+def test_write_active_profile_replaces_include_preserves_marker(
+    tmp_path: Path,
+) -> None:
+    """`write_active_profile` reemplaza la linea `include` pero deja el
+    marker `# ztc:{...}` y las managed directives intactas."""
+    backend = KittyBackend()
+    manifest = tmp_path / "kitty.conf"
+    _write_kitty_manifest(manifest, "c64.conf")
+    backend.write_active_profile(manifest, tmp_path / "vga.conf")
+    text = manifest.read_text(encoding="utf-8")
+    assert "include vga.conf" in text
+    assert "include c64.conf" not in text
+    assert '"managed_manifest": true' in text
+    assert "allow_remote_control yes" in text
+    assert "listen_on unix:@ztc-{kitty_pid}" in text
+
+
+def test_convert_to_manifest_preserves_managed_directives(tmp_path: Path) -> None:
+    """Manifest conserva managed directives + `# ztc:{...}`. Colors,
+    font_size, includes propios, comentarios: se descartan del manifest
+    — quedan solo en el backup. El caller crea active_profile aparte."""
+    backend = KittyBackend()
+    path = tmp_path / "kitty.conf"
+    path.write_text(
+        "# user comment\n"
+        "background #000000\n"
+        "foreground #ffffff\n"
+        "font_size 14.0\n"
+        "include user_theme.conf\n"
+        "allow_remote_control yes\n"
+        "listen_on unix:@ztc-{kitty_pid}\n"
+        "dynamic_background_opacity yes\n"
+        '# ztc:{"remote_control_pending_instance": "pid:1234"}\n',
+        encoding="utf-8",
+    )
+    active = tmp_path / "tokyo.conf"
+    backup = backend.convert_to_manifest(path, active)
+    assert backup is not None
+
+    manifest_text = path.read_text(encoding="utf-8")
+    backup_text = backup.read_text(encoding="utf-8")
+
+    # Manifest conserva managed directives.
+    assert "allow_remote_control yes" in manifest_text
+    assert "listen_on unix:@ztc-{kitty_pid}" in manifest_text
+    assert "dynamic_background_opacity yes" in manifest_text
+    # Marker ztc con managed_manifest + remote_control_pending_instance
+    # preservado del original.
+    assert '"managed_manifest": true' in manifest_text
+    assert '"remote_control_pending_instance": "pid:1234"' in manifest_text
+    # Manifest apunta al active_profile (no creado por convert).
+    assert "include tokyo.conf" in manifest_text
+    assert not active.exists()  # caller es responsable de crearlo
+    # Colors/font_size/includes propios: NO estan en el manifest.
+    assert "background #000000" not in manifest_text
+    assert "font_size 14.0" not in manifest_text
+    assert "include user_theme.conf" not in manifest_text
+    assert "# user comment" not in manifest_text
+
+    # Backup preserva el contenido original VERBATIM.
+    assert "background #000000" in backup_text
+    assert "font_size 14.0" in backup_text
+    assert "include user_theme.conf" in backup_text
+    assert "# user comment" in backup_text
+
+
+def test_convert_to_manifest_raises_if_source_missing(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        KittyBackend().convert_to_manifest(
+            tmp_path / "missing.conf", tmp_path / "c64.conf"
+        )
+
+
+def test_write_ztc_pref_preserves_managed_manifest_key(tmp_path: Path) -> None:
+    """Al escribir una nueva pref (p.ej. `remote_control_pending_instance`),
+    `managed_manifest` debe sobrevivir en el JSON merged."""
+    path = tmp_path / "kitty.conf"
+    path.write_text(
+        '# ztc:{"managed_manifest": true, "remote_control_modal": "dismissed"}\n',
+        encoding="utf-8",
+    )
+    backend = KittyBackend()
+    doc = backend.load(path)
+    write_ztc_pref(doc, "remote_control_pending_instance", "pid:9999")
+    # Tres keys: las dos viejas + la nueva.
+    assert read_ztc_pref(doc, "managed_manifest") is True
+    assert read_ztc_pref(doc, "remote_control_modal") == "dismissed"
+    assert read_ztc_pref(doc, "remote_control_pending_instance") == "pid:9999"
+
+
+def test_save_profile_with_reload_reads_runtime_prefs_from_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Sin pasar el manifest, el reload de Kitty bailearia al no encontrar
+    `allow_remote_control` en el doc del perfil. Con manifest_path, lee
+    de ahi y dispara el IPC."""
+    from ztc.services.save_helper import save_profile_with_reload
+
+    backend = KittyBackend()
+    manifest_path = tmp_path / "kitty.conf"
+    _write_kitty_manifest(manifest_path, "c64.conf")
+    profile_path = tmp_path / "c64.conf"
+    profile_path.write_text(
+        "background #000000\nforeground #ffffff\n", encoding="utf-8"
+    )
+    profile_doc = backend.load(profile_path)
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setenv("KITTY_LISTEN_ON", "unix:@ztc-1")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = save_profile_with_reload(
+        backend, profile_doc, profile_path, manifest_path
+    )
+    assert result.reload_ok is True
+    # El IPC se dispara (no bailea por ausencia de remote control en el
+    # profile_doc).
+    assert calls == [
+        ["kitty", "@", "--to", "unix:@ztc-1", "load-config"],
+    ]
+
+
+def test_reload_after_profile_switch_dispatches_opacity_when_float(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """`reload_after_profile_switch` SIEMPRE dispara `set-background-opacity`
+    si la opacity efectiva post-switch es float (idempotente). Necesario
+    porque cambiar de perfil puede mover la opacity sin que `changed_settings`
+    lo marque."""
+    backend = KittyBackend()
+    manifest_path = tmp_path / "kitty.conf"
+    _write_kitty_manifest(manifest_path, "c64.conf")
+    profile_path = tmp_path / "c64.conf"
+    profile_path.write_text(
+        "background_opacity 0.7\nbackground #000000\n", encoding="utf-8"
+    )
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setenv("KITTY_LISTEN_ON", "unix:@ztc-1")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert backend.reload_after_profile_switch(manifest_path, profile_path) is True
+    assert calls == [
+        ["kitty", "@", "--to", "unix:@ztc-1", "load-config"],
+        ["kitty", "@", "--to", "unix:@ztc-1", "set-background-opacity", "0.7"],
+    ]
+
+
+def test_reload_after_profile_switch_only_load_config_when_opacity_unset(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Si la opacity efectiva no esta seteada (o no parsea como float),
+    solo `load-config`, sin `set-background-opacity`."""
+    backend = KittyBackend()
+    manifest_path = tmp_path / "kitty.conf"
+    _write_kitty_manifest(manifest_path, "c64.conf")
+    profile_path = tmp_path / "c64.conf"
+    profile_path.write_text("background #000000\n", encoding="utf-8")
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setenv("KITTY_LISTEN_ON", "unix:@ztc-1")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert backend.reload_after_profile_switch(manifest_path, profile_path) is True
+    assert calls == [
+        ["kitty", "@", "--to", "unix:@ztc-1", "load-config"],
+    ]
+
+
+def test_reload_after_profile_switch_skips_when_remote_control_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Si el manifest no tiene `allow_remote_control yes` y no hay
+    `KITTY_LISTEN_ON`, el reload bailea sin disparar IPC."""
+    backend = KittyBackend()
+    manifest_path = tmp_path / "kitty.conf"
+    # Manifest SIN managed directives.
+    _write_kitty_manifest(manifest_path, "c64.conf", with_directives=False)
+    profile_path = tmp_path / "c64.conf"
+    profile_path.write_text("background #000000\n", encoding="utf-8")
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.delenv("KITTY_LISTEN_ON", raising=False)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert (
+        backend.reload_after_profile_switch(manifest_path, profile_path) is False
+    )
+    assert calls == []

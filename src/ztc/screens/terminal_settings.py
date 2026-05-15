@@ -15,8 +15,8 @@ from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
+from ztc.screens.profile_editing import ProfileEditingMixin
 from ztc.services.fonts import FontFace, list_monospace_fonts, resolve_font_faces
-from ztc.services.save_helper import compose_save_toast, save_with_reload
 from ztc.services.terminals import TerminalBackend
 from ztc.services.terminals.settings import (
     CanonicalSetting,
@@ -27,7 +27,7 @@ from ztc.widgets.confirm import EnumPickerModal, FontPickerModal, PromptModal
 from ztc.widgets.header import StaticHeader
 
 
-class TerminalSettingsScreen(Screen[None]):
+class TerminalSettingsScreen(ProfileEditingMixin, Screen[None]):
     """Editor de settings (no-color) del backend activo: padding, size,
     opacity, font size, font family, cursor shape.
     """
@@ -35,8 +35,8 @@ class TerminalSettingsScreen(Screen[None]):
     BINDINGS = [
         Binding("enter", "edit", "Edit"),
         Binding("x", "reset", "Reset"),
-        Binding("i", "import", "Import"),
         Binding("r", "reload", "Reload"),
+        Binding("l", "load", "Load"),
         Binding("s", "save", "Save"),
         Binding("escape", "back", "Back"),
         # `q` y `ctrl+q` neutralizados: solo `Esc` sale del editor.
@@ -222,8 +222,7 @@ class TerminalSettingsScreen(Screen[None]):
                 self.app.notify(f"Invalid: {exc}", severity="error", timeout=6)
                 return
             self.dirty = True
-            self._refresh_header()
-            self._rebuild_list()
+            self._refresh_profile_view()
 
         if setting.kind == SettingKind.ENUM:
             self.app.push_screen(
@@ -281,8 +280,7 @@ class TerminalSettingsScreen(Screen[None]):
         setting = self.settings[option_list.highlighted]
         if self.backend.delete_setting(self.doc, setting):
             self.dirty = True
-            self._refresh_header()
-            self._rebuild_list()
+            self._refresh_profile_view()
             self.app.notify(
                 f"{setting.name} reset (press 's' to save to disk)",
                 severity="information",
@@ -294,98 +292,8 @@ class TerminalSettingsScreen(Screen[None]):
                 severity="information",
             )
 
-    def action_import(self) -> None:
-        # Settings import via load + read_setting/write_setting (todo
-        # protocol, agnostico de backend). Mismo backend, no cross-backend
-        # — la lectura solo entiende el formato propio.
-        backend = self.backend
-
-        def after(path_str: str | None) -> None:
-            if not path_str:
-                return
-            raw = Path(path_str).expanduser()
-            path = raw if raw.is_absolute() else (self.backend_path.parent / raw)
-            if not path.exists():
-                self.app.notify(f"Does not exist: {path}", severity="error", timeout=8)
-                return
-            try:
-                source = backend.load(path)
-            except Exception as exc:  # noqa: BLE001
-                self.app.notify(f"Load error: {exc}", severity="error", timeout=10)
-                return
-            count = 0
-            for setting in self.settings:
-                value = backend.read_setting(source, setting)
-                if value is None:
-                    continue
-                try:
-                    backend.write_setting(self.doc, setting, value)
-                except ValueError:
-                    continue
-                count += 1
-            if count == 0:
-                self.app.notify(
-                    "The file contains no recognized settings.",
-                    severity="warning",
-                    timeout=8,
-                )
-                return
-            self.dirty = True
-            self._refresh_header()
-            self._rebuild_list()
-            self.app.notify(
-                f"Imported {count} setting(s) from {path.name}",
-                severity="information",
-                timeout=6,
-            )
-
-        self.app.push_screen(
-            PromptModal(
-                title="Import settings from file",
-                placeholder=f"filename (next to {self.backend_path.name}) or absolute path",
-                confirm_label="Import",
-            ),
-            after,
-        )
-
     def action_reload(self) -> None:
         self.doc = self.backend.load(self.backend_path)
         self.dirty = False
-        self._refresh_header()
-        self._rebuild_list()
+        self._refresh_profile_view()
         self.app.notify("Reloaded from disk.", severity="information")
-
-    def action_save(self) -> None:
-        try:
-            result = save_with_reload(self.backend, self.doc, self.backend_path)
-        except Exception as exc:  # noqa: BLE001
-            self.app.notify(f"Save error: {exc}", severity="error", timeout=10)
-            return
-        self.dirty = False
-        self._refresh_header()
-        self.app.notify(
-            compose_save_toast(self.backend_path.name, result),
-            severity="information",
-            timeout=6,
-        )
-
-    def action_back(self) -> None:
-        if not self.dirty:
-            self.app.pop_screen()
-            return
-        from ztc.widgets.confirm import UnsavedChangesModal
-
-        def after(choice: str | None) -> None:
-            if choice == "discard":
-                self.app.pop_screen()
-                return
-            if choice == "save":
-                # action_save hace notify de error y deja dirty=True si falla;
-                # solo salimos si quedo limpio.
-                self.action_save()
-                if not self.dirty:
-                    self.app.pop_screen()
-                return
-            # "cancel" o None: queda en el editor.
-
-        self.app.push_screen(UnsavedChangesModal(), after)

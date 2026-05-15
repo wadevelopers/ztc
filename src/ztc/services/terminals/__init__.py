@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from ztc.services.colors import CanonicalSlot, is_valid_hex, normalize_hex
+from ztc.services.colors import CanonicalSlot
 from ztc.services.terminals.settings import CanonicalSetting
 
 # Doc opaco que cada backend tipa internamente (TOMLDocument para
@@ -20,9 +20,10 @@ class TerminalBackend(Protocol):
 
     Un backend lee/escribe slots canonicos `(group, name)` y settings
     canonicos mapeandolos a la nomenclatura propia de su archivo de
-    config. Tambien soporta `import_theme_file` para copiar slots desde
-    otro archivo del mismo formato, y expone capacidades runtime para
-    aplicar o explicar la recarga post-save.
+    config. Expone capacidades runtime para aplicar o explicar la
+    recarga post-save, y soporta perfiles intercambiables via
+    manifest (`read/write_active_profile`, `convert_to_manifest`,
+    `reload_after_profile_*`).
     """
 
     kind: str
@@ -48,14 +49,6 @@ class TerminalBackend(Protocol):
     def delete_slot(self, doc: BackendDoc, slot: CanonicalSlot) -> bool: ...
 
     def supported_slots(self) -> list[CanonicalSlot]: ...
-
-    def import_theme_file(self, doc: BackendDoc, source_path: Path) -> int:
-        """Copia los slots conocidos desde otro archivo del mismo formato
-        (mismo backend) al doc actual. Devuelve cuantos slots se
-        sobrescribieron. No toca otras secciones del archivo. Ignora
-        valores que no sean hex validos. Levanta `FileNotFoundError`
-        si `source_path` no existe."""
-        ...
 
     # ---------- settings (padding, opacity, font, cursor shape, ...) ----------
 
@@ -111,38 +104,100 @@ class TerminalBackend(Protocol):
         devuelve False. None si el backend no requiere hint manual."""
         ...
 
+    # ---------- perfiles intercambiables (manifest + profile switching) ----------
 
-def default_import_theme_file(
-    backend: TerminalBackend, doc: BackendDoc, source_path: Path
-) -> int:
-    """Implementacion comun de `import_theme_file` para cualquier backend
-    que se ajuste al patron canonico: leer otro archivo del mismo formato
-    y copiar slots conocidos al doc actual.
+    def is_managed_manifest(self, path: Path) -> bool:
+        """True si `path` es un manifest gestionado por ztc (tiene el
+        marcador propio). Si False, el archivo se trata como config
+        standalone — no se hace profile switching sobre el."""
+        ...
 
-    Cada backend concreto delega aca a menos que necesite logica propia
-    (hoy ninguno la necesita). Centralizar previene divergencia silenciosa
-    cuando se sume Ghostty u otro backend.
+    def read_active_profile(self, manifest_path: Path) -> Path | None:
+        """Si `manifest_path` es un manifest gestionado por ztc, devuelve
+        el path absoluto del perfil activo (primer `import` en Alacritty,
+        primer `include` en Kitty). Si no es manifest o no tiene perfil
+        referenciado, devuelve None."""
+        ...
 
-    Reglas:
-    - `FileNotFoundError` si `source_path` no existe.
-    - Itera sobre `backend.supported_slots()` (cada backend declara cuales).
-    - Lee con `backend.read_slot`; ignora valores que no sean hex validos
-      (named colors, oklch(...), etc. no se importan — `normalize_hex`
-      tirarian sino).
-    - Escribe con `backend.write_slot(doc, slot, normalize_hex(value))`.
-    - Devuelve la cantidad de slots sobrescritos.
-    """
-    if not source_path.exists():
-        raise FileNotFoundError(source_path)
-    other = backend.load(source_path)
-    count = 0
-    for slot in backend.supported_slots():
-        value = backend.read_slot(other, slot)
-        if value is None or not is_valid_hex(value):
-            continue
-        backend.write_slot(doc, slot, normalize_hex(value))
-        count += 1
-    return count
+    def write_active_profile(
+        self, manifest_path: Path, profile_path: Path
+    ) -> None:
+        """Reescribe el manifest para que apunte a `profile_path`.
+        Preserva el marcador y el resto del archivo (en Kitty: prefs
+        runtime `# ztc:{...}` y managed directives)."""
+        ...
+
+    def unmanage_manifest(
+        self, manifest_path: Path, profile_doc: BackendDoc
+    ) -> Path | None:
+        """Reverse de `convert_to_manifest`: vuelve `manifest_path` a un
+        archivo standalone con el contenido de `profile_doc` adentro.
+
+        Preserva las managed directives (Kitty: `allow_remote_control`,
+        `listen_on`, `dynamic_background_opacity`) y las prefs `# ztc:`
+        existentes — solo quita la key `managed_manifest`. Si el dict
+        `# ztc:` queda vacio tras quitarla, no se escribe la linea.
+
+        Hace backup automatico del manifest antes de reescribir. NO toca
+        el archivo del perfil activo en disco (caller decide que hacer
+        con el).
+
+        Devuelve el path del backup del manifest. Devuelve `None` si
+        `manifest_path` no es manifest gestionado (no hay nada que
+        des-hacer)."""
+        ...
+
+    def convert_to_manifest(
+        self, manifest_path: Path, active_profile: Path
+    ) -> Path | None:
+        """Convierte `manifest_path` en un manifest gestionado por ztc
+        que importa `active_profile`.
+
+        El contenido previo de `manifest_path` se preserva en un backup
+        automatico (`make_backup`); NO se duplica en el active_profile.
+        Si el caller necesita preservarlo como perfil cargable, debe
+        leer el backup despues.
+
+        Detalles por backend:
+        - Alacritty: reescribe el archivo como manifest minimal
+          (`[ztc] managed_manifest = true` + `[general] import = [...]`).
+        - Kitty: el manifest conserva las managed directives
+          (`allow_remote_control`, `listen_on`,
+          `dynamic_background_opacity`) y la linea `# ztc:{...}` con sus
+          prefs runtime, agregando `managed_manifest: true`. El resto
+          del contenido (colors, font_size, includes propios) se
+          descarta del manifest — vive solo en el backup.
+
+        El caller es responsable de que `active_profile` exista (Load:
+        ya existe; Save-as: caller lo escribe con `backend.save`).
+
+        Devuelve el path del backup del archivo original.
+        """
+        ...
+
+    def reload_after_profile_switch(
+        self, manifest_path: Path, new_profile_path: Path
+    ) -> bool:
+        """Recarga la terminal viva tras un switch de perfil
+        (`write_active_profile` recien escribio el manifest). Alacritty
+        retorna True directo (live-reload nativo del manifest); Kitty
+        invoca `kitty @ load-config` + `set-background-opacity`
+        idempotente."""
+        ...
+
+    def reload_after_profile_save(
+        self,
+        profile_doc: BackendDoc,
+        profile_path: Path,
+        manifest_path: Path,
+    ) -> bool:
+        """Recarga tras un save al perfil activo (sin cambio de perfil).
+        Para Kitty: igual que `reload_after_save` pero leyendo prefs
+        runtime (`allow_remote_control`, `listen_on`,
+        `remote_control_pending_instance`) del manifest, no del
+        `profile_doc`. Para Alacritty: True directo. Usado por el helper
+        `save_profile_with_reload`."""
+        ...
 
 
 __all__ = [
@@ -150,5 +205,4 @@ __all__ = [
     "CanonicalSetting",
     "CanonicalSlot",
     "TerminalBackend",
-    "default_import_theme_file",
 ]

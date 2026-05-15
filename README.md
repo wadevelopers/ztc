@@ -48,10 +48,18 @@ The main `ztc` menu exposes five modules:
   slots (foreground, background, cursor) of the active backend.
   Contrast warnings are computed against the active Zellij theme
   background.
-- **Terminal settings** — six values: padding x, padding y, opacity,
-  font family, font size and cursor shape. The same six work on both
-  backends; each is serialized to its native format (TOML for
-  Alacritty, flat key/value for Kitty).
+- **Terminal settings** — eight values: window columns, window lines,
+  padding x, padding y, opacity, font size, font family and cursor
+  shape. The same eight work on both backends; each is serialized to
+  its native format (TOML for Alacritty, flat key/value for Kitty).
+
+Both editors share **Load / Save** (`l` / `s`): the active config
+file becomes a small *manifest* the first time you save with a new
+name, importing the active profile. Switching between profiles
+applies live without restarting the terminal; the original config is
+preserved as a content-hashed backup (`<name>.<hash>.bak`) that you
+can re-load to roll back. Saving back to the original name converts
+the manifest back to a standalone file.
 
 For an end-to-end example combining terminal settings, colors and a
 Zellij layout, see [`doc/C64_SHOWCASE.md`](doc/C64_SHOWCASE.md).

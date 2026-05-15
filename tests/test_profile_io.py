@@ -1,0 +1,44 @@
+"""Tests del helper `profile_io.validate_profile_path`."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from ztc.services.profile_io import resolve_profile_path, validate_profile_path
+from ztc.services.terminals.alacritty import AlacrittyBackend
+
+# ---------- resolve_profile_path ----------
+
+
+def test_resolve_profile_path_relative(tmp_path: Path) -> None:
+    assert resolve_profile_path("c64.toml", tmp_path) == tmp_path / "c64.toml"
+
+
+def test_resolve_profile_path_absolute(tmp_path: Path) -> None:
+    abs_path = tmp_path / "x" / "c64.toml"
+    assert resolve_profile_path(str(abs_path), tmp_path) == abs_path
+
+
+# ---------- validate_profile_path ----------
+
+
+def test_validate_rejects_wrong_extension(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    error = validate_profile_path(backend, tmp_path / "x.conf")
+    assert error is not None
+    assert ".toml" in error
+
+
+def test_validate_rejects_missing_parent_dir(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    error = validate_profile_path(backend, tmp_path / "nope" / "x.toml")
+    assert error is not None
+    assert "Directory does not exist" in error
+
+
+def test_validate_accepts_valid_path(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    assert validate_profile_path(backend, tmp_path / "c64.toml") is None
+
+
+

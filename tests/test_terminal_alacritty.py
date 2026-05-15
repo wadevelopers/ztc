@@ -97,37 +97,6 @@ def test_write_slot_preserves_other_keys(tmp_path: Path) -> None:
     assert doc["window"]["opacity"] == 0.97  # type: ignore[index]
 
 
-def test_read_all_slots_only_returns_defined(tmp_path: Path) -> None:
-    src = tmp_path / "a.toml"
-    shutil.copy2(FIX / "alacritty_min.toml", src)
-    backend = AlacrittyBackend()
-    doc = backend.load(src)
-    slots = backend.read_all_slots(doc)
-    assert ("primary", "background") in slots
-    assert ("normal", "red") in slots
-    assert ("normal", "blue") not in slots  # ausente en el fixture min
-
-
-def test_import_theme_overwrites_defined_slots(tmp_path: Path) -> None:
-    src = tmp_path / "a.toml"
-    shutil.copy2(FIX / "alacritty_min.toml", src)
-    backend = AlacrittyBackend()
-    doc = backend.load(src)
-    count = backend.import_theme_file(doc, FIX / "dracula.toml")
-    # Dracula define 2 (primary) + 8 (normal) + 2 (cursor) = 12 slots conocidos.
-    assert count == 12
-    assert backend.read_slot(doc, ("primary", "background")) == "#282a36"
-    assert backend.read_slot(doc, ("normal", "red")) == "#ff5555"
-    assert backend.read_slot(doc, ("cursor", "cursor")) == "#f8f8f2"
-
-
-def test_import_theme_missing_file(tmp_path: Path) -> None:
-    backend = AlacrittyBackend()
-    doc = tomlkit.document()
-    with pytest.raises(FileNotFoundError):
-        backend.import_theme_file(doc, tmp_path / "nope.toml")
-
-
 def test_contrast_ratio_known_values() -> None:
     # blanco vs negro = 21
     assert round(colors.contrast_ratio("#ffffff", "#000000") or 0, 1) == 21.0
@@ -157,3 +126,274 @@ def test_compute_warnings_clean_when_high_contrast() -> None:
     backend.write_slot(doc, ("selection", "background"), "#888888")
     backend.write_slot(doc, ("cursor", "cursor"), "#ffaa00")
     assert colors.compute_warnings(_slots_from_doc(backend, doc)) == []
+
+
+# ---------- perfiles intercambiables (manifest + profile switching) ----------
+
+
+def _write_manifest(path: Path, profile_name: str) -> None:
+    """Helper: crea un manifest minimal apuntando a `profile_name`."""
+    path.write_text(
+        "# ztc-managed-manifest = true\n\n"
+        f'import = ["{profile_name}"]\n',
+        encoding="utf-8",
+    )
+
+
+def _write_legacy_manifest(path: Path, profile_name: str) -> None:
+    path.write_text(
+        "[ztc]\nmanaged_manifest = true\n\n"
+        f'[general]\nimport = ["{profile_name}"]\n',
+        encoding="utf-8",
+    )
+
+
+def _mock_alacritty_version(
+    monkeypatch: pytest.MonkeyPatch, version: str
+) -> None:
+    class Result:
+        stdout = f"alacritty {version}"
+        stderr = ""
+
+    monkeypatch.setattr(
+        "ztc.services.terminals.alacritty.subprocess.run",
+        lambda *args, **kwargs: Result(),
+    )
+
+
+def test_is_managed_manifest_false_for_standalone(tmp_path: Path) -> None:
+    """Una config sin marker ztc no es manifest, aunque tenga imports."""
+    backend = AlacrittyBackend()
+    path = tmp_path / "alacritty.toml"
+    path.write_text(
+        '[general]\nimport = ["theme.toml"]\n[window]\nopacity = 0.9\n',
+        encoding="utf-8",
+    )
+    assert backend.is_managed_manifest(path) is False
+
+
+def test_is_managed_manifest_false_for_missing_file(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    assert backend.is_managed_manifest(tmp_path / "missing.toml") is False
+
+
+def test_is_managed_manifest_true_when_marker_present(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    path = tmp_path / "alacritty.toml"
+    _write_manifest(path, "c64.toml")
+    assert backend.is_managed_manifest(path) is True
+
+
+def test_is_managed_manifest_true_for_legacy_ztc_table(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    path = tmp_path / "alacritty.toml"
+    _write_legacy_manifest(path, "c64.toml")
+    assert backend.is_managed_manifest(path) is True
+
+
+def test_read_active_profile_returns_none_when_not_manifest(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    path = tmp_path / "alacritty.toml"
+    path.write_text(
+        '[general]\nimport = ["theme.toml"]\n', encoding="utf-8"
+    )
+    assert backend.read_active_profile(path) is None
+
+
+def test_read_active_profile_returns_relative_path(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    _write_manifest(manifest, "c64.toml")
+    assert backend.read_active_profile(manifest) == tmp_path / "c64.toml"
+
+
+def test_read_active_profile_accepts_legacy_general_import(
+    tmp_path: Path,
+) -> None:
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    _write_legacy_manifest(manifest, "c64.toml")
+    assert backend.read_active_profile(manifest) == tmp_path / "c64.toml"
+
+
+def test_read_active_profile_handles_absolute_path(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    abs_profile = tmp_path / "other" / "c64.toml"
+    manifest.write_text(
+        "# ztc-managed-manifest = true\n\n"
+        f'import = ["{abs_profile}"]\n',
+        encoding="utf-8",
+    )
+    assert backend.read_active_profile(manifest) == abs_profile
+
+
+def test_write_active_profile_uses_root_import_for_alacritty_0_13(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_alacritty_version(monkeypatch, "0.13.2")
+    # Alacritty requiere paths `~/...` o absolutos en `import`. Simular
+    # que tmp_path es el home del usuario para que el path emitido
+    # quede como `~/vga.toml` (camino realista en producción).
+    monkeypatch.setenv("HOME", str(tmp_path))
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    _write_manifest(manifest, "c64.toml")
+    backend.write_active_profile(manifest, tmp_path / "vga.toml")
+    text = manifest.read_text(encoding="utf-8")
+    assert backend.is_managed_manifest(manifest) is True
+    assert backend.read_active_profile(manifest) == tmp_path / "vga.toml"
+    assert "# ztc-managed-manifest = true" in text
+    assert 'import = ["~/vga.toml"]' in text
+    assert "[general]" not in text
+    assert "[ztc]" not in text
+
+
+def test_write_active_profile_uses_general_import_for_alacritty_0_14(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_alacritty_version(monkeypatch, "0.14.0")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    _write_manifest(manifest, "c64.toml")
+    backend.write_active_profile(manifest, tmp_path / "vga.toml")
+    text = manifest.read_text(encoding="utf-8")
+    assert backend.is_managed_manifest(manifest) is True
+    assert backend.read_active_profile(manifest) == tmp_path / "vga.toml"
+    assert "# ztc-managed-manifest = true" in text
+    assert "[general]" in text
+    assert 'import = ["~/vga.toml"]' in text
+    assert "[ztc]" not in text
+
+
+def test_write_active_profile_uses_absolute_path_outside_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Si el perfil está fuera de $HOME, el manifest usa path absoluto
+    (`/...`). Alacritty acepta ambos formatos; el simple sin prefijo
+    es el único que NO acepta."""
+    _mock_alacritty_version(monkeypatch, "0.13.2")
+    # HOME apunta a otro lugar; tmp_path queda fuera.
+    monkeypatch.setenv("HOME", "/nonexistent-home")
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    _write_manifest(manifest, "c64.toml")
+    profile = tmp_path / "vga.toml"
+    backend.write_active_profile(manifest, profile)
+    text = manifest.read_text(encoding="utf-8")
+    assert f'import = ["{profile}"]' in text
+
+
+def test_convert_to_manifest_writes_minimal_manifest_with_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """El archivo original se vuelve manifest minimal apuntando al
+    active_profile. El contenido viejo NO se duplica en active_profile —
+    queda solo en el backup. El caller es responsable de crear
+    active_profile (en este test no lo creamos, solo verificamos el
+    estado del manifest)."""
+    backend = AlacrittyBackend()
+    path = tmp_path / "alacritty.toml"
+    original_text = (
+        '# user comment\n'
+        '[colors.primary]\n'
+        'background = "#000000"\n'
+        '[window]\n'
+        'opacity = 0.97\n'
+    )
+    path.write_text(original_text, encoding="utf-8")
+
+    active = tmp_path / "tokyo.toml"
+    _mock_alacritty_version(monkeypatch, "0.13.2")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    backup = backend.convert_to_manifest(path, active)
+
+    # Backup creado con el contenido original.
+    assert backup is not None
+    assert backup.exists()
+    assert backup.read_text(encoding="utf-8") == original_text
+    # Active profile NO fue creado por convert_to_manifest.
+    assert not active.exists()
+    # Manifest pasa a ser gestionado y apunta al active.
+    assert backend.is_managed_manifest(path) is True
+    assert backend.read_active_profile(path) == active
+    # Manifest es minimal: marker + import, sin colores/settings viejos.
+    manifest_text = path.read_text(encoding="utf-8")
+    assert "# ztc-managed-manifest = true" in manifest_text
+    assert 'import = ["~/tokyo.toml"]' in manifest_text
+    assert "[ztc]" not in manifest_text
+    assert "[general]" not in manifest_text
+    assert "#000000" not in manifest_text
+    assert "opacity" not in manifest_text
+
+
+def test_convert_to_manifest_raises_if_source_missing(tmp_path: Path) -> None:
+    backend = AlacrittyBackend()
+    with pytest.raises(FileNotFoundError):
+        backend.convert_to_manifest(
+            tmp_path / "missing.toml", tmp_path / "c64.toml"
+        )
+
+
+def test_reload_after_profile_save_touches_manifest_when_profile_differs(
+    tmp_path: Path,
+) -> None:
+    """Alacritty solo vigila el manifest, no los imports. Cuando se
+    guarda un perfil distinto del manifest, el reload debe tocar el
+    manifest para forzar a Alacritty a re-procesarlo."""
+    import time as _time
+
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    _write_manifest(manifest, "tincho.toml")
+    profile = tmp_path / "tincho.toml"
+    profile.write_text('[window]\npadding = { x = 10, y = 10 }\n', encoding="utf-8")
+
+    # Forzar mtime conocido en el pasado, así el touch del reload se
+    # nota con resolución de segundos.
+    old_mtime = _time.time() - 60
+    import os as _os
+
+    _os.utime(manifest, (old_mtime, old_mtime))
+    pre_mtime = manifest.stat().st_mtime
+
+    profile_doc = backend.load(profile)
+    assert backend.reload_after_profile_save(profile_doc, profile, manifest) is True
+
+    post_mtime = manifest.stat().st_mtime
+    assert post_mtime > pre_mtime, "manifest mtime should be bumped"
+
+
+def test_reload_after_profile_save_skips_touch_when_profile_is_manifest(
+    tmp_path: Path,
+) -> None:
+    """Si el perfil ES el manifest (caso standalone), no hay que tocar
+    nada — el `backend.save` ya cambió el archivo y Alacritty lo
+    detecta nativamente."""
+    backend = AlacrittyBackend()
+    standalone = tmp_path / "alacritty.toml"
+    standalone.write_text('[window]\nopacity = 0.9\n', encoding="utf-8")
+
+    # No hay nada que verificar en términos de mtime acá (el caller ya
+    # cambió el archivo escribiéndolo); solo aseguramos que el reload
+    # no falla y no crea side effects raros.
+    doc = backend.load(standalone)
+    assert backend.reload_after_profile_save(doc, standalone, standalone) is True
+
+
+def test_reload_after_profile_save_handles_missing_manifest(
+    tmp_path: Path,
+) -> None:
+    """Defensivo: si el manifest no existe (primer save antes de que
+    se cree), no romper."""
+    backend = AlacrittyBackend()
+    profile = tmp_path / "tincho.toml"
+    profile.write_text('[window]\nopacity = 0.9\n', encoding="utf-8")
+    nonexistent_manifest = tmp_path / "alacritty.toml"
+
+    doc = backend.load(profile)
+    assert (
+        backend.reload_after_profile_save(doc, profile, nonexistent_manifest)
+        is True
+    )

@@ -136,9 +136,17 @@ class TermConfigApp(App[None]):
         #   el backend lo controla el caller.
         # - Si no, se resuelve via registry segun deteccion. Si la
         #   terminal es no soportada o estamos por SSH, no hay backend.
+        #
+        # Estado relacionado a perfiles:
+        # - `backend_manifest_path`: siempre el archivo default (o el que
+        #   pase el caller). Es donde viven las managed directives y el
+        #   marker ztc. Si el archivo no es un manifest gestionado, se
+        #   comporta como su propio perfil.
+        # - `backend_path`: el perfil activo. Si el manifest apunta a un
+        #   perfil, ese; si no (archivo standalone), el manifest mismo.
         if backend is not None:
             self.backend: TerminalBackend | None = backend
-            self.backend_path: Path | None = (
+            self.backend_manifest_path: Path | None = (
                 backend_path or backend.default_config_path()
             )
         else:
@@ -147,12 +155,14 @@ class TermConfigApp(App[None]):
                 resolved = get_backend(kind)
                 assert resolved is not None  # is_backend_available lo garantiza
                 self.backend = resolved
-                self.backend_path = (
+                self.backend_manifest_path = (
                     backend_path or resolved.default_config_path()
                 )
             else:
                 self.backend = None
-                self.backend_path = backend_path
+                self.backend_manifest_path = backend_path
+
+        self.backend_path: Path | None = self._resolve_active_profile_path()
 
         # Target diferido del launcher embebido. Si el usuario elige
         # attach/new/bash desde "Zellij sessions", lo guardamos aca y
@@ -161,6 +171,50 @@ class TermConfigApp(App[None]):
         # eso, zellij hereda raw mode + alt-screen y la terminal queda
         # bloqueada al salir.
         self.pending_launch: LaunchTarget = None
+
+    def _resolve_active_profile_path(self) -> Path | None:
+        """Devuelve el perfil activo segun el manifest. Si el archivo
+        no es un manifest gestionado, retorna el manifest path mismo
+        (el archivo se comporta como su propio perfil)."""
+        if self.backend is None or self.backend_manifest_path is None:
+            return self.backend_manifest_path
+        active = self.backend.read_active_profile(self.backend_manifest_path)
+        return active or self.backend_manifest_path
+
+    def set_active_profile(self, new_profile_path: Path) -> None:
+        """Cambia el perfil activo: escribe el manifest, actualiza state
+        y dispara reload best-effort.
+
+        Orden transaccional:
+        1. `write_active_profile`: si falla, propaga excepcion (caller
+           muestra error toast). State NO se toca.
+        2. `self.backend_path = new`: post-write, el manifest YA dice que
+           el activo es el nuevo perfil — esa es la verdad logica.
+        3. `reload_after_profile_switch`: best-effort. Si falla, mostrar
+           warning toast pero mantener state al nuevo perfil.
+
+        Caso especial `new_profile_path == backend_manifest_path`: post
+        unmanage (volver a standalone). El manifest fue reescrito por
+        `unmanage_manifest` con el contenido standalone; no llamamos a
+        `write_active_profile` (escribiria `include kitty.conf` adentro
+        de `kitty.conf` → loop). Solo sync state + reload.
+        """
+        if self.backend is None or self.backend_manifest_path is None:
+            raise RuntimeError("No backend available for profile switching")
+        if new_profile_path != self.backend_manifest_path:
+            self.backend.write_active_profile(
+                self.backend_manifest_path, new_profile_path
+            )
+        self.backend_path = new_profile_path
+        reload_ok = self.backend.reload_after_profile_switch(
+            self.backend_manifest_path, new_profile_path
+        )
+        if not reload_ok:
+            hint = self.backend.manual_reload_hint()
+            msg = "Profile switched but reload failed."
+            if hint:
+                msg += f"\n{hint}"
+            self.notify(msg, severity="warning", timeout=8)
 
     # ---------- compose / mount ----------
 
@@ -265,8 +319,14 @@ class TermConfigApp(App[None]):
         self.register_zellij_themes()
         self.sync_theme_with_zellij()
         self.query_one("#main-menu", OptionList).focus()
-        if self.backend is not None and self.backend_path is not None:
-            check = build_startup_check(self.backend, self.backend_path, self)
+        if self.backend is not None and self.backend_manifest_path is not None:
+            # Las managed directives (allow_remote_control, listen_on,
+            # dynamic_background_opacity, prefs # ztc:) viven en el manifest,
+            # no en el perfil. Pasar backend_path (perfil activo) romperia
+            # el remote control al primer switch.
+            check = build_startup_check(
+                self.backend, self.backend_manifest_path, self
+            )
             if check is not None:
                 self.push_screen(check.modal, check.on_result)
 

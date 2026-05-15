@@ -258,7 +258,8 @@ class ThemePickerScreen(Screen[None]):
         """Propaga bg/fg/normal.* al backend de la terminal. No bloqueante: si falla, avisa."""
         backend = getattr(self.app, "backend", None)
         backend_path = getattr(self.app, "backend_path", None)
-        if backend is None or backend_path is None:
+        manifest_path = getattr(self.app, "backend_manifest_path", None)
+        if backend is None or backend_path is None or manifest_path is None:
             return
         try:
             result = theme_sync.sync_terminal_with_zellij_theme(
@@ -266,6 +267,7 @@ class ThemePickerScreen(Screen[None]):
                 backend=backend,
                 backend_path=backend_path,
                 zellij_config_path=self.config_path,
+                manifest_path=manifest_path,
             )
         except Exception as exc:  # noqa: BLE001
             self.app.notify(

@@ -7,15 +7,17 @@ estructura de Alacritty.
 
 from __future__ import annotations
 
+import re
+import subprocess
 from pathlib import Path
 
 import tomlkit
 from tomlkit.toml_document import TOMLDocument
 
 from ztc.services import toml_io
+from ztc.services.backups import make_backup
 from ztc.services.colors import CanonicalSlot
 from ztc.services.fonts import resolve_font_faces
-from ztc.services.terminals import default_import_theme_file
 from ztc.services.terminals.settings import (
     SETTINGS,
     CanonicalSetting,
@@ -35,6 +37,9 @@ SLOT_GROUPS: dict[str, tuple[str, ...]] = {
 KNOWN_SLOTS: list[CanonicalSlot] = [
     (group, name) for group, names in SLOT_GROUPS.items() for name in names
 ]
+
+_MANAGED_MARKER = "ztc-managed-manifest = true"
+_GENERAL_IMPORT_MIN_VERSION = (0, 14, 0)
 
 # Mapeo de cada setting canonico al path TOML donde Alacritty lo guarda.
 # Ej. `window.padding.x` -> doc["window"]["padding"]["x"].
@@ -113,18 +118,101 @@ class AlacrittyBackend:
             del doc["colors"]
         return True
 
-    # ---------- capabilities especificas de Alacritty ----------
+    # ---------- perfiles intercambiables (manifest + profile switching) ----------
 
-    def read_all_slots(self, doc: TOMLDocument) -> dict[CanonicalSlot, str]:
-        out: dict[CanonicalSlot, str] = {}
-        for slot in KNOWN_SLOTS:
-            value = self.read_slot(doc, slot)
-            if value is not None:
-                out[slot] = value
-        return out
+    def is_managed_manifest(self, path: Path) -> bool:
+        if not path.exists():
+            return False
+        text = path.read_text(encoding="utf-8")
+        if _MANAGED_MARKER in text:
+            return True
+        doc = self.load(path)
+        # Backward compatibility with old ZTC manifests. Do not write this
+        # table anymore: Alacritty warns about unknown live config keys.
+        ztc_section = doc.get("ztc")
+        if not isinstance(ztc_section, dict):
+            return False
+        return bool(ztc_section.get("managed_manifest", False))
 
-    def import_theme_file(self, doc: TOMLDocument, source_path: Path) -> int:
-        return default_import_theme_file(self, doc, source_path)
+    def read_active_profile(self, manifest_path: Path) -> Path | None:
+        if not self.is_managed_manifest(manifest_path):
+            return None
+        doc = self.load(manifest_path)
+        imports = _read_imports(doc)
+        if not imports:
+            return None
+        # tomlkit array se comporta como list pero no es list. Iteramos
+        # para tolerar ambos tipos.
+        try:
+            raw = imports[0]
+        except (IndexError, KeyError, TypeError):
+            return None
+        if not isinstance(raw, str):
+            return None
+        raw_path = Path(raw).expanduser()
+        if raw_path.is_absolute():
+            return raw_path
+        return manifest_path.parent / raw_path
+
+    def write_active_profile(
+        self, manifest_path: Path, profile_path: Path
+    ) -> None:
+        doc = _build_manifest_doc(manifest_path, profile_path)
+        toml_io.dump_toml(doc, manifest_path)
+
+    def unmanage_manifest(
+        self, manifest_path: Path, profile_doc: TOMLDocument
+    ) -> Path | None:
+        """Reescribe `manifest_path` con el contenido del `profile_doc`
+        (perfil activo). Quita metadata legacy de ZTC si existe.
+        Alacritty no tiene managed directives globales, asi que el
+        resultado es el TOML del perfil escrito tal cual."""
+        if not self.is_managed_manifest(manifest_path):
+            return None
+        backup = make_backup(manifest_path)
+        # El profile_doc no deberia contener la seccion [ztc] (viene de
+        # un perfil cargado, no del manifest). Defensivo: si la tiene, la
+        # quitamos antes de escribir.
+        if "ztc" in profile_doc:
+            del profile_doc["ztc"]
+        toml_io.dump_toml(profile_doc, manifest_path, backup=False)
+        return backup
+
+    def convert_to_manifest(
+        self, manifest_path: Path, active_profile: Path
+    ) -> Path | None:
+        """Backup del archivo original + reescribe como manifest minimal
+        apuntando a `active_profile`. El contenido viejo queda solo en
+        el backup; no se duplica en `active_profile` (caller responsable
+        de que exista)."""
+        if not manifest_path.exists():
+            raise FileNotFoundError(manifest_path)
+        backup = make_backup(manifest_path)
+        manifest_doc = _build_manifest_doc(manifest_path, active_profile)
+        toml_io.dump_toml(manifest_doc, manifest_path, backup=False)
+        return backup
+
+    def reload_after_profile_switch(
+        self, manifest_path: Path, new_profile_path: Path
+    ) -> bool:
+        # Live-reload nativo de Alacritty cubre el switch: el watchdog
+        # detecta el cambio en el manifest, sigue el import y aplica.
+        return True
+
+    def reload_after_profile_save(
+        self,
+        profile_doc: TOMLDocument,
+        profile_path: Path,
+        manifest_path: Path,
+    ) -> bool:
+        # Alacritty solo vigila el archivo principal (manifest), no los
+        # archivos importados. Si acabamos de guardar un perfil distinto
+        # del manifest, tocar el manifest fuerza a Alacritty a
+        # re-procesarlo y volver a leer el import — sin esto los
+        # cambios solo se aplican al reiniciar la terminal.
+        if profile_path != manifest_path and manifest_path.exists():
+            manifest_path.touch()
+        return True
 
     # ---------- settings (window, font, cursor) ----------
 
@@ -174,6 +262,88 @@ class AlacrittyBackend:
         if deleted:
             _mark_setting_changed(doc, setting.name)
         return deleted
+
+
+# ---------- helpers manifest Alacritty ----------
+
+
+def _read_imports(doc: TOMLDocument) -> object | None:
+    """Lee imports en formato Alacritty 0.13 y 0.14+.
+
+    0.13 usa `import = [...]` en la raiz. 0.14 movio esa opcion a
+    `[general] import = [...]`. Aceptamos ambos para poder leer manifests
+    generados por versiones anteriores de ZTC o por otra version de
+    Alacritty.
+    """
+    if _uses_general_import():
+        return _read_general_imports(doc) or doc.get("import")
+    return doc.get("import") or _read_general_imports(doc)
+
+
+def _read_general_imports(doc: TOMLDocument) -> object | None:
+    general = doc.get("general")
+    if not isinstance(general, dict):
+        return None
+    return general.get("import")
+
+
+def _build_manifest_doc(manifest_path: Path, profile_path: Path) -> TOMLDocument:
+    doc = tomlkit.document()
+    doc.add(tomlkit.comment(_MANAGED_MARKER))
+    doc.add(tomlkit.nl())
+    import_value = _profile_import_value(manifest_path, profile_path)
+    if _uses_general_import():
+        general = tomlkit.table()
+        general["import"] = [import_value]
+        doc["general"] = general
+    else:
+        doc["import"] = [import_value]
+    return doc
+
+
+def _profile_import_value(manifest_path: Path, profile_path: Path) -> str:
+    """Alacritty requiere paths absolutos (`/...`) o relativos al home
+    del usuario (`~/...`) en `import`. Paths simples sin prefijo
+    (`"c64.toml"`) son ignorados silenciosamente — el manifest queda
+    sin perfil cargado y la terminal pierde las settings.
+
+    Citado de `man 5 alacritty`:
+        All imports must either be absolute paths starting with `/`,
+        or paths relative to the user's home directory starting with `~/`.
+
+    `manifest_path` queda sin uso pero se mantiene por la firma común
+    a otros backends que podrian necesitar el dirname.
+    """
+    del manifest_path  # no se necesita en Alacritty post-fix
+    abs_profile = profile_path.resolve()
+    try:
+        return f"~/{abs_profile.relative_to(Path.home())}"
+    except ValueError:
+        return str(abs_profile)
+
+
+def _uses_general_import() -> bool:
+    version = _detect_alacritty_version()
+    if version is None:
+        return True
+    return version >= _GENERAL_IMPORT_MIN_VERSION
+
+
+def _detect_alacritty_version() -> tuple[int, int, int] | None:
+    try:
+        proc = subprocess.run(
+            ["alacritty", "--version"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.search(r"\b(\d+)\.(\d+)\.(\d+)\b", proc.stdout + proc.stderr)
+    if match is None:
+        return None
+    return tuple(int(part) for part in match.groups())
 
 
 # ---------- helpers TOML por path ----------

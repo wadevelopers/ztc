@@ -35,6 +35,7 @@ def test_sync_from_bundled_dracula(tmp_path: Path) -> None:
         backend=backend,
         backend_path=ala,
         zellij_config_path=cfg,
+        manifest_path=ala,
     )
     assert result.skipped_reason is None
     assert result.backup is not None
@@ -67,6 +68,7 @@ def test_sync_from_user_theme(tmp_path: Path) -> None:
         backend=backend,
         backend_path=ala,
         zellij_config_path=cfg,
+        manifest_path=ala,
     )
     assert result.skipped_reason is None
     assert _read(backend, ala, ("primary", "background")) == "#123456"
@@ -92,6 +94,7 @@ def test_sync_only_writes_changed_slots(tmp_path: Path) -> None:
         backend=backend,
         backend_path=ala,
         zellij_config_path=cfg,
+        manifest_path=ala,
     )
     # Aunque haya otros slots a actualizar, primary.background NO debe estar
     # en la lista de updated (ya estaba con el valor correcto).
@@ -109,6 +112,7 @@ def test_sync_no_alacritty_file(tmp_path: Path) -> None:
         backend=backend,
         backend_path=ala,
         zellij_config_path=cfg,
+        manifest_path=ala,
     )
     assert result.skipped_reason and "does not exist" in result.skipped_reason
     assert not result.updated
@@ -123,6 +127,7 @@ def test_sync_unknown_theme(tmp_path: Path) -> None:
         backend=backend,
         backend_path=ala,
         zellij_config_path=cfg,
+        manifest_path=ala,
     )
     assert result.skipped_reason and "no extractable colors" in result.skipped_reason
     assert not result.updated
@@ -138,6 +143,7 @@ def test_sync_no_changes_returns_no_backup(tmp_path: Path) -> None:
         backend=backend,
         backend_path=ala,
         zellij_config_path=cfg,
+        manifest_path=ala,
     )
     # Aplicar de nuevo: nada deberia cambiar.
     result = theme_sync.sync_terminal_with_zellij_theme(
@@ -145,6 +151,7 @@ def test_sync_no_changes_returns_no_backup(tmp_path: Path) -> None:
         backend=backend,
         backend_path=ala,
         zellij_config_path=cfg,
+        manifest_path=ala,
     )
     assert result.backup is None
     assert result.updated == {}
@@ -163,6 +170,7 @@ def test_sync_propagates_text_selected_to_alacritty_selection(tmp_path: Path) ->
         backend=backend,
         backend_path=ala,
         zellij_config_path=cfg,
+        manifest_path=ala,
     )
     assert _read(backend, ala, ("selection", "background")) == "#475266"
     assert _read(backend, ala, ("selection", "text")) == "#cccac2"
@@ -192,6 +200,7 @@ def test_sync_user_theme_with_rich_components(tmp_path: Path) -> None:
         backend=backend,
         backend_path=ala,
         zellij_config_path=cfg,
+        manifest_path=ala,
     )
     assert _read(backend, ala, ("selection", "background")) == "#5566aa"
     assert _read(backend, ala, ("selection", "text")) == "#ffffff"
@@ -206,6 +215,7 @@ def test_sync_preserves_other_alacritty_sections(tmp_path: Path) -> None:
         backend=backend,
         backend_path=ala,
         zellij_config_path=cfg,
+        manifest_path=ala,
     )
     text = ala.read_text(encoding="utf-8")
     # Las secciones que no son colors no se tocan.
@@ -214,31 +224,43 @@ def test_sync_preserves_other_alacritty_sections(tmp_path: Path) -> None:
     assert "opacity" in text
 
 
-def test_sync_result_includes_reload_result(
+def test_sync_uses_save_profile_with_reload(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    """`sync_terminal_with_zellij_theme` debe ir por
+    `save_profile_with_reload` para que el reload IPC de Kitty lea
+    runtime prefs del manifest. Verifica que el SaveResult del helper
+    se propaga al SyncResult."""
     ala = _make_alacritty(tmp_path)
     cfg = _empty_zellij_config(tmp_path)
     backend = AlacrittyBackend()
-    calls: list[tuple[object, object, Path]] = []
+    calls: list[tuple[object, object, Path, Path]] = []
 
-    def fake_save_with_reload(backend_arg, doc_arg, path_arg):  # noqa: ANN001
-        calls.append((backend_arg, doc_arg, path_arg))
+    def fake_save_profile_with_reload(  # noqa: ANN001
+        backend_arg, doc_arg, profile_path, manifest_path
+    ):
+        calls.append((backend_arg, doc_arg, profile_path, manifest_path))
         return SaveResult(
             backup_path=tmp_path / "alacritty.toml.bak",
             reload_ok=False,
             manual_reload_hint="manual hint",
         )
 
-    monkeypatch.setattr(theme_sync, "save_with_reload", fake_save_with_reload)
+    monkeypatch.setattr(
+        theme_sync, "save_profile_with_reload", fake_save_profile_with_reload
+    )
+    manifest_path = tmp_path / "alacritty.manifest.toml"
     result = theme_sync.sync_terminal_with_zellij_theme(
         zellij_theme_name="dracula",
         backend=backend,
         backend_path=ala,
         zellij_config_path=cfg,
+        manifest_path=manifest_path,
     )
     assert len(calls) == 1
+    assert calls[0][2] == ala
+    assert calls[0][3] == manifest_path
     assert result.backup == tmp_path / "alacritty.toml.bak"
     assert result.reload_ok is False
     assert result.manual_reload_hint == "manual hint"
