@@ -297,11 +297,24 @@ def _build_manifest_doc(manifest_path: Path, profile_path: Path) -> TOMLDocument
 
 
 def _profile_import_value(manifest_path: Path, profile_path: Path) -> str:
-    return (
-        profile_path.name
-        if profile_path.parent == manifest_path.parent
-        else str(profile_path)
-    )
+    """Alacritty requiere paths absolutos (`/...`) o relativos al home
+    del usuario (`~/...`) en `import`. Paths simples sin prefijo
+    (`"c64.toml"`) son ignorados silenciosamente — el manifest queda
+    sin perfil cargado y la terminal pierde las settings.
+
+    Citado de `man 5 alacritty`:
+        All imports must either be absolute paths starting with `/`,
+        or paths relative to the user's home directory starting with `~/`.
+
+    `manifest_path` queda sin uso pero se mantiene por la firma común
+    a otros backends que podrian necesitar el dirname.
+    """
+    del manifest_path  # no se necesita en Alacritty post-fix
+    abs_profile = profile_path.resolve()
+    try:
+        return f"~/{abs_profile.relative_to(Path.home())}"
+    except ValueError:
+        return str(abs_profile)
 
 
 def _uses_general_import() -> bool:

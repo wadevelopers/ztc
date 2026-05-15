@@ -232,6 +232,10 @@ def test_write_active_profile_uses_root_import_for_alacritty_0_13(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _mock_alacritty_version(monkeypatch, "0.13.2")
+    # Alacritty requiere paths `~/...` o absolutos en `import`. Simular
+    # que tmp_path es el home del usuario para que el path emitido
+    # quede como `~/vga.toml` (camino realista en producción).
+    monkeypatch.setenv("HOME", str(tmp_path))
     backend = AlacrittyBackend()
     manifest = tmp_path / "alacritty.toml"
     _write_manifest(manifest, "c64.toml")
@@ -240,7 +244,7 @@ def test_write_active_profile_uses_root_import_for_alacritty_0_13(
     assert backend.is_managed_manifest(manifest) is True
     assert backend.read_active_profile(manifest) == tmp_path / "vga.toml"
     assert "# ztc-managed-manifest = true" in text
-    assert 'import = ["vga.toml"]' in text
+    assert 'import = ["~/vga.toml"]' in text
     assert "[general]" not in text
     assert "[ztc]" not in text
 
@@ -249,6 +253,7 @@ def test_write_active_profile_uses_general_import_for_alacritty_0_14(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _mock_alacritty_version(monkeypatch, "0.14.0")
+    monkeypatch.setenv("HOME", str(tmp_path))
     backend = AlacrittyBackend()
     manifest = tmp_path / "alacritty.toml"
     _write_manifest(manifest, "c64.toml")
@@ -258,8 +263,26 @@ def test_write_active_profile_uses_general_import_for_alacritty_0_14(
     assert backend.read_active_profile(manifest) == tmp_path / "vga.toml"
     assert "# ztc-managed-manifest = true" in text
     assert "[general]" in text
-    assert 'import = ["vga.toml"]' in text
+    assert 'import = ["~/vga.toml"]' in text
     assert "[ztc]" not in text
+
+
+def test_write_active_profile_uses_absolute_path_outside_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Si el perfil está fuera de $HOME, el manifest usa path absoluto
+    (`/...`). Alacritty acepta ambos formatos; el simple sin prefijo
+    es el único que NO acepta."""
+    _mock_alacritty_version(monkeypatch, "0.13.2")
+    # HOME apunta a otro lugar; tmp_path queda fuera.
+    monkeypatch.setenv("HOME", "/nonexistent-home")
+    backend = AlacrittyBackend()
+    manifest = tmp_path / "alacritty.toml"
+    _write_manifest(manifest, "c64.toml")
+    profile = tmp_path / "vga.toml"
+    backend.write_active_profile(manifest, profile)
+    text = manifest.read_text(encoding="utf-8")
+    assert f'import = ["{profile}"]' in text
 
 
 def test_convert_to_manifest_writes_minimal_manifest_with_backup(
@@ -283,6 +306,7 @@ def test_convert_to_manifest_writes_minimal_manifest_with_backup(
 
     active = tmp_path / "tokyo.toml"
     _mock_alacritty_version(monkeypatch, "0.13.2")
+    monkeypatch.setenv("HOME", str(tmp_path))
     backup = backend.convert_to_manifest(path, active)
 
     # Backup creado con el contenido original.
@@ -297,10 +321,9 @@ def test_convert_to_manifest_writes_minimal_manifest_with_backup(
     # Manifest es minimal: marker + import, sin colores/settings viejos.
     manifest_text = path.read_text(encoding="utf-8")
     assert "# ztc-managed-manifest = true" in manifest_text
-    assert 'import = ["tokyo.toml"]' in manifest_text
+    assert 'import = ["~/tokyo.toml"]' in manifest_text
     assert "[ztc]" not in manifest_text
     assert "[general]" not in manifest_text
-    assert "tokyo.toml" in manifest_text
     assert "#000000" not in manifest_text
     assert "opacity" not in manifest_text
 
