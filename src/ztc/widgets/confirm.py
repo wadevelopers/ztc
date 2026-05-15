@@ -675,7 +675,9 @@ class EditColorModal(ModalScreen[str | None]):
             normalized = normalize_hex(value)
             swatch.update(f"[on {normalized}]                              [/]")
         else:
-            swatch.update("[red]Invalid format[/]")
+            swatch.update(
+                "[bold red on white]        Invalid format        [/]"
+            )
 
     def _submit(self) -> None:
         from ztc.services.colors import is_valid_hex, normalize_hex
