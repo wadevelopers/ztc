@@ -48,21 +48,21 @@ The look works with any monospaced font. Two options:
 
 ZTC keeps each terminal "look" in its own profile file (a `.toml` for
 Alacritty, a `.conf` for Kitty). The first **Save** with a new name
-converts your default config into a *manifest* that imports the active
-profile; subsequent Save / Load operations switch the profile without
-touching the manifest.
+turns your default config (`alacritty.toml` / `kitty.conf`) into a
+small *manifest* that imports the named profile; subsequent Save and
+Load operations switch the profile without touching the manifest. The
+content that was in the default before the conversion is preserved
+automatically as a backup (`<name>.<hash>.bak`) that you can re-load
+from disk later.
 
 For this showcase, save the C64 look as a profile named `c64`:
 
 1. In **Terminal settings**, apply the values from the table below.
 2. Press `s` (Save). The modal is prefilled with your current profile
    name — change it to `c64.toml` (Alacritty) or `c64.conf` (Kitty)
-   and confirm.
-3. The first time, a second modal appears: *"Convert to manifest — name
-   for the profile with the current settings"*. Accept the default
-   (`default.toml` / `default.conf`); this snapshot lets you switch
-   back to your old look later via **Load** (`l`).
-4. Open **Terminal colors**, set the background, and Save again — the
+   and confirm. The toast confirms the save and mentions the backup
+   file that holds your previous setup.
+3. Open **Terminal colors**, set the background, and Save again — the
    modal is already prefilled with `c64.{toml,conf}`, so Enter saves
    in-place on the active profile.
 
@@ -98,13 +98,31 @@ if it shows up (optional — restarting the terminal works too).
 
 ## Switching profiles
 
-Once both the `default` and `c64` profiles exist:
+After the conversion, your everyday config file (`alacritty.toml` /
+`kitty.conf`) is a manifest that imports `c64.{toml,conf}`. To switch:
 
-- **Load** (`l`) opens a path prompt — type `default.toml` (or
-  `default.conf`) to return to your everyday look; type `c64.toml` to
-  bring the C64 frame back.
-- **Save** (`s`) with a new name creates yet another profile; with the
-  current name, saves in-place on the active profile.
+- **Load** (`l`) opens a path prompt. Type any profile filename next
+  to the manifest — including the auto-created backup
+  `<name>.<hash>.bak` if you want to roll back to your pre-C64 setup.
+- **Save** (`s`) with a new name creates another profile and switches
+  to it. With the current name, saves in-place on the active profile.
+- **Save** (`s`) with the original config name (`alacritty.toml` /
+  `kitty.conf`) **converts the manifest back to a standalone file**
+  with the current profile's contents inside. The profile file itself
+  stays on disk — you can re-load it later.
+
+## Restoring your daily setup
+
+Right after creating the `c64` profile, your default terminal is
+**already** running the C64 look — fine for the showcase, but probably
+not what you want for daily use. To restore a comfortable day-to-day
+config, in Terminal settings / colors adjust the values you want and
+Save with the name `alacritty.toml` (or `kitty.conf`): the manifest
+turns back into a standalone config and `c64.{toml,conf}` keeps
+existing as a separate file. The launch script keeps working because
+it points to `c64.{toml,conf}` directly via `--config-file` /
+`--config`, independent of which profile is active in the default
+config.
 
 ## Banner script
 
@@ -218,19 +236,49 @@ and an interactive shell.
 
 Once the `c64` profile and a `c64` Zellij layout exist, you can open
 the showcase in a fresh window without touching your everyday terminal
-session. With Alacritty, the `--config-file` flag points the new window
-at the profile directly:
+session. The new window starts with the C64 look, jumps straight into
+a Zellij session called `c64`, and the script behind it handles three
+states: session doesn't exist (create with layout), session active
+(re-attach), session exited (re-attach with `-f`).
+
+Save one of these scripts under `~/.config/ztc/scripts/` and run it
+from a launcher / hotkey / `.desktop` file.
+
+**Alacritty** — pass the profile via `--config-file`, then exec the
+shell that launches Zellij:
 
 ```bash
-alacritty --config-file ~/.config/alacritty/c64.toml \
-    -e bash -lc "zellij attach -f main5 2>/dev/null || zellij -n c64 -s main5"
+#!/usr/bin/env bash
+set -euo pipefail
+
+SESSION="c64"
+LAYOUT="c64"
+ALACRITTY_CONFIG="$HOME/.config/alacritty/c64.toml"
+
+exec alacritty \
+  --config-file "$ALACRITTY_CONFIG" \
+  -e bash -lc "zellij attach -f '${SESSION}' 2>/dev/null || zellij -n '${LAYOUT}' -s '${SESSION}'"
 ```
 
-`-n c64` creates the session with the `c64` layout; `-s main5` names
-it `main5`; `attach -f` reuses the session if it already exists (the
-`-f` flag re-attaches an existing one without complaint).
+**Kitty** — same idea, using `--config` and Kitty's positional argument
+syntax for the command:
 
-Kitty has an equivalent flag (`kitty --config ~/.config/kitty/c64.conf
-zellij ...`); Ghostty exposes `--config-file=...`. These haven't been
-verified end-to-end here, so adapt the command to your shell and
-terminal.
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SESSION="c64"
+LAYOUT="c64"
+KITTY_CONFIG="$HOME/.config/kitty/c64.conf"
+
+exec kitty \
+  --config "$KITTY_CONFIG" \
+  bash -lc "zellij attach -f '${SESSION}' 2>/dev/null || zellij -n '${LAYOUT}' -s '${SESSION}'"
+```
+
+In both cases: `-n c64` creates the session with the `c64` layout;
+`-s c64` names the session; `attach -f` re-attaches if the session
+already exists (the `-f` flag accepts a previously-exited session).
+The single-quotes around `${SESSION}` and `${LAYOUT}` in the inner
+`bash -lc` string are literal — they re-quote the expanded values when
+the inner shell parses the command line.
