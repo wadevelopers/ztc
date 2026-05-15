@@ -19,7 +19,7 @@ def test_default_paths_point_to_home():
     assert p.zellij_layouts_dir.name == "layouts"
 
 
-def test_alacritty_detection_resolves_to_alacritty_backend():
+def test_alacritty_detection_resolves_to_alacritty_backend(tmp_path):
     """Si la deteccion devuelve kind='alacritty', el registry resuelve
     AlacrittyBackend automaticamente (sin necesidad de pasarlo)."""
     from ztc.app import TermConfigApp
@@ -29,10 +29,15 @@ def test_alacritty_detection_resolves_to_alacritty_backend():
     detection = TerminalDetection(
         kind="alacritty", via_ssh=False, raw_marker="env:ALACRITTY_WINDOW_ID"
     )
-    app = TermConfigApp(detection=detection, zellij_installed=True)
+    config_path = tmp_path / "alacritty.toml"
+    app = TermConfigApp(
+        backend_path=config_path,
+        detection=detection,
+        zellij_installed=True,
+    )
     assert isinstance(app.backend, AlacrittyBackend)
     assert app.backend.kind == "alacritty"
-    assert "alacritty.toml" in str(app.backend_path)
+    assert app.backend_path == config_path
 
 
 def test_unsupported_detection_yields_no_backend():

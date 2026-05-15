@@ -7,6 +7,8 @@ estructura de Alacritty.
 
 from __future__ import annotations
 
+import re
+import subprocess
 from pathlib import Path
 
 import tomlkit
@@ -35,6 +37,9 @@ SLOT_GROUPS: dict[str, tuple[str, ...]] = {
 KNOWN_SLOTS: list[CanonicalSlot] = [
     (group, name) for group, names in SLOT_GROUPS.items() for name in names
 ]
+
+_MANAGED_MARKER = "ztc-managed-manifest = true"
+_GENERAL_IMPORT_MIN_VERSION = (0, 14, 0)
 
 # Mapeo de cada setting canonico al path TOML donde Alacritty lo guarda.
 # Ej. `window.padding.x` -> doc["window"]["padding"]["x"].
@@ -118,7 +123,12 @@ class AlacrittyBackend:
     def is_managed_manifest(self, path: Path) -> bool:
         if not path.exists():
             return False
+        text = path.read_text(encoding="utf-8")
+        if _MANAGED_MARKER in text:
+            return True
         doc = self.load(path)
+        # Backward compatibility with old ZTC manifests. Do not write this
+        # table anymore: Alacritty warns about unknown live config keys.
         ztc_section = doc.get("ztc")
         if not isinstance(ztc_section, dict):
             return False
@@ -128,10 +138,7 @@ class AlacrittyBackend:
         if not self.is_managed_manifest(manifest_path):
             return None
         doc = self.load(manifest_path)
-        general = doc.get("general")
-        if not isinstance(general, dict):
-            return None
-        imports = general.get("import")
+        imports = _read_imports(doc)
         if not imports:
             return None
         # tomlkit array se comporta como list pero no es list. Iteramos
@@ -150,26 +157,14 @@ class AlacrittyBackend:
     def write_active_profile(
         self, manifest_path: Path, profile_path: Path
     ) -> None:
-        doc = self.load(manifest_path)
-        if "ztc" not in doc:
-            doc["ztc"] = tomlkit.table()
-        doc["ztc"]["managed_manifest"] = True  # type: ignore[index]
-        if "general" not in doc:
-            doc["general"] = tomlkit.table()
-        # Path relativo si el perfil esta junto al manifest; absoluto si no.
-        import_value = (
-            profile_path.name
-            if profile_path.parent == manifest_path.parent
-            else str(profile_path)
-        )
-        doc["general"]["import"] = [import_value]  # type: ignore[index]
+        doc = _build_manifest_doc(manifest_path, profile_path)
         toml_io.dump_toml(doc, manifest_path)
 
     def unmanage_manifest(
         self, manifest_path: Path, profile_doc: TOMLDocument
     ) -> Path | None:
         """Reescribe `manifest_path` con el contenido del `profile_doc`
-        (perfil activo). Quita la seccion `[ztc]` con `managed_manifest`.
+        (perfil activo). Quita metadata legacy de ZTC si existe.
         Alacritty no tiene managed directives globales, asi que el
         resultado es el TOML del perfil escrito tal cual."""
         if not self.is_managed_manifest(manifest_path):
@@ -193,18 +188,7 @@ class AlacrittyBackend:
         if not manifest_path.exists():
             raise FileNotFoundError(manifest_path)
         backup = make_backup(manifest_path)
-        manifest_doc = tomlkit.document()
-        ztc_table = tomlkit.table()
-        ztc_table["managed_manifest"] = True
-        manifest_doc["ztc"] = ztc_table
-        general_table = tomlkit.table()
-        import_value = (
-            active_profile.name
-            if active_profile.parent == manifest_path.parent
-            else str(active_profile)
-        )
-        general_table["import"] = [import_value]
-        manifest_doc["general"] = general_table
+        manifest_doc = _build_manifest_doc(manifest_path, active_profile)
         toml_io.dump_toml(manifest_doc, manifest_path, backup=False)
         return backup
 
@@ -273,6 +257,75 @@ class AlacrittyBackend:
         if deleted:
             _mark_setting_changed(doc, setting.name)
         return deleted
+
+
+# ---------- helpers manifest Alacritty ----------
+
+
+def _read_imports(doc: TOMLDocument) -> object | None:
+    """Lee imports en formato Alacritty 0.13 y 0.14+.
+
+    0.13 usa `import = [...]` en la raiz. 0.14 movio esa opcion a
+    `[general] import = [...]`. Aceptamos ambos para poder leer manifests
+    generados por versiones anteriores de ZTC o por otra version de
+    Alacritty.
+    """
+    if _uses_general_import():
+        return _read_general_imports(doc) or doc.get("import")
+    return doc.get("import") or _read_general_imports(doc)
+
+
+def _read_general_imports(doc: TOMLDocument) -> object | None:
+    general = doc.get("general")
+    if not isinstance(general, dict):
+        return None
+    return general.get("import")
+
+
+def _build_manifest_doc(manifest_path: Path, profile_path: Path) -> TOMLDocument:
+    doc = tomlkit.document()
+    doc.add(tomlkit.comment(_MANAGED_MARKER))
+    doc.add(tomlkit.nl())
+    import_value = _profile_import_value(manifest_path, profile_path)
+    if _uses_general_import():
+        general = tomlkit.table()
+        general["import"] = [import_value]
+        doc["general"] = general
+    else:
+        doc["import"] = [import_value]
+    return doc
+
+
+def _profile_import_value(manifest_path: Path, profile_path: Path) -> str:
+    return (
+        profile_path.name
+        if profile_path.parent == manifest_path.parent
+        else str(profile_path)
+    )
+
+
+def _uses_general_import() -> bool:
+    version = _detect_alacritty_version()
+    if version is None:
+        return True
+    return version >= _GENERAL_IMPORT_MIN_VERSION
+
+
+def _detect_alacritty_version() -> tuple[int, int, int] | None:
+    try:
+        proc = subprocess.run(
+            ["alacritty", "--version"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.search(r"\b(\d+)\.(\d+)\.(\d+)\b", proc.stdout + proc.stderr)
+    if match is None:
+        return None
+    return tuple(int(part) for part in match.groups())
 
 
 # ---------- helpers TOML por path ----------
